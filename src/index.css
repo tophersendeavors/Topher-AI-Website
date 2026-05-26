@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    font-family: theme("fontFamily.body");
+    background-color: theme("colors.ash.black");
+    color: theme("colors.ash.bone");
+    background-image:
+      radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(180deg, #0a0a0a 0%, #050505 100%);
+    background-size: 3px 3px, auto;
+  }
+  ::selection {
+    background: theme("colors.ash.blood");
+    color: theme("colors.ash.bone");
+  }
+}
+
+@layer components {
+  .display-title {
+    @apply font-display tracking-[0.08em] uppercase;
+  }
+  .distress {
+    text-shadow:
+      0.5px 0 0 rgba(233, 227, 214, 0.2),
+      -0.5px 0 0 rgba(122, 10, 10, 0.25);
+    letter-spacing: 0.04em;
+  }
+  .card {
+    @apply bg-ash-coal/70 border border-white/5 backdrop-blur-sm;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em]
+           border border-white/10 hover:border-white/30 transition-colors;
+  }
+  .btn-primary {
+    @apply btn bg-ash-bone text-ash-black border-ash-bone hover:bg-white;
+  }
+  .btn-danger {
+    @apply btn bg-ash-blood/80 text-ash-bone border-ash-blood hover:bg-ash-blood;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em]
+           border border-white/10 text-ash-gray;
+  }
+  .input {
+    @apply w-full bg-ash-ink border border-white/10 px-3 py-2 text-sm text-ash-bone
+           focus:outline-none focus:border-ash-bone/60 placeholder:text-ash-gray/60;
+  }
+  .label {
+    @apply text-[10px] uppercase tracking-[0.22em] text-ash-gray;
+  }
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}

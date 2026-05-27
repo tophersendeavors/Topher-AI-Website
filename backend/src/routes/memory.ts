@@ -7,9 +7,9 @@ import { MEMORY_KINDS, MEMORY_SCOPES } from "@toburt/shared";
 
 const Write = z.object({
   projectId: z.string().uuid(),
-  scope: z.enum(MEMORY_SCOPES as readonly [(typeof MEMORY_SCOPES)[number], ...typeof MEMORY_SCOPES]),
+  scope: z.enum(MEMORY_SCOPES),
   scopeRef: z.string().uuid().optional(),
-  kind: z.enum(MEMORY_KINDS as readonly [(typeof MEMORY_KINDS)[number], ...typeof MEMORY_KINDS]),
+  kind: z.enum(MEMORY_KINDS),
   text: z.string().min(1),
   body: z.record(z.unknown()).optional(),
   approved: z.boolean().optional(),
@@ -19,9 +19,9 @@ const Write = z.object({
 const Search = z.object({
   projectId: z.string().uuid(),
   query: z.string().min(1),
-  scope: z.enum(MEMORY_SCOPES as readonly [(typeof MEMORY_SCOPES)[number], ...typeof MEMORY_SCOPES]).optional(),
+  scope: z.enum(MEMORY_SCOPES).optional(),
   scopeRef: z.string().uuid().optional(),
-  kind: z.enum(MEMORY_KINDS as readonly [(typeof MEMORY_KINDS)[number], ...typeof MEMORY_KINDS]).optional(),
+  kind: z.enum(MEMORY_KINDS).optional(),
   approvedOnly: z.boolean().optional(),
   k: z.number().int().positive().optional(),
 });

@@ -10,7 +10,10 @@ import {
   STAGE_REQUIRES_APPROVAL,
 } from "@toburt/shared";
 import type { WorkflowStageId } from "@toburt/shared";
-import { getAgent } from "../../agents/registry.js";
+import { conceptAgent } from "../../agents/concept.js";
+import { plotAgent } from "../../agents/plot.js";
+import { sceneAgent } from "../../agents/scene.js";
+import { dialogueAgent } from "../../agents/dialogue.js";
 import { runAgent } from "../../agents/runner.js";
 import { hydrateContext } from "../hydrate.js";
 import { postRoomMessage } from "../room.js";
@@ -47,7 +50,7 @@ export const loglineStage: Stage<z.infer<typeof LoglinePack>> = {
   async run(ctx) {
     const idea =
       (ctx.previousArtifacts.idea as { idea?: string })?.idea ?? ctx.prompt ?? "";
-    const concept = getAgent("concept");
+    const concept = conceptAgent;
 
     const aCtx = await hydrateContext({
       projectId: ctx.projectId,
@@ -97,7 +100,7 @@ export const synopsisStage: Stage<{ synopsis: string }> = {
 
     // Use the plot agent to draft a synopsis under its `treatment` intent in
     // brief mode — we only need 250-400 words here.
-    const plot = getAgent("plot");
+    const plot = plotAgent;
     const { output } = await runAgent(plot, {
       intent: "treatment",
       brief: `Write a 250-400 word synopsis derived from this premise:\n\n${pack?.premise}\n\nLoglines: ${pack?.loglines
@@ -141,7 +144,7 @@ export const treatmentStage: Stage<z.infer<typeof Treatment>> = {
   async run(ctx) {
     const syn =
       (ctx.previousArtifacts.synopsis as { synopsis?: string })?.synopsis ?? "";
-    const plot = getAgent("plot");
+    const plot = plotAgent;
     const aCtx = await hydrateContext({
       projectId: ctx.projectId,
       workflowId: ctx.workflowId,
@@ -183,7 +186,7 @@ export const seasonArcStage: Stage<z.infer<typeof SeasonArc>> = {
   outputSchema: SeasonArc,
   async run(ctx) {
     const t = ctx.previousArtifacts.treatment as z.infer<typeof Treatment>;
-    const plot = getAgent("plot");
+    const plot = plotAgent;
     const aCtx = await hydrateContext({
       projectId: ctx.projectId,
       workflowId: ctx.workflowId,
@@ -215,7 +218,7 @@ export const episodeOutlineStage: Stage<z.infer<typeof EpisodeOutline>> = {
     const arc = ctx.previousArtifacts.season_arc as z.infer<typeof SeasonArc>;
     const targetEp = arc?.episodes?.[0];
     if (!targetEp) throw new Error("No episodes in season arc");
-    const plot = getAgent("plot");
+    const plot = plotAgent;
     const aCtx = await hydrateContext({
       projectId: ctx.projectId,
       workflowId: ctx.workflowId,
@@ -245,7 +248,7 @@ export const beatSheetStage: Stage<z.infer<typeof BeatSheet>> = {
   outputSchema: BeatSheet,
   async run(ctx) {
     const outline = ctx.previousArtifacts.episode_outline as z.infer<typeof EpisodeOutline>;
-    const plot = getAgent("plot");
+    const plot = plotAgent;
     const aCtx = await hydrateContext({
       projectId: ctx.projectId,
       workflowId: ctx.workflowId,
@@ -304,8 +307,8 @@ export const draftV1Stage: Stage<{ fountain: string }> = {
   outputSchema: z.object({ fountain: z.string().min(1) }),
   async run(ctx) {
     const list = ctx.previousArtifacts.scene_list as z.infer<typeof SceneList>;
-    const scene = getAgent("scene");
-    const dialogue = getAgent("dialogue");
+    const scene = sceneAgent;
+    const dialogue = dialogueAgent;
     const fountainParts: string[] = [];
 
     for (const spec of list.scenes) {

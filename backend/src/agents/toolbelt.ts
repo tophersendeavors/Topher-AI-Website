@@ -258,7 +258,7 @@ export const voiceFingerprint: ToolDefinition<
     const notes = (ch?.voice_notes ?? "").toLowerCase();
     const tokens = notes.match(/[a-z']+/g) ?? [];
     const sample = input.sample.toLowerCase();
-    const hits = tokens.filter((t) => sample.includes(t)).length;
+    const hits = tokens.filter((t: string) => sample.includes(t)).length;
     const score = Math.min(1, hits / Math.max(1, tokens.length || 8));
     return { score, tells: tokens.slice(0, 5) };
   },

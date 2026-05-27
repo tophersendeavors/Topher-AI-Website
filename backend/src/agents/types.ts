@@ -23,8 +23,8 @@ export interface AgentContext {
 export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
   name: string;
   description: string;
-  inputSchema: z.ZodSchema<TInput>;
-  outputSchema?: z.ZodSchema<TOutput>;
+  inputSchema: z.ZodType<TInput, z.ZodTypeDef, any>;
+  outputSchema?: z.ZodType<TOutput, z.ZodTypeDef, any>;
   /** Allowed roles. If undefined, all agents may use it. */
   allowedRoles?: AgentRole[];
   execute(input: TInput, ctx: AgentContext): Promise<TOutput>;
@@ -35,8 +35,10 @@ export interface Agent<TInput = unknown, TOutput = unknown> {
   label: string;
   description: string;
   model: string;
-  inputSchema: z.ZodSchema<TInput>;
-  outputSchema: z.ZodSchema<TOutput>;
+  // `any` for the input/output zod types tolerates schemas that use
+  // `.default()` / `.optional()` (input type differs from output type).
+  inputSchema: z.ZodType<TInput, z.ZodTypeDef, any>;
+  outputSchema: z.ZodType<TOutput, z.ZodTypeDef, any>;
   toolNames: string[];
   systemPrompt(ctx: AgentContext): string;
   /** Provide an optional output post-processor (e.g. canon writes). */

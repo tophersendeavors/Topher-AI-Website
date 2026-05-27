@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-feature-settings: "ss01", "cv11";
+  background:
+    radial-gradient(900px 600px at 80% -10%, rgba(243, 80, 26, 0.10), transparent 60%),
+    radial-gradient(700px 500px at -10% 20%, rgba(30, 144, 255, 0.06), transparent 60%),
+    #06070a;
+  background-attachment: fixed;
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/[0.03] border border-white/[0.06] backdrop-blur-xl shadow-glass;
+  }
+  .glass-strong {
+    @apply bg-white/[0.05] border border-white/[0.08] backdrop-blur-xl shadow-glass;
+  }
+  .panel {
+    @apply glass rounded-2xl;
+  }
+  .panel-strong {
+    @apply glass-strong rounded-2xl;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2
+           text-sm font-medium transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-ember-500/40;
+  }
+  .btn-primary {
+    @apply btn bg-ember-500/90 text-white hover:bg-ember-400
+           shadow-[0_8px_24px_-12px_rgba(243,80,26,0.6)];
+  }
+  .btn-ghost {
+    @apply btn text-bone-100 hover:bg-white/5;
+  }
+  .btn-outline {
+    @apply btn border border-white/10 text-bone-100 hover:bg-white/[0.04];
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10
+           bg-white/[0.04] px-2.5 py-0.5 text-[11px] uppercase tracking-wider
+           text-bone-200/80;
+  }
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-ink-800/70 px-3 py-2
+           text-sm text-bone-50 placeholder-bone-500 focus:outline-none
+           focus:ring-2 focus:ring-ember-500/40;
+  }
+  .label-eyebrow {
+    @apply text-[11px] uppercase tracking-[0.18em] text-bone-400/80;
+  }
+  .divider-soft {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-white/8 to-transparent;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* Editor */
+.monaco-editor, .monaco-editor-background, .monaco-editor .margin {
+  background-color: transparent !important;
+}

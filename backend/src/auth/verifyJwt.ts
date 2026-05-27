@@ -1,4 +1,4 @@
-import type { FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import jwt from "@fastify/jwt";
 import { config } from "../config.js";
 
@@ -8,19 +8,15 @@ export interface AuthUser {
   role?: string;
 }
 
-declare module "fastify" {
-  interface FastifyRequest {
-    user?: AuthUser;
-  }
-}
+// `@fastify/jwt` already decorates request.user with the decoded payload.
+// We keep a separate cache key to expose our normalized AuthUser.
+const AUTH_CACHE = new WeakMap<FastifyRequest, AuthUser>();
 
-export async function registerAuth(app: import("fastify").FastifyInstance) {
+export async function registerAuth(app: FastifyInstance) {
   await app.register(jwt, {
     secret: config.SUPABASE_JWT_SECRET,
     verify: { algorithms: ["HS256"] },
   });
-
-  app.decorateRequest("user", undefined);
 }
 
 /**
@@ -28,7 +24,8 @@ export async function registerAuth(app: import("fastify").FastifyInstance) {
  * Throws 401 if missing/invalid.
  */
 export async function requireUser(req: FastifyRequest): Promise<AuthUser> {
-  if (req.user) return req.user;
+  const cached = AUTH_CACHE.get(req);
+  if (cached) return cached;
 
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) {
@@ -49,7 +46,7 @@ export async function requireUser(req: FastifyRequest): Promise<AuthUser> {
       email: decoded.email,
       role: decoded.role,
     };
-    req.user = user;
+    AUTH_CACHE.set(req, user);
     return user;
   } catch {
     const err = new Error("Invalid token");

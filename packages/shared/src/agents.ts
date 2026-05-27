@@ -184,7 +184,9 @@ export const LoglinePack = z.object({
     )
     .min(1),
   premise: z.string(),
-  themes: z.array(z.string()),
+  // LLMs frequently omit auxiliary arrays even when prompted; default so the
+  // output is accepted as long as the primary fields are present.
+  themes: z.array(z.string()).default([]),
 });
 export type LoglinePack = z.infer<typeof LoglinePack>;
 
@@ -203,7 +205,7 @@ export const Treatment = z.object({
       summary: z.string(),
     })
   ),
-  themes: z.array(z.string()),
+  themes: z.array(z.string()).default([]),
 });
 export type Treatment = z.infer<typeof Treatment>;
 

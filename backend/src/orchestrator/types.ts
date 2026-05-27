@@ -26,6 +26,8 @@ export interface Stage<T = unknown> {
   requiresApproval: boolean;
   inputs: WorkflowStageId[];
   agents: AgentRole[];
-  outputSchema: z.ZodSchema<T>;
+  // `any` for the input/output zod types tolerates schemas that use
+  // `.default()` / `.optional()` (input type differs from output type).
+  outputSchema: z.ZodType<T, z.ZodTypeDef, any>;
   run(ctx: StageContext): Promise<StageResult<T>>;
 }

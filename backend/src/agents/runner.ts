@@ -121,10 +121,21 @@ export async function runAgent<TIn, TOut>(
       continue;
     }
 
-    const outParse = agent.outputSchema.safeParse(parsed.result);
+    // Schema validation. On failure, try one self-correction round: tell the
+    // model exactly which fields were wrong and re-prompt for the result only.
+    let outParse = agent.outputSchema.safeParse(parsed.result);
+    if (!outParse.success && round < maxRounds) {
+      const issues = outParse.error.issues
+        .map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`)
+        .join("\n");
+      userTurn =
+        `Your previous \`result\` failed schema validation:\n${issues}\n\n` +
+        `Return a corrected \`result\` JSON only. Do not include tool_calls.`;
+      continue;
+    }
     if (!outParse.success) {
       throw new Error(
-        `Agent ${agent.role} output invalid: ${outParse.error.message}\n` +
+        `Agent ${agent.role} output invalid after ${maxRounds} attempt(s): ${outParse.error.message}\n` +
           `Raw output: ${truncate(JSON.stringify(parsed.result), 500)}`
       );
     }

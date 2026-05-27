@@ -57,5 +57,7 @@ pids/
 *.seed
 
 # Generated screenplay exports (dev)
-exports/
-tmp/
+# Generated screenplay exports (dev). Anchored at the repo root so it
+# does NOT match frontend/src/features/exports/ or any nested directory.
+/exports/
+/tmp/

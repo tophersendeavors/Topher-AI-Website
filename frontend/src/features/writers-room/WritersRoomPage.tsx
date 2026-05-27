@@ -303,7 +303,15 @@ function agentSeedInput(role: AgentRole, prompt: string): unknown {
     case "showrunner":
       return { intent: "respond", candidate: { note: prompt } };
     case "character":
-      return { intent: "create", seed: { name: prompt || "Unnamed" } };
+      // Pass the full prompt as `brief` so the agent can extract name +
+      // occupation + age etc. from a natural-language description. Also
+      // pre-seed `name` with the first comma-separated token as a safety
+      // net if `brief` is sparse.
+      return {
+        intent: "create",
+        brief: prompt,
+        seed: { name: (prompt.split(",")[0] ?? prompt).trim() || "Unnamed" },
+      };
     case "world":
       return { intent: "build", draft: prompt };
     case "plot":

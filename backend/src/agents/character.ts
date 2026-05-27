@@ -7,6 +7,8 @@ import type { Agent } from "./types.js";
 const Input = z.object({
   intent: z.enum(["create", "update", "arc", "voice", "relate"]),
   characterId: z.string().uuid().optional(),
+  /** Free-text description: name + premise + anything else the user typed. */
+  brief: z.string().optional(),
   seed: z
     .object({
       name: z.string().optional(),
@@ -26,7 +28,10 @@ const Output = z.object({
     .optional(),
 });
 
-export const characterAgent: Agent<z.infer<typeof Input>, z.infer<typeof Output>> = {
+export const characterAgent: Agent<
+  z.infer<typeof Input>,
+  z.infer<typeof Output>
+> = {
   role: "character",
   label: "Character",
   description: "Character bibles, arcs, voice fingerprints, relationships.",
@@ -43,6 +48,17 @@ export const characterAgent: Agent<z.infer<typeof Input>, z.infer<typeof Output>
       "and a flaw that the story will press against.",
       "Voice = vocabulary + rhythm + 'tells' (verbal tics, recurring images).",
       "Arc = act1 (status quo), act2 (escalation), act3 (transformation).",
+      "",
+      "Input handling:",
+      "- If the user provided a `brief` string, treat it as the primary",
+      "  source of truth — parse the name, age, occupation, and any other",
+      "  cues from it. Do NOT respond with placeholder text like 'awaiting",
+      "  brief' or 'TBD' — invent a concrete, specific character from the",
+      "  brief and project canon.",
+      "- If a `seed` is provided, honor any fields it sets verbatim.",
+      "- If you only have a name, invent a plausible character grounded in",
+      "  the project's logline / treatment from retrieved canon.",
+      "",
       "When you create or substantially update a character, call",
       "`proposeCanonChange` (scope='character', kind='voice') with the voice",
       "section so future Dialogue passes can score against it.",

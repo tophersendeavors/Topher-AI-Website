@@ -101,59 +101,78 @@ const RULES: Rule[] = [
 ];
 
 /**
- * Validate a scene's Fountain text.
- *
- * Returns one violation per matching dialogue line (action lines are not
- * checked — narration directness is a different problem).
+ * Walk a sequence of screenplay elements and emit one violation per matching
+ * dialogue line. Action lines are intentionally not checked — narration
+ * directness is a different problem with different remedies.
+ */
+function scanElements(
+  elements: Array<{ kind: string; text: string }>,
+  baseLine: number
+): DirectnessViolation[] {
+  const violations: DirectnessViolation[] = [];
+  let lineNum = baseLine;
+  for (const el of elements) {
+    if (el.kind === "dialogue") {
+      for (const rule of RULES) {
+        if (rule.pattern.test(el.text)) {
+          violations.push({
+            line: lineNum,
+            text: el.text,
+            pattern: rule.id,
+            severity: rule.severity,
+          });
+        }
+      }
+    }
+    lineNum += 1;
+  }
+  return violations;
+}
+
+function rejectionDecision(
+  violations: DirectnessViolation[],
+  opts: { rejectionThreshold?: number; allowStylistic?: boolean }
+): boolean {
+  const threshold = opts.rejectionThreshold ?? 2;
+  const criticalCount = violations.filter((v) => v.severity === "critical").length;
+  return !opts.allowStylistic && criticalCount > threshold;
+}
+
+/**
+ * Validate a scene's Fountain text. Parses once and scans its elements.
  */
 export function validateSceneDirectness(
   fountain: string,
   opts: { rejectionThreshold?: number; allowStylistic?: boolean } = {}
 ): DirectnessReport {
-  const violations: DirectnessViolation[] = [];
-
-  // Walk the elements; we only care about dialogue lines and parentheticals.
   const parsed = parseFountain(fountain);
-  for (const scene of parsed.scenes.length ? parsed.scenes : [{ elements: parsed.elements, startLine: 0 } as any]) {
-    let lineNum = scene.startLine ?? 0;
-    for (const el of scene.elements) {
-      if (el.kind === "dialogue") {
-        for (const rule of RULES) {
-          if (rule.pattern.test(el.text)) {
-            violations.push({
-              line: lineNum,
-              text: el.text,
-              pattern: rule.id,
-              severity: rule.severity,
-            });
-          }
-        }
-      }
-      lineNum += 1;
-    }
-  }
-
-  const threshold = opts.rejectionThreshold ?? 2;
-  const criticalCount = violations.filter((v) => v.severity === "critical").length;
-  const shouldReject = !opts.allowStylistic && criticalCount > threshold;
-
-  return { violations, shouldReject };
+  // If the input parsed into scenes, use the first scene's elements;
+  // otherwise fall back to the whole element stream (scene-less text).
+  const elements = parsed.scenes.length
+    ? parsed.scenes[0].elements
+    : parsed.elements;
+  const baseLine = parsed.scenes.length ? parsed.scenes[0].startLine : 0;
+  const violations = scanElements(elements, baseLine);
+  return { violations, shouldReject: rejectionDecision(violations, opts) };
 }
 
 /**
  * Validate a whole script. Returns per-scene reports so the UI can render
- * inline annotations.
+ * inline annotations. Walks scenes from a single parse — never re-parses.
  */
 export function validateScriptDirectness(
   fountain: string,
   opts: { rejectionThreshold?: number; allowStylistic?: boolean } = {}
 ): Array<{ order: number; slugline: string; report: DirectnessReport }> {
   const parsed = parseFountain(fountain);
-  return parsed.scenes.map((s) => ({
-    order: s.order,
-    slugline: s.slugline,
-    report: validateSceneDirectness(s.fountain, opts),
-  }));
+  return parsed.scenes.map((s) => {
+    const violations = scanElements(s.elements, s.startLine);
+    return {
+      order: s.order,
+      slugline: s.slugline,
+      report: { violations, shouldReject: rejectionDecision(violations, opts) },
+    };
+  });
 }
 
 /** Stable export for the rule list — used by the UI's hints panel. */

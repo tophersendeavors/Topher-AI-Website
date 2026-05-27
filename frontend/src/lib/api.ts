@@ -116,6 +116,34 @@ export const api = {
       `/agents/invoke`,
       { method: "POST", body: JSON.stringify(body) }
     ),
+  arbitrateAgent: (body: {
+    projectId: string;
+    role: AgentRole;
+    input: unknown;
+    workflowId?: string;
+    stage?: string;
+    maxRevisions?: number;
+  }) =>
+    request<{
+      output: unknown;
+      decision: {
+        decision: "approve" | "reject" | "revise";
+        rationale: string;
+        notes?: string[];
+      };
+      approved: boolean;
+      revisions: number;
+      trail: Array<{
+        kind: "recommend" | "review" | "revise" | "approve" | "veto" | "reject" | "exhausted";
+        role: AgentRole;
+        body: string;
+        attempt: number;
+      }>;
+      memoryEntryId?: string;
+    }>(`/agents/arbitrate`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   listRoomMessages: (projectId: string) =>
     request<RoomMessage[]>(`/projects/${projectId}/room`),
   postRoomMessage: (projectId: string, body: { body: string; workflowId?: string; stage?: string }) =>
@@ -193,6 +221,40 @@ export const api = {
       `/scripts/${scriptId}/emotional/validate`,
       { method: "POST" }
     ),
+  scoreScriptEmotional: (scriptId: string, opts?: { useLLM?: boolean }) =>
+    request<{
+      scriptId: string;
+      overall: number;
+      weakSceneCount: number;
+      scenes: Array<{
+        sceneId: string | null;
+        order: number;
+        slugline: string;
+        overall: number;
+        weak: boolean;
+        rewriteInstructions: string[];
+        scores: Record<
+          "truth" | "subtext" | "wound" | "behavior" | "tension" | "powerShift",
+          { value: number; reason: string }
+        >;
+      }>;
+    }>(`/scripts/${scriptId}/emotional/score`, {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }),
+  scoreSceneEmotional: (sceneId: string) =>
+    request<{
+      sceneId: string | null;
+      order: number;
+      slugline: string;
+      overall: number;
+      weak: boolean;
+      rewriteInstructions: string[];
+      scores: Record<
+        "truth" | "subtext" | "wound" | "behavior" | "tension" | "powerShift",
+        { value: number; reason: string }
+      >;
+    }>(`/scenes/${sceneId}/emotional/score`, { method: "POST" }),
   runScriptEmotionalPass: (scriptId: string) =>
     request<
       Array<{

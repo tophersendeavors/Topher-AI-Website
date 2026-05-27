@@ -48,6 +48,9 @@ export function EmotionalIntelligencePage() {
     mutationFn: () => api.runScriptEmotionalPass(scriptId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["emotional-states", scriptId] }),
   });
+  const scoreScript = useMutation({
+    mutationFn: () => api.scoreScriptEmotional(scriptId),
+  });
   const toggleStylistic = useMutation({
     mutationFn: (v: boolean) => api.setStylisticDirectness(projectId, v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["project", projectId] }),
@@ -107,6 +110,72 @@ export function EmotionalIntelligencePage() {
               <Play className="h-4 w-4" />
               {runPass.isPending ? "Running…" : "Run EI pass"}
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => scoreScript.mutate()}
+              disabled={!scriptId || scoreScript.isPending}
+            >
+              <Sparkles className="h-4 w-4" />
+              {scoreScript.isPending ? "Scoring…" : "Score scenes (read-only)"}
+            </Button>
+            {scoreScript.data && (
+              <div className="rounded-md border border-white/10 bg-white/[0.02] p-3 text-xs">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-bone-200">
+                    Overall {(scoreScript.data.overall * 100).toFixed(0)}/100
+                  </span>
+                  <span
+                    className={`chip ${
+                      scoreScript.data.weakSceneCount > 0
+                        ? "border-amber-700/50 text-amber-200"
+                        : "border-emerald-700/50 text-emerald-200"
+                    }`}
+                  >
+                    {scoreScript.data.weakSceneCount} weak scene(s)
+                  </span>
+                </div>
+                <ul className="mt-2 max-h-72 space-y-1.5 overflow-y-auto">
+                  {scoreScript.data.scenes.map((s) => (
+                    <li
+                      key={`${s.order}-${s.sceneId ?? "x"}`}
+                      className={`rounded-md border p-2 ${
+                        s.weak
+                          ? "border-amber-700/50 bg-amber-950/20"
+                          : "border-white/10 bg-white/[0.02]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="truncate text-bone-200">
+                          {s.order}. {s.slugline}
+                        </span>
+                        <span className="text-bone-400">
+                          {(s.overall * 100).toFixed(0)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                        {Object.entries(s.scores).map(([k, v]) => (
+                          <span
+                            key={k}
+                            className={`chip ${
+                              v.value < 0.5 ? "border-red-700/40 text-red-200" : ""
+                            }`}
+                          >
+                            {k} {(v.value * 100).toFixed(0)}
+                          </span>
+                        ))}
+                      </div>
+                      {s.weak && s.rewriteInstructions.length > 0 && (
+                        <ul className="mt-1 list-disc pl-4 text-[11px] text-bone-300">
+                          {s.rewriteInstructions.map((r, i) => (
+                            <li key={i}>{r}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {rejectedCount > 0 && (
               <div className="rounded-md border border-red-700/50 bg-red-950/30 p-2 text-xs text-red-200">
                 <AlertTriangle className="-mt-0.5 mr-1 inline h-3.5 w-3.5" />

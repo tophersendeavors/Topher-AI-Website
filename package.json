@@ -21,6 +21,8 @@
     "typecheck": "npm-run-all --parallel typecheck:backend typecheck:frontend",
     "typecheck:backend": "npm --workspace backend run typecheck",
     "typecheck:frontend": "npm --workspace frontend run typecheck",
+    "test": "npm --workspace backend test",
+    "test:watch": "npm --workspace backend run test:watch",
     "db:reset": "supabase db reset",
     "db:push": "supabase db push"
   },

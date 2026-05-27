@@ -6,6 +6,7 @@ import { requireUser } from "../auth/verifyJwt.js";
 import { assertProjectMember } from "../db/queries.js";
 import { getAgent } from "../agents/registry.js";
 import { runAgent } from "../agents/runner.js";
+import { runWithArbitration } from "../agents/arbitration.js";
 import { hydrateContext } from "../orchestrator/hydrate.js";
 import { postRoomMessage } from "../orchestrator/room.js";
 
@@ -56,6 +57,64 @@ export default async function agentsRoutes(app: FastifyInstance) {
     });
 
     return result;
+  });
+
+  // Full Showrunner arbitration loop: agent submits → Showrunner reviews →
+  // approve / veto / auto-revise. Every step is broadcast to the Writers
+  // Room via Supabase Realtime so the UI can render the debate.
+  app.post("/agents/arbitrate", async (req) => {
+    const user = await requireUser(req);
+    const Body = z.object({
+      projectId: z.string().uuid(),
+      role: z.enum(AGENT_ROLES as readonly [AgentRole, ...AgentRole[]]),
+      input: z.unknown(),
+      workflowId: z.string().uuid().optional(),
+      stage: z.string().optional(),
+      maxRevisions: z.number().int().min(0).max(5).optional(),
+    });
+    const body = Body.parse(req.body);
+    await assertProjectMember(user.id, body.projectId);
+
+    // The Showrunner cannot arbitrate itself — short-circuit to a plain
+    // invoke so the caller still gets a sensible response.
+    if (body.role === "showrunner") {
+      const agent = getAgent("showrunner");
+      const ctx = await hydrateContext({
+        projectId: body.projectId,
+        workflowId: body.workflowId,
+        stage: body.stage as never,
+        collaborators: ["showrunner"],
+        query: JSON.stringify(body.input).slice(0, 500),
+        user: { id: user.id },
+      });
+      const result = await runAgent(agent, body.input, ctx);
+      return {
+        output: result.output,
+        decision: {
+          decision: "approve",
+          rationale: "Showrunner self-call (no arbitration).",
+          notes: [],
+        },
+        approved: true,
+        revisions: 0,
+        trail: [],
+      };
+    }
+
+    const agent = getAgent(body.role);
+    const ctx = await hydrateContext({
+      projectId: body.projectId,
+      workflowId: body.workflowId,
+      stage: body.stage as never,
+      collaborators: [body.role, "showrunner"],
+      query: JSON.stringify(body.input).slice(0, 500),
+      user: { id: user.id },
+    });
+
+    return runWithArbitration(agent, body.input, ctx, {
+      maxRevisions: body.maxRevisions ?? 2,
+      persistToMemory: true,
+    });
   });
 
   // Writers Room transcript.

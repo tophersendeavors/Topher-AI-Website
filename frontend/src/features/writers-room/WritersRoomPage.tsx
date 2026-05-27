@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { Send, Sparkles } from "lucide-react";
+import { Gavel, Send, Sparkles } from "lucide-react";
 import {
   AGENT_PROFILES,
   AGENT_ROLES,
@@ -13,6 +13,8 @@ import {
   type RoomMessage,
 } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { useApprovalsStream, useRoomStream } from "@/lib/realtime";
+import { hasSupabaseEnv } from "@/lib/supabase";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -27,19 +29,12 @@ export function WritersRoomPage() {
     queryKey: ["project", projectId],
     queryFn: () => api.getProject(projectId),
   });
-  const room = useQuery({
-    queryKey: ["room", projectId],
-    queryFn: () => api.listRoomMessages(projectId),
-    refetchInterval: 3000,
-  });
-  const approvals = useQuery({
-    queryKey: ["approvals", projectId],
-    queryFn: () => api.listApprovals(projectId),
-    refetchInterval: 4000,
-  });
+  const room = useRoomStream(projectId);
+  const approvals = useApprovalsStream(projectId);
 
   const [active, setActive] = useState<AgentRole>("showrunner");
   const [draft, setDraft] = useState("");
+  const [arbitrate, setArbitrate] = useState(false);
 
   const post = useMutation({
     mutationFn: () => api.postRoomMessage(projectId, { body: draft }),
@@ -48,13 +43,21 @@ export function WritersRoomPage() {
       qc.invalidateQueries({ queryKey: ["room", projectId] });
     },
   });
-  const invoke = useMutation({
-    mutationFn: () =>
-      api.invokeAgent({
+  const invoke = useMutation<unknown, Error, void>({
+    mutationFn: async () => {
+      if (arbitrate) {
+        return await api.arbitrateAgent({
+          projectId,
+          role: active,
+          input: agentSeedInput(active, draft),
+        });
+      }
+      return await api.invokeAgent({
         projectId,
         role: active,
         input: agentSeedInput(active, draft),
-      }),
+      });
+    },
     onSuccess: () => {
       setDraft("");
       qc.invalidateQueries({ queryKey: ["room", projectId] });
@@ -101,9 +104,16 @@ export function WritersRoomPage() {
           eyebrow="Transcript"
           title="Live"
           actions={
-            <span className="chip">
+            <span
+              className="chip"
+              title={
+                hasSupabaseEnv()
+                  ? "Subscribed to Supabase Realtime channel room:{projectId}"
+                  : "Local dev — polling fallback (Supabase env not set)"
+              }
+            >
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              streaming
+              {hasSupabaseEnv() ? "streaming" : "polling"}
             </span>
           }
         >
@@ -120,9 +130,26 @@ export function WritersRoomPage() {
           </div>
 
           <div className="mt-4 border-t border-white/[0.06] pt-4">
-            <div className="mb-2 flex items-center gap-2">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <AgentBadge role={active} />
               <span className="text-xs text-bone-400">will respond</span>
+              <label
+                className={`ml-auto flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                  arbitrate
+                    ? "border-ember-700/60 bg-ember-950/30 text-ember-100"
+                    : "border-white/10 text-bone-300 hover:bg-white/[0.04]"
+                }`}
+                title="Routes the response through the Showrunner. The agent can be approved, vetoed, or asked to revise — automatically."
+              >
+                <input
+                  type="checkbox"
+                  className="hidden"
+                  checked={arbitrate}
+                  onChange={(e) => setArbitrate(e.target.checked)}
+                />
+                <Gavel className="h-3.5 w-3.5" />
+                Showrunner arbitration {arbitrate ? "on" : "off"}
+              </label>
             </div>
             <div className="flex items-end gap-2">
               <textarea
@@ -144,8 +171,12 @@ export function WritersRoomPage() {
                   onClick={() => invoke.mutate()}
                   disabled={!draft.trim() || invoke.isPending}
                 >
-                  <Sparkles className="h-4 w-4" />
-                  Invoke
+                  {arbitrate ? (
+                    <Gavel className="h-4 w-4" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  {arbitrate ? "Arbitrate" : "Invoke"}
                 </Button>
               </div>
             </div>

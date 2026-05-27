@@ -15,6 +15,11 @@ export function commonHeader(role: string, ctx: AgentContext): string {
     `Always produce structured JSON conforming to the requested schema.`,
     `Never invent canon — only the Showrunner can promote facts to canon.`,
     `Concise, professional, screenwriter-grade prose. No filler.`,
+    "",
+    "## Revision protocol",
+    "If the user input includes a `critique` field, the Showrunner asked you",
+    "to revise. Treat the critique as binding. Do not defend your prior",
+    "output — change it. Keep what was working, fix what was named.",
   ];
   if (ctx.showrunnerNotes) {
     lines.push(``, `# Showrunner notes (sticky vision):`, ctx.showrunnerNotes);

@@ -7,6 +7,9 @@ import {
   runScriptEmotionalPass,
   runSceneEmotionalPass,
 } from "../emotional/index.js";
+import { scoreScript } from "../emotional/score.js";
+import { parseFountain } from "../screenplay/fountain.js";
+import { scoreScene } from "../emotional/score.js";
 import {
   validateScriptDirectness,
   validateSceneDirectness,
@@ -75,6 +78,74 @@ export default async function emotionalRoutes(app: FastifyInstance) {
       characters: body.characters ?? scene.characters ?? [],
       relationshipId: body.relationshipId,
       workflowId: body.workflowId,
+      userId: user.id,
+    });
+  });
+
+  // --- Multi-dimensional scoring (read-only; no rewrites) -----------------
+  // Scores every scene on six dimensions (truth, subtext, wound, behavior,
+  // tension, power shift). Weak scenes are returned with rewrite
+  // instructions. Does NOT mutate the script.
+  app.post("/scripts/:scriptId/emotional/score", async (req) => {
+    const user = await requireUser(req);
+    const { scriptId } = req.params as { scriptId: string };
+    const { data: script, error } = await supabase
+      .from("scripts")
+      .select("project_id, fountain")
+      .eq("id", scriptId)
+      .single();
+    if (error) throw error;
+    await assertProjectMember(user.id, script.project_id);
+
+    const body = z
+      .object({ useLLM: z.boolean().optional() })
+      .parse(req.body ?? {});
+
+    return scoreScript({
+      projectId: script.project_id,
+      scriptId,
+      fountain: script.fountain ?? "",
+      useLLM: body.useLLM,
+      userId: user.id,
+    });
+  });
+
+  app.post("/scenes/:sceneId/emotional/score", async (req) => {
+    const user = await requireUser(req);
+    const { sceneId } = req.params as { sceneId: string };
+    const { data: scene, error } = await supabase
+      .from("script_scenes")
+      .select("id, ord, fountain, characters, script_id")
+      .eq("id", sceneId)
+      .single();
+    if (error) throw error;
+    const { data: script } = await supabase
+      .from("scripts")
+      .select("project_id")
+      .eq("id", scene.script_id)
+      .single();
+    await assertProjectMember(user.id, script!.project_id);
+
+    const parsed = parseFountain(scene.fountain ?? "");
+    const target = parsed.scenes[0] ?? {
+      order: scene.ord,
+      slugline: "INT. UNKNOWN - DAY",
+      intExt: null,
+      location: "",
+      timeOfDay: "",
+      characters: scene.characters ?? [],
+      startLine: 0,
+      endLine: 0,
+      fountain: scene.fountain ?? "",
+      elements: [],
+    };
+
+    return scoreScene({
+      projectId: script!.project_id,
+      scriptId: scene.script_id,
+      sceneId,
+      scene: target,
+      characters: scene.characters ?? [],
       userId: user.id,
     });
   });

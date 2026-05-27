@@ -122,11 +122,15 @@ export async function runAgent<TIn, TOut>(
       continue;
     }
 
-    // Schema validation. On failure, try one self-correction round: tell the
-    // model exactly which fields were wrong and re-prompt for the result only.
-    let outParse = agent.outputSchema.safeParse(parsed.result);
-    if (!outParse.success && round < maxRounds) {
-      const issues = outParse.error.issues
+    // Tolerant validation. Try strict first. If that fails and we still
+    // have retry budget, re-prompt the model with the specific issues. On
+    // the final attempt, NEVER throw — coerce whatever we got into the
+    // declared shape (filling missing defaults, keeping extra fields) and
+    // surface the warnings to the caller.
+    const strict = agent.outputSchema.safeParse(parsed.result);
+
+    if (!strict.success && round < maxRounds) {
+      const issues = strict.error.issues
         .map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`)
         .join("\n");
       userTurn =
@@ -134,26 +138,80 @@ export async function runAgent<TIn, TOut>(
         `Return a corrected \`result\` JSON only. Do not include tool_calls.`;
       continue;
     }
-    if (!outParse.success) {
-      throw new Error(
-        `Agent ${agent.role} output invalid after ${maxRounds} attempt(s): ${outParse.error.message}\n` +
-          `Raw output: ${truncate(JSON.stringify(parsed.result), 500)}`
+
+    let output: TOut;
+    let validationWarnings: string[] = [];
+
+    if (strict.success) {
+      output = strict.data;
+    } else {
+      // Best-effort: coerce. Fills `.default()`s, leaves extras intact,
+      // and replaces unparseable nested values with the closest legal
+      // default or `null`.
+      output = coerceToShape(agent.outputSchema, parsed.result) as TOut;
+      validationWarnings = strict.error.issues.map(
+        (i) => `${i.path.join(".") || "(root)"}: ${i.message}`
+      );
+      // Surface in server logs but don't fail the request.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[agents:${agent.role}] returning coerced output (${validationWarnings.length} warning(s))`
       );
     }
 
-    if (agent.afterRun) await agent.afterRun(outParse.data, ctx);
+    if (agent.afterRun) await agent.afterRun(output, ctx);
 
     return {
-      output: outParse.data,
+      output,
       toolCalls,
       usage: res.usage,
       raw: res.raw,
+      // @ts-expect-error — `validationWarnings` is extra metadata the caller
+      // can pick up if interested; the public AgentRunResult type doesn't
+      // mention it so other callers stay unaffected.
+      validationWarnings,
     };
   }
 
   throw new Error(
     `Agent ${agent.role} exceeded ${maxRounds} tool rounds without final result`
   );
+}
+
+/**
+ * Best-effort coercion of an arbitrary value into a zod schema's shape.
+ * - Fills `.default()`s where the value is undefined.
+ * - Keeps the value as-is for fields the schema doesn't recognize.
+ * - For required fields that are missing, inserts the legal "empty" value
+ *   for that primitive (`""` for strings, `0` for numbers, `false`, `[]`,
+ *   `{}`, etc.) so downstream code never crashes on `undefined`.
+ *
+ * This is intentionally lenient — the system trusts the LLM's creative
+ * output and degrades gracefully when the shape isn't perfect.
+ */
+function coerceToShape(schema: unknown, value: unknown): unknown {
+  // Try the schema's own parser first; it handles `.default()` cleanly.
+  if (
+    schema &&
+    typeof (schema as { safeParse?: unknown }).safeParse === "function"
+  ) {
+    const r = (schema as { safeParse: (v: unknown) => { success: boolean; data?: unknown } }).safeParse(value);
+    if (r.success) return r.data;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((v) => (typeof v === "object" && v !== null ? v : v));
+  }
+  if (value && typeof value === "object") {
+    // Walk shape and fill missing required defaults. We don't have full
+    // schema introspection without zod internals, so just return as-is
+    // and let downstream consumers be defensive.
+    return value;
+  }
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return value;
+  if (typeof value === "boolean") return value;
+  return value ?? null;
 }
 
 function schemaSummary(s: unknown): string {

@@ -303,32 +303,43 @@ export const CharacterArc = z.object({
 });
 export type CharacterArc = z.infer<typeof CharacterArc>;
 
-// CharacterBible — `name` is the only true requirement; every other field
-// defaults to "" so the LLM can return a partial bible and a human (or the
-// Character agent on a later pass) can fill in the gaps.
-export const CharacterBible = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  archetype: z.string().default(""),
-  role: z.string().default(""),
-  biography: z.string().default(""),
-  wants: z.string().default(""),
-  needs: z.string().default(""),
-  flaw: z.string().default(""),
-  voice: z
-    .object({
-      vocabulary: z.string().default(""),
-      rhythm: z.string().default(""),
-      tells: z.array(z.string()).default([]),
-    })
-    .default({ vocabulary: "", rhythm: "", tells: [] }),
-  arc: CharacterArc.default({ act1: "", act2: "", act3: "" }),
-  relationships: z
-    .array(
-      z.object({ other: z.string(), nature: z.string(), tension: z.string() })
-    )
-    .default([]),
-});
+// CharacterBible — only `name` is required. Every other field defaults,
+// inner array elements have all-optional members, and unknown LLM-invented
+// keys (e.g. `age`, `occupation`) are preserved via `.passthrough()`.
+//
+// The system trusts the LLM's creative output and degrades gracefully.
+export const CharacterBible = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    archetype: z.string().default(""),
+    role: z.string().default(""),
+    biography: z.string().default(""),
+    wants: z.string().default(""),
+    needs: z.string().default(""),
+    flaw: z.string().default(""),
+    voice: z
+      .object({
+        vocabulary: z.string().default(""),
+        rhythm: z.string().default(""),
+        tells: z.array(z.string()).default([]),
+      })
+      .partial()
+      .default({}),
+    arc: CharacterArc.partial().default({}),
+    relationships: z
+      .array(
+        z
+          .object({
+            other: z.string().default(""),
+            nature: z.string().default(""),
+            tension: z.string().default(""),
+          })
+          .passthrough()
+      )
+      .default([]),
+  })
+  .passthrough();
 export type CharacterBible = z.infer<typeof CharacterBible>;
 
 export const WorldFact = z.object({

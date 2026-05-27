@@ -190,21 +190,31 @@ export const LoglinePack = z.object({
 });
 export type LoglinePack = z.infer<typeof LoglinePack>;
 
+// Treatment — title + premise are essential; everything else defaults so a
+// partial response still validates.
 export const Treatment = z.object({
-  title: z.string(),
-  premise: z.string(),
-  worldStatement: z.string(),
-  protagonists: z.array(
-    z.object({ name: z.string(), role: z.string(), summary: z.string() })
-  ),
-  acts: z.array(
-    z.object({
-      number: z.number().int(),
-      goal: z.string(),
-      turn: z.string(),
-      summary: z.string(),
-    })
-  ),
+  title: z.string().min(1),
+  premise: z.string().min(1),
+  worldStatement: z.string().default(""),
+  protagonists: z
+    .array(
+      z.object({
+        name: z.string(),
+        role: z.string().default(""),
+        summary: z.string().default(""),
+      })
+    )
+    .default([]),
+  acts: z
+    .array(
+      z.object({
+        number: z.number().int(),
+        goal: z.string().default(""),
+        turn: z.string().default(""),
+        summary: z.string().default(""),
+      })
+    )
+    .default([]),
   themes: z.array(z.string()).default([]),
 });
 export type Treatment = z.infer<typeof Treatment>;
@@ -287,32 +297,37 @@ export const SceneList = z.object({
 export type SceneList = z.infer<typeof SceneList>;
 
 export const CharacterArc = z.object({
-  act1: z.string(),
-  act2: z.string(),
-  act3: z.string(),
+  act1: z.string().default(""),
+  act2: z.string().default(""),
+  act3: z.string().default(""),
 });
 export type CharacterArc = z.infer<typeof CharacterArc>;
 
+// CharacterBible — `name` is the only true requirement; every other field
+// defaults to "" so the LLM can return a partial bible and a human (or the
+// Character agent on a later pass) can fill in the gaps.
 export const CharacterBible = z.object({
   id: z.string().optional(),
-  name: z.string(),
-  archetype: z.string(),
-  role: z.string(),
-  biography: z.string(),
-  wants: z.string(),
-  needs: z.string(),
-  flaw: z.string(),
-  voice: z.object({
-    vocabulary: z.string(),
-    rhythm: z.string(),
-    tells: z.array(z.string()),
-  }),
-  arc: CharacterArc,
+  name: z.string().min(1),
+  archetype: z.string().default(""),
+  role: z.string().default(""),
+  biography: z.string().default(""),
+  wants: z.string().default(""),
+  needs: z.string().default(""),
+  flaw: z.string().default(""),
+  voice: z
+    .object({
+      vocabulary: z.string().default(""),
+      rhythm: z.string().default(""),
+      tells: z.array(z.string()).default([]),
+    })
+    .default({ vocabulary: "", rhythm: "", tells: [] }),
+  arc: CharacterArc.default({ act1: "", act2: "", act3: "" }),
   relationships: z
     .array(
       z.object({ other: z.string(), nature: z.string(), tension: z.string() })
     )
-    .optional(),
+    .default([]),
 });
 export type CharacterBible = z.infer<typeof CharacterBible>;
 

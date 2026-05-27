@@ -59,7 +59,8 @@ export async function runAgent<TIn, TOut>(
     buildContextBlock(ctx),
   ].join("\n");
 
-  const maxRounds = opts.maxToolRounds ?? 3;
+  // 4 rounds = (initial) + up to 3 retries (tool calls and/or schema fixes).
+  const maxRounds = opts.maxToolRounds ?? 4;
   const toolCalls: Array<{ name: string; input: unknown; output: unknown }> = [];
 
   let userTurn =

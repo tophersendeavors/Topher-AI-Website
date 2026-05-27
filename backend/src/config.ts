@@ -9,7 +9,10 @@ const env = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_ANON_KEY: z.string().min(20),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
-  SUPABASE_JWT_SECRET: z.string().min(10),
+  // Optional now — when omitted, the backend verifies JWTs via Supabase's
+  // JWKS endpoint (asymmetric signing keys). When set, HS256 verification is
+  // tried first with this secret, then JWKS as a fallback.
+  SUPABASE_JWT_SECRET: z.string().optional().default(""),
 
   EMBEDDING_PROVIDER: z.enum(["openai"]).default("openai"),
   EMBEDDING_MODEL: z.string().default("text-embedding-3-large"),

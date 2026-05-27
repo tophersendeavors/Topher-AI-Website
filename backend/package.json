@@ -23,6 +23,7 @@
     "@toburt/shared": "*",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
+    "jose": "^5.9.6",
     "openai": "^4.67.3",
     "pino": "^9.4.0",
     "pino-pretty": "^11.2.2",

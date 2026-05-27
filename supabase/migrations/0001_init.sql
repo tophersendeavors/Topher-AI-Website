@@ -81,7 +81,8 @@ create table projects (
   logline       text,
   genre         text[],
   tone          text[],
-  references    text[],
+  -- `references` is a reserved keyword in Postgres, so we use `inspirations`.
+  inspirations  text[],
   showrunner_notes text,
   cover_url     text,
   created_at    timestamptz not null default now(),

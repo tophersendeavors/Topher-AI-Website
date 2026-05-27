@@ -10,7 +10,7 @@ const Create = z.object({
   logline: z.string().optional(),
   genre: z.array(z.string()).optional(),
   tone: z.array(z.string()).optional(),
-  references: z.array(z.string()).optional(),
+  inspirations: z.array(z.string()).optional(),
   showrunner_notes: z.string().optional(),
 });
 

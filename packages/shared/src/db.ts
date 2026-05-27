@@ -17,7 +17,7 @@ export interface Project {
   logline: string | null;
   genre: string[] | null;
   tone: string[] | null;
-  references: string[] | null;
+  inspirations: string[] | null;
   showrunner_notes: string | null;
   cover_url: string | null;
   allow_stylistic_directness?: boolean;

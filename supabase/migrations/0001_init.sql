@@ -263,7 +263,11 @@ create table memory_entries (
   kind            memory_kind not null,
   body            jsonb not null,
   text            text not null,
-  embedding       vector(3072),
+  -- 1536 dim is the max usable with pgvector's ivfflat index (limit 2000)
+  -- and matches OpenAI's `text-embedding-3-small` natively. The `-3-large`
+  -- model also accepts a `dimensions=1536` parameter (see backend/src/
+  -- memory/embeddings.ts).
+  embedding       vector(1536),
   approved        boolean not null default false,
   version         int not null default 1,
   supersedes_id   uuid references memory_entries(id),
@@ -274,8 +278,7 @@ create table memory_entries (
 create index on memory_entries(project_id, scope, scope_ref);
 create index on memory_entries(project_id, kind);
 create index on memory_entries(supersedes_id);
--- Cosine-similarity index. For 3072 dims an HNSW index may exceed pgvector's
--- per-element budget on some Supabase tiers; ivfflat works at any dim.
+-- Cosine-similarity index. ivfflat caps at 2000 dimensions, hence 1536 above.
 create index on memory_entries using ivfflat (embedding vector_cosine_ops) with (lists = 100);
 
 -- -----------------------------------------------------------------------------

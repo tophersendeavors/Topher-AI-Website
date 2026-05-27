@@ -13,7 +13,7 @@ const env = z.object({
 
   EMBEDDING_PROVIDER: z.enum(["openai"]).default("openai"),
   EMBEDDING_MODEL: z.string().default("text-embedding-3-large"),
-  EMBEDDING_DIMENSIONS: z.coerce.number().default(3072),
+  EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
 
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

@@ -114,6 +114,21 @@ begin
              where s.id = script_scenes.script_id)
           ));
       $f$, t);
+    elsif t in ('workflow_stages',
+                'workflow_stage_artifacts',
+                'workflow_checkpoints') then
+      -- These tables don't carry project_id directly; they belong to a
+      -- workflow which does.
+      execute format($f$
+        create policy %1$s_member_all on %1$s
+          for all
+          using (is_project_member(
+            (select project_id from workflows w where w.id = %1$s.workflow_id)
+          ))
+          with check (is_project_member(
+            (select project_id from workflows w where w.id = %1$s.workflow_id)
+          ));
+      $f$, t);
     else
       execute format($f$
         create policy %1$s_member_all on %1$s

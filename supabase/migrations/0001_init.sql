@@ -9,6 +9,26 @@ create extension if not exists "pgcrypto";
 create extension if not exists "vector";
 
 -- -----------------------------------------------------------------------------
+-- Default privileges for `service_role` and `authenticated`.
+-- Without these, after a `drop schema public cascade` the service_role
+-- loses table-level access on anything created here. Re-asserting them
+-- is harmless on a fresh project.
+-- -----------------------------------------------------------------------------
+grant usage on schema public to anon, authenticated, service_role;
+
+alter default privileges in schema public
+  grant all on tables    to service_role;
+alter default privileges in schema public
+  grant all on sequences to service_role;
+alter default privileges in schema public
+  grant all on functions to service_role;
+
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public
+  grant usage, select on sequences to authenticated;
+
+-- -----------------------------------------------------------------------------
 -- Enums
 -- -----------------------------------------------------------------------------
 

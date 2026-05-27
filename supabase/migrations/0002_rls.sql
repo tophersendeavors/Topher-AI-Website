@@ -67,6 +67,11 @@ create policy project_members_write on project_members
 -- -----------------------------------------------------------------------------
 -- Generic policy: any project-scoped table — SELECT/INSERT/UPDATE/DELETE
 -- for project members.
+--
+-- The branch per table is in PL/pgSQL (not in SQL) because Postgres still
+-- parses every branch of a SQL `CASE WHEN`, including ones that can't be
+-- reached for a given table — and that fails when columns like
+-- `character_voice_fingerprints.character_id` don't exist on the target.
 -- -----------------------------------------------------------------------------
 do $$
 declare t text;
@@ -81,41 +86,41 @@ begin
     ])
   loop
     execute format('alter table %I enable row level security;', t);
+    execute format('drop policy if exists %1$s_member_all on %1$s;', t);
 
-    execute format($f$
-      drop policy if exists %1$s_member_all on %1$s;
-      create policy %1$s_member_all on %1$s
-        for all
-        using (
-          case
-            when '%1$s' = 'character_voice_fingerprints'
-              then is_project_member(
-                (select project_id from characters c
-                 where c.id = character_voice_fingerprints.character_id)
-              )
-            when '%1$s' = 'script_scenes'
-              then is_project_member(
-                (select project_id from scripts s
-                 where s.id = script_scenes.script_id)
-              )
-            else is_project_member(project_id)
-          end
-        )
-        with check (
-          case
-            when '%1$s' = 'character_voice_fingerprints'
-              then is_project_member(
-                (select project_id from characters c
-                 where c.id = character_voice_fingerprints.character_id)
-              )
-            when '%1$s' = 'script_scenes'
-              then is_project_member(
-                (select project_id from scripts s
-                 where s.id = script_scenes.script_id)
-              )
-            else is_project_member(project_id)
-          end
-        );
-    $f$, t);
+    if t = 'character_voice_fingerprints' then
+      execute format($f$
+        create policy %1$s_member_all on %1$s
+          for all
+          using (is_project_member(
+            (select project_id from characters c
+             where c.id = character_voice_fingerprints.character_id)
+          ))
+          with check (is_project_member(
+            (select project_id from characters c
+             where c.id = character_voice_fingerprints.character_id)
+          ));
+      $f$, t);
+    elsif t = 'script_scenes' then
+      execute format($f$
+        create policy %1$s_member_all on %1$s
+          for all
+          using (is_project_member(
+            (select project_id from scripts s
+             where s.id = script_scenes.script_id)
+          ))
+          with check (is_project_member(
+            (select project_id from scripts s
+             where s.id = script_scenes.script_id)
+          ));
+      $f$, t);
+    else
+      execute format($f$
+        create policy %1$s_member_all on %1$s
+          for all
+          using (is_project_member(project_id))
+          with check (is_project_member(project_id));
+      $f$, t);
+    end if;
   end loop;
 end$$;

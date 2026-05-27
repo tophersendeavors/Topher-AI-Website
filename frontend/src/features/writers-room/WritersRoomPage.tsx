@@ -296,5 +296,28 @@ function agentSeedInput(role: AgentRole, prompt: string): unknown {
       return { scope: {} };
     case "producer":
       return { scriptId: "00000000-0000-0000-0000-000000000000" };
+    // -------- Emotional Intelligence Layer --------
+    case "emotional_truth":
+      return {
+        sceneFountain: prompt || "INT. UNKNOWN - DAY\n\nThe room is quiet.",
+        characters: [],
+        allowStylistic: false,
+      };
+    case "subtext":
+      return {
+        sceneFountain: prompt || "JANE\nI feel sad.",
+        characters: [],
+        preferAction: true,
+      };
+    case "character_wound":
+      return { intent: "create", seed: prompt };
+    case "behavior":
+      return {
+        sceneFountain: prompt || "JANE\nI'm angry.",
+        characters: [],
+        replaceStatedEmotion: true,
+      };
+    case "relationship_tension":
+      return { intent: "map", sceneFountain: prompt };
   }
 }

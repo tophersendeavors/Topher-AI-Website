@@ -14,6 +14,7 @@ import { RewritesPage } from "@/features/rewrites/RewritesPage";
 import { ContinuityPage } from "@/features/continuity/ContinuityPage";
 import { ProductionPage } from "@/features/production/ProductionPage";
 import { ExportCenterPage } from "@/features/exports/ExportCenterPage";
+import { EmotionalIntelligencePage } from "@/features/emotional/EmotionalIntelligencePage";
 
 export function App() {
   return (
@@ -33,6 +34,7 @@ export function App() {
             <Route path="projects/:projectId/drafts/:scriptId" element={<ScriptEditorPage />} />
             <Route path="projects/:projectId/rewrites" element={<RewritesPage />} />
             <Route path="projects/:projectId/continuity" element={<ContinuityPage />} />
+            <Route path="projects/:projectId/emotional" element={<EmotionalIntelligencePage />} />
             <Route path="projects/:projectId/production" element={<ProductionPage />} />
             <Route path="projects/:projectId/exports" element={<ExportCenterPage />} />
           </Route>

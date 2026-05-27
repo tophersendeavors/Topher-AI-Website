@@ -16,8 +16,11 @@ human-in-the-loop approvals at every stage.
 
 ## Highlights
 
-- **10 specialized agents** — Showrunner, Concept, Character, World/Canon, Plot,
-  Scene, Dialogue, Script Doctor, Continuity, Producer.
+- **15 specialized agents** — Showrunner, Concept, Character, World/Canon,
+  Plot, Scene, Dialogue, Script Doctor, Continuity, Producer, plus a 5-agent
+  **Emotional Intelligence Layer** (Emotional Truth, Subtext, Character Wound,
+  Behavior, Relationship Tension) that rejects scenes whose characters
+  explain their feelings instead of dramatizing them.
 - **LangGraph-style orchestrator** — stateful, branchable, resumable graphs with
   per-stage checkpoints, approvals and rollback.
 - **Shared canonical memory** — Supabase + pgvector store project, script,

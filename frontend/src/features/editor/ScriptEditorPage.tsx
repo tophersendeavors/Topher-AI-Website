@@ -174,19 +174,44 @@ export function ScriptEditorPage() {
                 projectId={projectId}
                 input={() => ({ scope: { scriptId } })}
               />
+              <AssistButton
+                label="Behavior pass"
+                desc="Convert stated emotions into physical action / silence / tells."
+                role="behavior"
+                projectId={projectId}
+                input={() => ({
+                  sceneFountain: extractCurrentScene(body),
+                  characters: [],
+                  replaceStatedEmotion: true,
+                })}
+              />
+              <AssistButton
+                label="Subtext pass"
+                desc="Rewrite on-the-nose lines into indirect, layered ones."
+                role="subtext"
+                projectId={projectId}
+                input={() => ({
+                  sceneFountain: extractCurrentScene(body),
+                  characters: [],
+                  preferAction: true,
+                })}
+              />
+              <AssistButton
+                label="Emotional truth"
+                desc="Score the scene & extract the ten emotional fields."
+                role="emotional_truth"
+                projectId={projectId}
+                input={() => ({
+                  sceneFountain: extractCurrentScene(body),
+                  characters: [],
+                  scriptId,
+                  allowStylistic: false,
+                })}
+              />
             </ul>
           </Panel>
 
-          <Panel eyebrow="Hints" title="Voice & continuity">
-            <p className="text-sm text-bone-300">
-              When you save, scenes are reindexed and the next AI pass will see
-              the updated structure. Voice warnings appear here after a
-              Dialogue pass.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="chip">no warnings yet</span>
-            </div>
-          </Panel>
+          <EmotionalPanel scriptId={scriptId} />
         </div>
       </div>
     </div>
@@ -276,4 +301,83 @@ function extractCurrentSlugline(text: string): string {
     }
   }
   return "INT. UNKNOWN - DAY";
+}
+
+function EmotionalPanel({ scriptId }: { scriptId: string }) {
+  const qc = useQueryClient();
+  const states = useQuery({
+    queryKey: ["emotional-states", scriptId],
+    queryFn: () => api.listScriptEmotionalStates(scriptId),
+  });
+  const directness = useQuery({
+    queryKey: ["directness", scriptId],
+    queryFn: () => api.validateDirectness(scriptId),
+  });
+  const runPass = useMutation({
+    mutationFn: () => api.runScriptEmotionalPass(scriptId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["emotional-states", scriptId] });
+      qc.invalidateQueries({ queryKey: ["directness", scriptId] });
+    },
+  });
+
+  const directViolations = (directness.data ?? []).reduce(
+    (sum, s) => sum + s.report.violations.length,
+    0
+  );
+  const rejected = (states.data ?? []).filter((s) => s.rejected).length;
+
+  return (
+    <Panel eyebrow="Emotional Intelligence" title="Scene EI state">
+      <div className="mb-3 flex flex-wrap gap-2">
+        <span className="chip">{directViolations} directness flag(s)</span>
+        <span
+          className={`chip ${
+            rejected > 0 ? "border-red-700/50 text-red-200" : ""
+          }`}
+        >
+          {rejected} rejected scene(s)
+        </span>
+      </div>
+      <Button
+        variant="outline"
+        onClick={() => runPass.mutate()}
+        disabled={runPass.isPending}
+      >
+        <Sparkles className="h-4 w-4" />
+        {runPass.isPending ? "Running…" : "Run EI pass"}
+      </Button>
+      {(states.data ?? []).length > 0 && (
+        <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto pr-1 text-xs">
+          {states.data!.map((s, i) => (
+            <li
+              key={s.id}
+              className={`rounded-md border p-2 ${
+                s.rejected ? "border-red-700/50 bg-red-950/20" : "border-white/8 bg-white/[0.02]"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-bone-200">Scene {i + 1}</span>
+                {s.truth_score != null && (
+                  <span className="text-bone-400">truth {s.truth_score.toFixed(2)}</span>
+                )}
+              </div>
+              <div className="mt-1 text-bone-300">
+                {s.emotionalEntryState} → {s.emotionalExitState}
+              </div>
+              {s.rejection_reason && (
+                <div className="mt-1 text-red-200">{s.rejection_reason}</div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {directViolations === 0 && (states.data ?? []).length === 0 && (
+        <p className="mt-3 text-xs text-bone-400">
+          Run an EI pass to score this script's scenes against the ten
+          required emotional fields, and to catch on-the-nose dialogue.
+        </p>
+      )}
+    </Panel>
+  );
 }

@@ -335,3 +335,55 @@ fast for the wide canon scans).
 ```
 
 **Tools**: `retrieveDrafts`, `tagSceneEntities`.
+
+---
+
+# Emotional Intelligence Layer
+
+See [`EMOTIONAL_INTELLIGENCE.md`](./EMOTIONAL_INTELLIGENCE.md) for the full
+spec. Quick reference:
+
+## 11. Emotional Truth
+
+**Goal**: audit every scene for believable emotional cause and effect; produce
+the ten required emotional fields; reject scenes that explain emotions
+directly.
+
+**Input**: `{ sceneFountain, characters[], scriptId?, allowStylistic }`
+**Output**: `EmotionalTruthReport` — includes a complete `SceneEmotionalState`,
+a `truthScore` (0..1), a list of `causeEffect` judgments, and structured
+`rejections[]`.
+**Tools**: `retrieveCanon`, `retrieveDrafts`, `getCharacter`.
+
+## 12. Subtext
+
+**Goal**: rewrite on-the-nose lines into indirect, layered ones.
+
+**Input**: `{ sceneFountain, characters[], preferAction }`
+**Output**: `{ fountain, replacements: SubtextRewrite[] }`.
+**Tools**: `retrieveCanon`, `getCharacter`, `voiceFingerprint`.
+
+## 13. Character Wound
+
+**Goal**: per-character wound, fear, unmet need, shame trigger, defenses.
+
+**Input**: `{ intent: "create"|"refine"|"extract", characterId?, seed? }`
+**Output**: `{ wound: CharacterWound, notes[] }`. Promotes to canon via
+`proposeCanonChange`.
+
+## 14. Behavior
+
+**Goal**: translate stated emotion into physical action / silence /
+contradiction / micro-tells.
+
+**Input**: `{ sceneFountain, characters[], replaceStatedEmotion }`
+**Output**: `BehaviorTranslation` — `{ fountain, beats: BehaviorBeat[] }`.
+
+## 15. Relationship Tension
+
+**Goal**: surface the unsaid between two characters and per-scene shifts.
+
+**Input**: `{ intent: "map"|"scene_pass"|"refine", relationshipId?, aId?, bId?, sceneFountain? }`
+**Output**: `{ tension: RelationshipTension, sceneEffect? }` where
+`sceneEffect` carries the `powerShift` and `relationshipShift` that the
+`SceneEmotionalState` requires.

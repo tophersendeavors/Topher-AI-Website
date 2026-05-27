@@ -28,6 +28,16 @@ const env = z.object({
   SCRIPT_DOCTOR_MODEL: z.string().default("claude-opus-4-7"),
   CONTINUITY_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   PRODUCER_MODEL: z.string().default("claude-sonnet-4-6"),
+
+  // ---------- Emotional Intelligence Layer ----------
+  EMOTIONAL_TRUTH_MODEL: z.string().default("claude-opus-4-7"),
+  SUBTEXT_MODEL: z.string().default("claude-sonnet-4-6"),
+  CHARACTER_WOUND_MODEL: z.string().default("claude-opus-4-7"),
+  BEHAVIOR_MODEL: z.string().default("claude-sonnet-4-6"),
+  RELATIONSHIP_TENSION_MODEL: z.string().default("claude-sonnet-4-6"),
+
+  /** Reject scenes with > N critical directness violations during draft_v1. */
+  EMOTIONAL_REJECTION_THRESHOLD: z.coerce.number().int().nonnegative().default(2),
 });
 
 const parsed = env.safeParse(process.env);

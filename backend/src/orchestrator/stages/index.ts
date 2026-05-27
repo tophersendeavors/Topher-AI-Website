@@ -14,6 +14,8 @@ import { conceptAgent } from "../../agents/concept.js";
 import { plotAgent } from "../../agents/plot.js";
 import { sceneAgent } from "../../agents/scene.js";
 import { dialogueAgent } from "../../agents/dialogue.js";
+import { behaviorAgent } from "../../agents/behavior.js";
+import { subtextAgent } from "../../agents/subtext.js";
 import { runAgent } from "../../agents/runner.js";
 import { hydrateContext } from "../hydrate.js";
 import { postRoomMessage } from "../room.js";
@@ -316,7 +318,7 @@ export const draftV1Stage: Stage<{ fountain: string }> = {
         projectId: ctx.projectId,
         workflowId: ctx.workflowId,
         stage: "draft_v1",
-        collaborators: ["scene", "dialogue", "character", "continuity", "showrunner"],
+        collaborators: STAGE_AGENTS.draft_v1,
         query: spec.goal,
         user: ctx.user,
       });
@@ -335,7 +337,21 @@ export const draftV1Stage: Stage<{ fountain: string }> = {
         sceneFountain: draft.output.fountain,
         characters: spec.characters,
       }, aCtx);
-      fountainParts.push(pass.output.fountain);
+      // --- Emotional Intelligence Layer: behavior → subtext ---
+      // The full Emotional Truth + Relationship Tension pass runs after
+      // scenes are persisted (in /scripts/:id/emotional/pass) so the
+      // SceneEmotionalState rows can be linked to real script_scenes.id.
+      const beh = await runAgent(behaviorAgent, {
+        sceneFountain: pass.output.fountain,
+        characters: spec.characters,
+        replaceStatedEmotion: true,
+      }, aCtx);
+      const sub = await runAgent(subtextAgent, {
+        sceneFountain: beh.output.fountain,
+        characters: spec.characters,
+        preferAction: true,
+      }, aCtx);
+      fountainParts.push(sub.output.fountain);
     }
     const fountain = fountainParts.join("\n\n");
     return { artifact: { fountain }, awaitingApproval: this.requiresApproval };

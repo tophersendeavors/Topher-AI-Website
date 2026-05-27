@@ -13,6 +13,7 @@ import scriptsRoutes from "./routes/scripts.js";
 import exportsRoutes from "./routes/exports.js";
 import productionRoutes from "./routes/production.js";
 import entitiesRoutes from "./routes/entities.js";
+import emotionalRoutes from "./routes/emotional.js";
 
 async function main() {
   const app = Fastify({
@@ -43,6 +44,7 @@ async function main() {
       await api.register(exportsRoutes);
       await api.register(productionRoutes);
       await api.register(entitiesRoutes);
+      await api.register(emotionalRoutes);
     },
     { prefix: "/api" }
   );

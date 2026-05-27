@@ -3,6 +3,7 @@ import {
   Clapperboard,
   Film,
   GitBranch,
+  Heart,
   Layers,
   ListTree,
   Megaphone,
@@ -25,6 +26,7 @@ const NAV: Array<{ to: (id: string) => string; label: string; Icon: typeof Film;
   { to: (id) => `/projects/${id}/drafts`, label: "Drafts", Icon: Film, section: 3 },
   { to: (id) => `/projects/${id}/rewrites`, label: "Rewrites", Icon: Wand2, section: 3 },
   { to: (id) => `/projects/${id}/continuity`, label: "Continuity", Icon: GitBranch, section: 3 },
+  { to: (id) => `/projects/${id}/emotional`, label: "Emotional Intelligence", Icon: Heart, section: 3 },
   { to: (id) => `/projects/${id}/production`, label: "Production Tools", Icon: Wrench, section: 3 },
   { to: (id) => `/projects/${id}/exports`, label: "Export Center", Icon: Clapperboard, section: 3 },
 ];

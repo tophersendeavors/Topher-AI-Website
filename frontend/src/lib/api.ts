@@ -2,11 +2,15 @@ import type {
   AgentRole,
   Approval,
   Character,
+  CharacterWound,
+  DirectnessReport,
   Episode,
   Location,
   MemoryHit,
   Project,
+  RelationshipTension,
   RoomMessage,
+  SceneEmotionalState,
   Script,
   Season,
   WorkflowStageId,
@@ -182,4 +186,57 @@ export const api = {
   // Production
   productionFor: (scriptId: string, tool: "shotlist" | "storyboard" | "flow") =>
     request<unknown>(`/scripts/${scriptId}/production/${tool}`),
+
+  // -------- Emotional Intelligence Layer --------
+  validateDirectness: (scriptId: string) =>
+    request<Array<{ order: number; slugline: string; report: DirectnessReport }>>(
+      `/scripts/${scriptId}/emotional/validate`,
+      { method: "POST" }
+    ),
+  runScriptEmotionalPass: (scriptId: string) =>
+    request<
+      Array<{
+        state: SceneEmotionalState;
+        rejected: boolean;
+        rejectionReason?: string;
+        rewrittenFountain: string;
+        truthScore?: number;
+      }>
+    >(`/scripts/${scriptId}/emotional/pass`, { method: "POST" }),
+  runSceneEmotionalPass: (
+    sceneId: string,
+    body?: { fountain?: string; characters?: string[]; relationshipId?: string }
+  ) =>
+    request<{
+      state: SceneEmotionalState;
+      rejected: boolean;
+      rejectionReason?: string;
+      rewrittenFountain: string;
+      truthScore?: number;
+    }>(`/scenes/${sceneId}/emotional/pass`, {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
+  listScriptEmotionalStates: (scriptId: string) =>
+    request<Array<SceneEmotionalState & { id: string; scene_id: string; rejected: boolean; rejection_reason?: string; truth_score?: number }>>(
+      `/scripts/${scriptId}/emotional/states`
+    ),
+  getSceneEmotionalState: (sceneId: string) =>
+    request<(SceneEmotionalState & { id: string; rejected: boolean }) | null>(
+      `/scenes/${sceneId}/emotional/state`
+    ),
+  getCharacterWound: (characterId: string) =>
+    request<CharacterWound | null>(`/characters/${characterId}/wound`),
+  listWounds: (projectId: string) =>
+    request<CharacterWound[]>(`/projects/${projectId}/wounds`),
+  listRelationshipTensions: (projectId: string) =>
+    request<RelationshipTension[]>(`/projects/${projectId}/tensions`),
+  setStylisticDirectness: (projectId: string, allow: boolean) =>
+    request<{ id: string; allow_stylistic_directness: boolean }>(
+      `/projects/${projectId}/emotional/settings`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ allow_stylistic_directness: allow }),
+      }
+    ),
 };

@@ -15,6 +15,12 @@ export const AGENT_ROLES = [
   "script_doctor",
   "continuity",
   "producer",
+  // -------- Emotional Intelligence Layer --------
+  "emotional_truth",
+  "subtext",
+  "character_wound",
+  "behavior",
+  "relationship_tension",
 ] as const;
 
 export type AgentRole = (typeof AGENT_ROLES)[number];
@@ -82,6 +88,42 @@ export const AGENT_PROFILES: Record<
     emoji: "Pr",
     accent: "#7F8C8D",
     description: "Budget, feasibility, VFX, AI-gen practicality.",
+  },
+  // -------- Emotional Intelligence Layer --------
+  emotional_truth: {
+    label: "Emotional Truth",
+    emoji: "♡",
+    accent: "#D63384",
+    description:
+      "Audits every scene for believable emotional cause & effect.",
+  },
+  subtext: {
+    label: "Subtext",
+    emoji: "≈",
+    accent: "#9B59B6",
+    description:
+      "Rewrites on-the-nose dialogue into indirect, layered exchanges.",
+  },
+  character_wound: {
+    label: "Wound",
+    emoji: "✕",
+    accent: "#6E3A8B",
+    description:
+      "Tracks each character's core wound, fear, unmet need, shame trigger, defenses.",
+  },
+  behavior: {
+    label: "Behavior",
+    emoji: "↺",
+    accent: "#0EA5E9",
+    description:
+      "Translates stated emotion into physical action, avoidance, silence, micro-tells.",
+  },
+  relationship_tension: {
+    label: "Relationship",
+    emoji: "↔",
+    accent: "#EAB308",
+    description:
+      "Surfaces what's unsaid between characters and how each scene shifts it.",
   },
 };
 

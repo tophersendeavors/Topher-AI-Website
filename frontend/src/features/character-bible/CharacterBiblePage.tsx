@@ -108,6 +108,10 @@ export function CharacterBiblePage() {
 }
 
 function CharacterDetail({ character }: { character: Character }) {
+  const wound = useQuery({
+    queryKey: ["wound", character.id],
+    queryFn: () => api.getCharacterWound(character.id),
+  });
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <Field label="Archetype" value={character.archetype} />
@@ -133,6 +137,36 @@ function CharacterDetail({ character }: { character: Character }) {
           </div>
         </div>
       )}
+
+      <div className="md:col-span-2">
+        <div className="label-eyebrow mb-1 flex items-center gap-2">
+          Core wound
+          {wound.data && (
+            <span className="chip">{wound.data.kind ?? "custom"}</span>
+          )}
+        </div>
+        {!wound.data ? (
+          <div className="rounded-md border border-dashed border-white/10 bg-white/[0.02] p-3 text-xs text-bone-400">
+            No wound tracked yet. Invoke the <strong>Wound</strong> agent in the
+            Writers Room with this character's name to generate one.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <Field label="Wound" value={wound.data.wound} />
+            <Field label="Fear" value={wound.data.fear} />
+            <Field label="Unmet need" value={wound.data.unmetNeed} />
+            <Field label="Shame trigger" value={wound.data.shameTrigger} />
+            <div className="md:col-span-2">
+              <div className="label-eyebrow mb-1">Defenses</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(wound.data.defenses ?? []).map((d: string) => (
+                  <span key={d} className="chip">{d}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -20,6 +20,7 @@ export interface Project {
   references: string[] | null;
   showrunner_notes: string | null;
   cover_url: string | null;
+  allow_stylistic_directness?: boolean;
   created_at: string;
   updated_at: string;
 }

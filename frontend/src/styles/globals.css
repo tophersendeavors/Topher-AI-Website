@@ -1231,6 +1231,48 @@ body {
     text-wrap: pretty; margin-bottom: 22px;
   }
 
+  /* Calm notice banners — replace harsh amber-900/red-900 inline divs.
+     Use these for the "heads up" / "locked" / "ready" rows scattered
+     across pages. Each tone reads as a soft glass card with a thin
+     accent edge, not a flashy warning. */
+  .os-banner {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 16px;
+    border-radius: var(--os-r-md);
+    background: var(--os-glass-1);
+    border: 1px solid var(--os-brd-soft);
+    backdrop-filter: var(--os-blur);
+    box-shadow: var(--os-hi-soft);
+  }
+  .os-banner-icon {
+    width: 32px; height: 32px; flex: 0 0 auto;
+    border-radius: 9px;
+    display: grid; place-items: center;
+    background: var(--os-glass-2);
+    border: 1px solid var(--os-brd-soft);
+    color: var(--os-t-3);
+  }
+  .os-banner-info { border-color: var(--os-blue-edge); background: linear-gradient(120deg, var(--os-blue-wash), var(--os-glass-1) 60%); }
+  .os-banner-info .os-banner-icon { background: var(--os-blue-wash); color: var(--os-blue); border-color: var(--os-blue-edge); }
+  .os-banner-success { border-color: var(--os-emerald-edge); background: linear-gradient(120deg, var(--os-emerald-wash), var(--os-glass-1) 60%); }
+  .os-banner-success .os-banner-icon { background: var(--os-emerald-wash); color: var(--os-emerald); border-color: var(--os-emerald-edge); }
+  .os-banner-attn { border-color: var(--os-ember-edge); background: linear-gradient(120deg, var(--os-ember-wash), var(--os-glass-1) 60%); }
+  .os-banner-attn .os-banner-icon { background: var(--os-ember-wash); color: var(--os-ember); border-color: var(--os-ember-edge); }
+  .os-banner-warn { border-color: var(--os-attn-edge); background: linear-gradient(120deg, var(--os-attn-wash), var(--os-glass-1) 60%); }
+  .os-banner-warn .os-banner-icon { background: var(--os-attn-wash); color: var(--os-attn); border-color: var(--os-attn-edge); }
+  .os-banner-locked { border-color: var(--os-brd); background: var(--os-glass-2); }
+  .os-banner-locked .os-banner-icon { background: var(--os-glass-2); color: var(--os-t-3); }
+  .os-banner-block { border-color: var(--os-red-edge); background: linear-gradient(120deg, var(--os-red-wash), var(--os-glass-1) 60%); }
+  .os-banner-block .os-banner-icon { background: var(--os-red-wash); color: var(--os-red); border-color: var(--os-red-edge); }
+  .os-banner-title {
+    font-size: 13.5px; font-weight: 600; color: var(--os-t-1);
+    letter-spacing: -0.005em;
+  }
+  .os-banner-sub {
+    margin-top: 3px; font-size: 12.5px; line-height: 1.5;
+    color: var(--os-t-3); text-wrap: pretty;
+  }
+
   /* Icon button used as panel actions ("Copy", expand). */
   .os-icon-action {
     display: inline-flex; align-items: center; gap: 7px;

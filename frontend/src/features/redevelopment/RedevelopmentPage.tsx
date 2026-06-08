@@ -37,6 +37,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { ApprovalBadge } from "@/components/ui/ApprovalBadge";
+import { AuditCheckPanel } from "@/components/ui/AuditCheckPanel";
+import { DraftPreviewPanel } from "@/components/ui/DraftPreviewPanel";
 
 const STAGE_ORDER: RedevStageKey[] = [
   "r1_brief",
@@ -441,19 +443,14 @@ function StageDetail({
       .map((k) => STAGE_LABEL[k])
       .join(", ");
     return (
-      <Panel
-        eyebrow={STAGE_LABEL[stage]}
-        title="This stage is locked"
-      >
-        <div className="flex items-start gap-3 rounded border border-amber-700/40 bg-amber-900/15 p-4">
-          <Lock className="h-5 w-5 text-amber-300 mt-0.5 shrink-0" />
-          <div>
-            <div className="text-sm text-amber-100 font-medium">
-              Waiting on {blockers}
-            </div>
-            <div className="text-xs text-amber-200/80 mt-1">
-              {STAGE_SUB[stage]}
-            </div>
+      <Panel eyebrow={STAGE_LABEL[stage]} title="This stage is locked">
+        <div className="os-banner os-banner-locked">
+          <div className="os-banner-icon">
+            <Lock className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="os-banner-title">Waiting on {blockers}</div>
+            <div className="os-banner-sub">{STAGE_SUB[stage]}</div>
           </div>
         </div>
       </Panel>
@@ -2204,6 +2201,9 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
  *  ran on a generation, what passed, what triggered an auto-repair,
  *  and what the showrunner needs to review manually. Returned by the
  *  server's audit pipeline for R3 modules and R4 season arc. */
+/** Thin shim — delegates to the shared `AuditCheckPanel` so every
+ *  call site in this file automatically inherits the upgraded design
+ *  language. Kept as a wrapper to avoid churn on all ~12 callers. */
 function QualityCheckPanel({
   audit,
   collapsedByDefault = false,
@@ -2211,87 +2211,11 @@ function QualityCheckPanel({
   audit: RedevAuditReport;
   collapsedByDefault?: boolean;
 }) {
-  const [open, setOpen] = useState(!collapsedByDefault);
-  const repairedCount = audit.checks.filter((c) => c.status === "auto_repaired").length;
-  const warningCount = audit.checks.filter((c) => c.status === "warning").length;
-  const passedCount = audit.checks.filter((c) => c.status === "passed").length;
-
-  const summaryClass =
-    warningCount > 0
-      ? "border-amber-700/40 bg-amber-900/15"
-      : repairedCount > 0
-        ? "border-sky-700/40 bg-sky-900/15"
-        : "border-emerald-700/40 bg-emerald-900/15";
-
   return (
-    <div className={`rounded border ${summaryClass} p-3 space-y-2`}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between text-left"
-      >
-        <div className="text-[11px] uppercase tracking-wide text-bone-200 font-medium">
-          Generation Quality Check
-        </div>
-        <div className="text-[11px] flex items-center gap-2">
-          <span className="text-emerald-300">
-            <Check className="inline h-3 w-3 mr-0.5" />
-            {passedCount} passed
-          </span>
-          {repairedCount > 0 && (
-            <span className="text-sky-300">
-              <RefreshCw className="inline h-3 w-3 mr-0.5" />
-              {repairedCount} repaired
-            </span>
-          )}
-          {warningCount > 0 && (
-            <span className="text-amber-300">
-              <AlertTriangle className="inline h-3 w-3 mr-0.5" />
-              {warningCount} review
-            </span>
-          )}
-        </div>
-      </button>
-      {open && (
-        <div className="space-y-1.5 pt-1 border-t border-white/8">
-          {audit.checks.map((c) => (
-            <div key={c.id} className="text-[11px] flex items-start gap-2">
-              <span className="shrink-0 mt-0.5">
-                {c.status === "passed" && (
-                  <Check className="h-3.5 w-3.5 text-emerald-300" />
-                )}
-                {c.status === "auto_repaired" && (
-                  <RefreshCw className="h-3.5 w-3.5 text-sky-300" />
-                )}
-                {c.status === "warning" && (
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-300" />
-                )}
-              </span>
-              <div className="min-w-0">
-                <div className="text-bone-100 font-medium">{c.label}</div>
-                <div className="text-bone-400 leading-snug">{c.message}</div>
-              </div>
-            </div>
-          ))}
-          {audit.repairs.length > 0 && (
-            <div className="border-t border-white/8 pt-2 space-y-1">
-              <div className="text-[11px] uppercase tracking-wide text-sky-300">
-                Repairs applied
-              </div>
-              {audit.repairs.map((r, i) => (
-                <div
-                  key={i}
-                  className="text-[11px] text-bone-300 leading-snug flex items-start gap-1.5"
-                >
-                  <RefreshCw className="h-3 w-3 mt-0.5 shrink-0 text-sky-300" />
-                  <span>{r.description}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <AuditCheckPanel
+      audit={audit}
+      collapsedByDefault={collapsedByDefault}
+    />
   );
 }
 
@@ -3702,12 +3626,17 @@ function R6PreRewriteStage({
   if (!r5Approved) {
     return (
       <Panel eyebrow={STAGE_LABEL["r6_pilot_rewrite"]} title="R6 — Locked">
-        <div className="flex items-start gap-3 rounded border border-white/10 bg-white/[0.02] p-4">
-          <Lock className="h-5 w-5 text-bone-400 mt-0.5 shrink-0" />
-          <div className="text-sm text-bone-300 leading-relaxed">
-            R6 unlocks when R5 Pilot Strategy is approved. Approve the
-            strategy first, then return here to generate the per-character
-            protection contracts the rewrite must honor.
+        <div className="os-banner os-banner-locked">
+          <div className="os-banner-icon">
+            <Lock className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="os-banner-title">Locked until R5 is approved</div>
+            <div className="os-banner-sub">
+              R6 unlocks when R5 Pilot Strategy is approved. Approve the
+              strategy first, then return here to generate the per-character
+              protection contracts the rewrite must honor.
+            </div>
           </div>
         </div>
       </Panel>
@@ -4850,31 +4779,18 @@ function R6Pass2Section({
       )}
 
       {draft && (
-        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] uppercase tracking-wide text-bone-400">
-              Rewritten pilot — Fountain preview
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowFullDraft((v) => !v)}
-              className="text-[11px] text-bone-300 hover:text-bone-100 underline"
-            >
-              {showFullDraft ? "collapse" : "expand"}
-            </button>
-          </div>
-          <pre
-            className={`mt-2 overflow-auto rounded border border-bone-700/30 bg-black/30 px-3 py-2 text-[12px] text-bone-200 whitespace-pre-wrap leading-snug font-mono ${
-              showFullDraft ? "max-h-[80vh]" : "max-h-72"
-            }`}
-          >
-            {draft}
-          </pre>
-          <div className="mt-1 text-[11px] text-bone-500">
-            {draft.length.toLocaleString()} characters · Approving inserts as Draft N+1; existing EP01 preserved.
-            {priorScriptId ? ` Anchored to prior script ${priorScriptId.slice(0, 8)}…` : ""}
-          </div>
-        </div>
+        <DraftPreviewPanel
+          title="Rewritten pilot — Fountain preview"
+          text={draft}
+          state={draftApproved ? "promoted" : "proposed"}
+          draftNumber={promotedDraft ?? null}
+          startExpanded={showFullDraft}
+          footerHint={`Approving inserts as Draft N+1; existing EP01 preserved.${
+            priorScriptId
+              ? ` Anchored to prior script ${priorScriptId.slice(0, 8)}…`
+              : ""
+          }`}
+        />
       )}
     </div>
   );
@@ -5023,27 +4939,28 @@ function R6Pass2RepairPanel({
   if (warningTargetIds.length === 0 && !lastRepairResult) return null;
 
   return (
-    <div className="rounded-lg border border-amber-700/40 bg-amber-900/10 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="h-4 w-4 text-amber-300" />
-        <div className="text-[11px] uppercase tracking-wide text-amber-200 font-medium">
-          Surgical Plant Repair
+    <div className="os-banner os-banner-attn p-4 space-y-3 flex-col">
+      <div className="flex items-center gap-2 w-full">
+        <div className="os-banner-icon">
+          <AlertTriangle className="h-4 w-4" />
         </div>
+        <div className="os-banner-title flex-1">Surgical Plant Repair</div>
       </div>
-      <div className="text-[12px] text-bone-300 leading-snug">
+      <div className="text-[12.5px] text-bone-300 leading-relaxed">
         Hard protections passed. These character plants are missing. Repair
-        is <strong>surgical</strong>: only the selected plants get added — every
-        passing protection (Paul, Elena, Solano, Surrender, final hook, no
-        flashbacks / confession / therapy) stays locked. The audit re-runs
-        automatically. The draft is NOT promoted — Approve stays gated.
+        is <strong className="text-bone-100">surgical</strong> — only the
+        selected plants get added; every passing protection (Paul, Elena,
+        Solano, Surrender, final hook, no flashbacks / confession / therapy)
+        stays locked. The audit re-runs automatically. The draft is NOT
+        promoted — Approve stays gated.
       </div>
 
       {warningTargetIds.length > 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-2 w-full">
           {warningTargetIds.map((t) => (
             <label
               key={t}
-              className="flex items-start gap-2 rounded border border-amber-700/30 bg-black/20 px-3 py-2 cursor-pointer hover:bg-black/30"
+              className="flex items-start gap-2 rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 cursor-pointer hover:bg-black/30 transition-colors"
             >
               <input
                 type="checkbox"
@@ -5293,12 +5210,17 @@ function R7PolishStage({
   if (!r6Promoted) {
     return (
       <Panel eyebrow={STAGE_LABEL["r7_pilot_polish"]} title="R7 — Locked">
-        <div className="flex items-start gap-3 rounded border border-white/10 bg-white/[0.02] p-4">
-          <Lock className="h-5 w-5 text-bone-400 mt-0.5 shrink-0" />
-          <div className="text-sm text-bone-300 leading-relaxed">
-            R7 unlocks after R6 Pass 2 is approved AND promoted as a new
-            EP01 draft. Promote the rewrite first; then return here for
-            the polish pass.
+        <div className="os-banner os-banner-locked">
+          <div className="os-banner-icon">
+            <Lock className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="os-banner-title">Awaiting R6 promotion</div>
+            <div className="os-banner-sub">
+              R7 unlocks after R6 Pass 2 is approved AND promoted as a new
+              EP01 draft. Promote the rewrite first; then return here for
+              the polish pass.
+            </div>
           </div>
         </div>
       </Panel>
@@ -5643,13 +5565,16 @@ function R7Pass2Section({
 
   if (!planApproved) {
     return (
-      <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
-        <div className="flex items-start gap-3">
-          <Lock className="h-5 w-5 text-bone-400 mt-0.5 shrink-0" />
-          <div className="text-sm text-bone-300 leading-relaxed">
-            <strong>R7 Pass 2 locked.</strong> Approve the polish plan above to
-            unlock apply. Pass 2 produces a new polished Fountain draft;
-            approve to promote it as Draft N+1 (the R6 rewrite stays intact).
+      <div className="os-banner os-banner-locked">
+        <div className="os-banner-icon">
+          <Lock className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <div className="os-banner-title">R7 Pass 2 locked</div>
+          <div className="os-banner-sub">
+            Approve the polish plan above to unlock apply. Pass 2 produces a
+            new polished Fountain draft; approve to promote it as Draft N+1
+            (the R6 rewrite stays intact).
           </div>
         </div>
       </div>
@@ -5878,30 +5803,14 @@ function R7Pass2Section({
       )}
 
       {draft && (
-        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] uppercase tracking-wide text-bone-400">
-              Polished pilot — Fountain preview
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowFullDraft((v) => !v)}
-              className="text-[11px] text-bone-300 hover:text-bone-100 underline"
-            >
-              {showFullDraft ? "collapse" : "expand"}
-            </button>
-          </div>
-          <pre
-            className={`mt-2 overflow-auto rounded border border-bone-700/30 bg-black/30 px-3 py-2 text-[12px] text-bone-200 whitespace-pre-wrap leading-snug font-mono ${
-              showFullDraft ? "max-h-[80vh]" : "max-h-72"
-            }`}
-          >
-            {draft}
-          </pre>
-          <div className="mt-1 text-[11px] text-bone-500">
-            {draft.length.toLocaleString()} characters · Approving inserts as Draft N+1; R6 draft preserved.
-          </div>
-        </div>
+        <DraftPreviewPanel
+          title="Polished pilot — Fountain preview"
+          text={draft}
+          state={draftApproved ? "promoted" : "proposed"}
+          draftNumber={promotedDraft ?? null}
+          startExpanded={showFullDraft}
+          footerHint="Approving inserts as Draft N+1; R6 draft preserved."
+        />
       )}
     </div>
   );
@@ -5983,12 +5892,17 @@ function R8VoicePolishStage({
   if (!r7Promoted) {
     return (
       <Panel eyebrow={STAGE_LABEL["r8_voice_polish"]} title="R8 — Locked">
-        <div className="flex items-start gap-3 rounded border border-white/10 bg-white/[0.02] p-4">
-          <Lock className="h-5 w-5 text-bone-400 mt-0.5 shrink-0" />
-          <div className="text-sm text-bone-300 leading-relaxed">
-            R8 unlocks after R7 is approved AND promoted as a new EP01
-            draft. Promote the R7 polish first; then return here for the
-            voice & scene-life pass.
+        <div className="os-banner os-banner-locked">
+          <div className="os-banner-icon">
+            <Lock className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="os-banner-title">Awaiting R7 promotion</div>
+            <div className="os-banner-sub">
+              R8 unlocks after R7 is approved AND promoted as a new EP01
+              draft. Promote the R7 polish first; then return here for the
+              voice & scene-life pass.
+            </div>
           </div>
         </div>
       </Panel>
@@ -6306,13 +6220,16 @@ function R8Pass2Section({
 
   if (!planApproved) {
     return (
-      <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
-        <div className="flex items-start gap-3">
-          <Lock className="h-5 w-5 text-bone-400 mt-0.5 shrink-0" />
-          <div className="text-sm text-bone-300 leading-relaxed">
-            <strong>R8 Pass 2 locked.</strong> Approve the voice plan above to
-            unlock apply. Pass 2 produces a new polished Fountain draft;
-            approve to promote it as Draft N+1 (the R7 draft stays intact).
+      <div className="os-banner os-banner-locked">
+        <div className="os-banner-icon">
+          <Lock className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <div className="os-banner-title">R8 Pass 2 locked</div>
+          <div className="os-banner-sub">
+            Approve the voice plan above to unlock apply. Pass 2 produces a
+            new polished Fountain draft; approve to promote it as Draft N+1
+            (the R7 draft stays intact).
           </div>
         </div>
       </div>
@@ -6549,30 +6466,14 @@ function R8Pass2Section({
       )}
 
       {draft && (
-        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[11px] uppercase tracking-wide text-bone-400">
-              Voice-polished pilot — Fountain preview
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowFullDraft((v) => !v)}
-              className="text-[11px] text-bone-300 hover:text-bone-100 underline"
-            >
-              {showFullDraft ? "collapse" : "expand"}
-            </button>
-          </div>
-          <pre
-            className={`mt-2 overflow-auto rounded border border-bone-700/30 bg-black/30 px-3 py-2 text-[12px] text-bone-200 whitespace-pre-wrap leading-snug font-mono ${
-              showFullDraft ? "max-h-[80vh]" : "max-h-72"
-            }`}
-          >
-            {draft}
-          </pre>
-          <div className="mt-1 text-[11px] text-bone-500">
-            {draft.length.toLocaleString()} characters · Approving inserts as Draft N+1; R7 draft preserved.
-          </div>
-        </div>
+        <DraftPreviewPanel
+          title="Voice-polished pilot — Fountain preview"
+          text={draft}
+          state={draftApproved ? "promoted" : "proposed"}
+          draftNumber={promotedDraft ?? null}
+          startExpanded={showFullDraft}
+          footerHint="Approving inserts as Draft N+1; R7 draft preserved."
+        />
       )}
     </div>
   );

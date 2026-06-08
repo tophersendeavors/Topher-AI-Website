@@ -4,6 +4,7 @@ import { requireUser } from "../auth/verifyJwt.js";
 import { assertProjectMember } from "../db/queries.js";
 import { supabase } from "../db/client.js";
 import { indexScenes } from "../screenplay/sceneIndex.js";
+import { assertCanDemoteLockedCurrent } from "../draft/lockGuard.js";
 
 const Create = z.object({
   projectId: z.string().uuid(),
@@ -109,6 +110,18 @@ export default async function scriptsRoutes(app: FastifyInstance) {
     const projectId = prior.project_id as string;
     const episodeId = (prior.episode_id as string | null) ?? null;
     const nextNum = ((prior.draft_number as number) ?? 0) + 1;
+    const priorMetaForLock = (prior.metadata as Record<string, unknown>) ?? {};
+    const sourceWasLocked = priorMetaForLock.lockedWritingDraft === true;
+
+    // This route is the EXPLICIT user-driven "promote new draft from this
+    // source" flow. It is the only autonomous path allowed to demote a
+    // locked current draft (and only because the new draft becomes
+    // current after demote). Pass allowLockedDemotion so the guard
+    // accepts the demote even when the source was the R9-locked draft.
+    await assertCanDemoteLockedCurrent(
+      { projectId, episodeId },
+      { allowLockedDemotion: true }
+    );
 
     // Demote prior current drafts within this episode scope only.
     const demote = supabase
@@ -139,11 +152,22 @@ export default async function scriptsRoutes(app: FastifyInstance) {
       : `${proj?.title ?? "Untitled"} — Draft ${nextNum}`;
 
     // Carry over the writer credits / title-page settings but reset audit
-    // history — Draft N+1 should re-prove itself.
+    // history — Draft N+1 should re-prove itself. The new draft is NEVER
+    // marked lockedWritingDraft — it's an editable working draft seeded
+    // from a (possibly locked) source.
     const priorMeta = (prior.metadata as Record<string, unknown>) ?? {};
     const carryMeta: Record<string, unknown> = {
       source: "new_draft",
       promoted_from: id,
+      // Provenance — every new draft surfaces its origin so the UI can
+      // show "Generated from Draft N (R9 final polish, locked)".
+      sourceScriptId: id,
+      sourceDraftNumber: (prior.draft_number as number) ?? 0,
+      generatedBy: user.id,
+      createdFromLockedDraft: sourceWasLocked,
+      priorCurrentScriptId: id,
+      // Explicitly clear the lock flag so the new draft is writable.
+      lockedWritingDraft: false,
     };
     if (priorMeta.titlePage) carryMeta.titlePage = priorMeta.titlePage;
     if (priorMeta.writers) carryMeta.writers = priorMeta.writers;

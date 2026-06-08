@@ -1101,10 +1101,12 @@ function WriteDraft1Button({ id }: { id: string }) {
         ) : (
           <PlayCircle className="h-4 w-4" />
         )}
-        {prepare.isPending ? "Opening…" : "Write Draft 1"}
+        {prepare.isPending ? "Opening…" : "Write Draft 1 into New Draft"}
       </Button>
-      <div className="max-w-xs text-right text-xs text-bone-500">
-        Opens the writing room and writes your episode scene by scene.
+      <div className="max-w-xs text-right text-xs text-amber-300">
+        Reads from the workflow's <strong>scene plan / beat sheet</strong>, not
+        from any existing draft's prose. Output is a brand-new draft — locked
+        drafts are not touched.
       </div>
       {prepare.error && (
         <div className="max-w-xs text-right text-xs text-red-300">

@@ -34,6 +34,23 @@ import { Button } from "@/components/ui/Button";
 import { Explainer } from "@/components/ui/Explainer";
 import { useUIMode } from "@/lib/uiMode";
 import { BusyBar } from "@/components/ui/BusyBar";
+import { DraftWritingContext } from "@/components/ui/DraftWritingContext";
+
+/** Translate metadata.source enum into showrunner-friendly copy. */
+function friendlyDraftSource(source?: string | null): string | null {
+  if (!source) return null;
+  switch (source) {
+    case "r9_pass2_final_polish": return "R9 final polish";
+    case "r8_pass2_voice_polish": return "R8 voice polish";
+    case "r7_pass2_polish":       return "R7 polish";
+    case "r6_pass2_rewrite":      return "R6 rewrite";
+    case "gated_draft":           return "scene-by-scene draft";
+    case "new_draft":             return "new draft from prior";
+    case "workflow_draft_v1":     return "workflow draft v1";
+    case "micro_drama_chain":     return "micro-drama screenplay";
+    default:                       return source.replace(/_/g, " ");
+  }
+}
 import {
   buildInsights,
   buildCharacterHealth,
@@ -748,27 +765,25 @@ export function DraftWorkspacePage() {
       <ActivityBar scriptId={scriptId} scenesGenerating={rows.filter((r) => r.status === "generating").map((r) => r.ord)} />
 
       <div className="px-8 space-y-6">
-        {isLockedDraft && (
-          <div className="rounded-xl border border-ember-700/70 bg-ember-950/40 p-4 text-sm text-ember-100">
-            <div className="font-serif text-base text-bone-50">This draft is locked.</div>
-            <div className="mt-1 text-ember-200/90">
-              Scene writing cannot modify this draft. It was promoted as a creative
-              source-of-truth ({scriptMeta?.source ?? "locked"}) and is protected
-              against scene regeneration, fountain rewrite, and auto-demotion.
-              To continue, use <strong>Start new draft</strong> above to create a
-              new draft from this source.
-            </div>
-            {scriptMeta?.restoredFromR9SourceAt && (
-              <div className="mt-2 text-xs text-ember-300/70">
-                Restored from R9 source-of-truth on{" "}
-                {new Date(scriptMeta.restoredFromR9SourceAt).toLocaleString()}.
-              </div>
-            )}
-          </div>
-        )}
+        <DraftWritingContext
+          current={{
+            draftNumber: (script.data as { draft_number?: number } | undefined)?.draft_number ?? null,
+            title: script.data?.title,
+            isLocked: isLockedDraft,
+            sourceLabel: friendlyDraftSource(scriptMeta?.source),
+          }}
+          mode={isLockedDraft ? "blocked_locked" : "continue_unlocked"}
+          restoredFromR9At={scriptMeta?.restoredFromR9SourceAt ?? null}
+        />
 
         {/* Step 4: Write Draft 1 — the primary creative action */}
-        <GatedDraftPanel scriptId={scriptId} projectId={projectId} total={total} />
+        <GatedDraftPanel
+          scriptId={scriptId}
+          projectId={projectId}
+          total={total}
+          isLockedDraft={isLockedDraft}
+          draftNumber={(script.data as { draft_number?: number } | undefined)?.draft_number ?? null}
+        />
 
         {/* Development package intake — paste a dev doc, route project/season/scene changes */}
         {generated > 0 && <DevelopmentPackagePanel projectId={projectId} scriptId={scriptId} />}
@@ -925,10 +940,14 @@ function GatedDraftPanel({
   scriptId,
   projectId,
   total,
+  isLockedDraft = false,
+  draftNumber = null,
 }: {
   scriptId: string;
   projectId: string;
   total: number;
+  isLockedDraft?: boolean;
+  draftNumber?: number | null;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -1054,24 +1073,38 @@ function GatedDraftPanel({
         </div>
       </div>
 
+      {isLockedDraft && (
+        <div className="mt-3 rounded-md border border-ember-700/60 bg-ember-950/40 p-3 text-xs text-ember-100">
+          Scene writing is disabled — this draft is locked. Use{" "}
+          <strong>Start new full draft</strong> in the header to create a
+          writable Draft {(draftNumber ?? 0) + 1} from this source. The new
+          draft will be writable and the locked source will stay intact.
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {!complete && (
           <>
-            <Button onClick={draftAll} disabled={running}>
+            <Button onClick={draftAll} disabled={running || isLockedDraft}>
               {running && autoMode ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <PlayCircle className="h-4 w-4" />
               )}
-              {running && autoMode ? "Writing…" : "Write the Full Draft"}
+              {running && autoMode
+                ? "Writing…"
+                : draftNumber
+                ? `Continue Draft ${draftNumber} — write all remaining scenes`
+                : "Write the Full Draft"}
             </Button>
-            <Button variant="outline" onClick={draftOne} disabled={running}>
+            <Button variant="outline" onClick={draftOne} disabled={running || isLockedDraft}>
               {running && !autoMode ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <PlayCircle className="h-4 w-4" />
               )}
-              Write Next Scene
+              {draftNumber
+                ? `Continue Draft ${draftNumber} — write next scene`
+                : "Write Next Scene"}
             </Button>
           </>
         )}

@@ -1,11 +1,53 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { ChevronRight, FilePlus, FileText } from "lucide-react";
+import { ChevronRight, FilePlus, FileText, Lock, Plus, Loader2 } from "lucide-react";
+
+function friendlyDraftSource(source?: string | null): string | null {
+  if (!source) return null;
+  switch (source) {
+    case "r9_pass2_final_polish": return "R9 final polish";
+    case "r8_pass2_voice_polish": return "R8 voice polish";
+    case "r7_pass2_polish":       return "R7 polish";
+    case "r6_pass2_rewrite":      return "R6 rewrite";
+    case "gated_draft":           return "scene-by-scene draft";
+    case "new_draft":             return "from prior draft";
+    case "workflow_draft_v1":     return "workflow draft v1";
+    case "micro_drama_chain":     return "micro-drama";
+    default:                       return null;
+  }
+}
+
+function NewDraftFromButton({ scriptId, projectId }: { scriptId: string; projectId: string }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: () => api.startNewDraft(scriptId),
+    onSuccess: (next) => {
+      qc.invalidateQueries({ queryKey: ["scripts", projectId] });
+      navigate(`/projects/${projectId}/drafts/${(next as { id: string }).id}`);
+    },
+  });
+  return (
+    <Button
+      variant="outline"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        mut.mutate();
+      }}
+      disabled={mut.isPending}
+      title="Create a new writable Draft N+1 seeded from this locked source. The locked source stays intact."
+    >
+      {mut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+      Start new draft from this
+    </Button>
+  );
+}
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
@@ -95,26 +137,53 @@ export function DraftsPage() {
                     // patch / draft history / Copy / Production all live
                     // there). The prestige DraftWorkspacePage crashes on
                     // them. Route them home instead of into a broken page.
-                    const meta = (s.metadata ?? {}) as { source?: string };
+                    const meta = (s.metadata ?? {}) as {
+                      source?: string;
+                      lockedWritingDraft?: boolean;
+                      sourceScriptId?: string;
+                      sourceDraftNumber?: number;
+                      createdFromLockedDraft?: boolean;
+                    };
                     const isMicroDrama = meta.source === "micro_drama_chain";
+                    const isLocked = meta.lockedWritingDraft === true;
+                    const sourceTag = friendlyDraftSource(meta.source);
+                    const provenance =
+                      typeof meta.sourceDraftNumber === "number" && meta.sourceDraftNumber > 0
+                        ? `Started from Draft ${meta.sourceDraftNumber}${meta.createdFromLockedDraft ? " (was locked)" : ""}`
+                        : null;
                     const href = isMicroDrama
                       ? `/projects/${projectId}/episodes`
                       : `/projects/${projectId}/drafts/${s.id}`;
                     return (
-                      <Link
-                        to={href}
-                        className={`flex items-center justify-between rounded-md border p-4 transition-colors ${
-                          s.current
-                            ? "border-ember-700/60 bg-ember-900/15 hover:bg-ember-900/25"
+                      <div
+                        className={`flex items-center justify-between gap-3 rounded-md border p-4 transition-colors ${
+                          isLocked
+                            ? "border-ember-700/60 bg-ember-950/30"
+                            : s.current
+                            ? "border-emerald-700/40 bg-emerald-950/20 hover:bg-emerald-950/30"
                             : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]"
                         }`}
                       >
-                        <div>
+                        <Link to={href} className="block flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-2 text-bone-50">
                             {s.title}
                             {s.current && (
-                              <span className="chip border-ember-700/60 bg-ember-900/40 text-ember-100">
+                              <span className={`chip ${
+                                isLocked
+                                  ? "border-ember-700/60 bg-ember-900/40 text-ember-100"
+                                  : "border-emerald-700/50 bg-emerald-900/30 text-emerald-100"
+                              }`}>
                                 current
+                              </span>
+                            )}
+                            {isLocked && (
+                              <span className="chip border-ember-700/70 bg-ember-900/50 text-ember-50">
+                                <Lock className="mr-1 inline h-3 w-3" /> locked · source only
+                              </span>
+                            )}
+                            {sourceTag && (
+                              <span className="chip border-white/10 bg-white/[0.04] text-bone-200">
+                                {sourceTag}
                               </span>
                             )}
                             {isMicroDrama && (
@@ -124,11 +193,21 @@ export function DraftsPage() {
                             )}
                           </div>
                           <div className="text-xs text-bone-400">
-                            Draft {s.draft_number} • updated {new Date(s.updated_at).toLocaleString()}
+                            Draft {s.draft_number} • updated{" "}
+                            {new Date(s.updated_at).toLocaleString()}
+                            {provenance ? <> · {provenance}</> : null}
                           </div>
+                        </Link>
+                        <div className="flex items-center gap-2">
+                          {!isMicroDrama && isLocked && (
+                            <NewDraftFromButton
+                              scriptId={s.id}
+                              projectId={projectId!}
+                            />
+                          )}
+                          <ChevronRight className="h-4 w-4 text-bone-400" />
                         </div>
-                        <ChevronRight className="h-4 w-4 text-bone-400" />
-                      </Link>
+                      </div>
                     );
                   })()}
                 </li>

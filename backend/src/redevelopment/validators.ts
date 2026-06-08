@@ -17,6 +17,7 @@
 // trustworthy without one.
 
 import { CHARACTER_INCLUSION_RULES, enforceCharacterInclusion } from "./protocolModuleAgent.js";
+import { applyActiveTemplateFilter } from "./templateChecks.js";
 import type {
   AuditCheck,
   AuditCheckId,
@@ -1111,7 +1112,7 @@ export function auditAndRepairPilotStrategy(args: {
       : "Surrender (the pilot's foundational Protocol module) isn't named in the strategy. Add it to protocolPhilosophyMoments or newSeedsToPlant.",
   });
 
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -1428,7 +1429,7 @@ export function auditAndRepairR6Guardrails(args: {
             .join(" · ")}${leaks.length > 2 ? " · …" : ""}.`,
   });
 
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -1595,7 +1596,7 @@ export function auditAndRepairR6RewritePlan(args: {
       : "No scene declares final_blended_hook in targets[]. The pilot must end on the blended Option A + C hook.",
   });
 
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -1857,7 +1858,7 @@ export function auditAndRepairR6Pass2Draft(args: {
   // Used variable to silence TS unused warning when only some branches reference `lower`.
   void lower;
 
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -2073,7 +2074,7 @@ export function auditAndRepairR7PolishPlan(args: {
   void approachSummary;
   void lowerFlat;
 
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -2330,7 +2331,7 @@ export function auditAndRepairR7Pass2Draft(args: {
       : `Polished draft looks malformed (slugs: ${sluglineCount}, length: ${text.length}). The polish may have damaged the Fountain structure.`,
   });
 
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -2550,7 +2551,7 @@ export function auditAndRepairR8VoicePolishPlan(args: {
   });
 
   void approachSummary;
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // Meta-narration patterns reused in the R8 plan AND apply audits. Matches
@@ -2790,7 +2791,7 @@ export function auditAndRepairR8Pass2Draft(args: {
   });
 
   void args.planItems;
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -3050,7 +3051,7 @@ export function auditAndRepairR9FinalPolishPlan(args: {
   });
 
   void approachSummary;
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }
 
 // ============================================================================
@@ -3292,5 +3293,5 @@ export function auditAndRepairR9Pass2Draft(args: {
 
   void args.planItems;
   void args.guardrails;
-  return { checks, repairs };
+  return applyActiveTemplateFilter({ checks, repairs });
 }

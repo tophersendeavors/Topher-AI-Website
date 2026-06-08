@@ -233,3 +233,103 @@ export function composeHookPromptBlock(template: RedevProjectTemplate): string {
   const anchors = hook.anchors.map((a) => `"${a.label}"`).join(", ");
   return `  • Hook strategy "${hook.label}" must survive — required anchors: ${anchors}.`;
 }
+
+// ---------------------------------------------------------------------------
+// Audit-output filter
+// ---------------------------------------------------------------------------
+//
+// Until every validator function is rewritten to take `template` as an
+// arg and gate its SELVAJE-specific checks internally, we filter the
+// output at the route layer. The validators keep producing the full
+// SELVAJE-flavored check list; this filter strips checks whose `id`
+// matches a known SELVAJE-specific token when the active template
+// isn't SELVAJE.
+//
+// Result: SELVAJE behaves identically (filter is a no-op when
+// templateId === "selvaje" or undefined). Other templates see only the
+// generic, template-agnostic checks.
+
+const SELVAJE_SPECIFIC_CHECK_PATTERNS: RegExp[] = [
+  /paul/i,                  // paul_reveal_protected / r5_paul_timing / etc.
+  /elena/i,                 // elena_protected / nadia_elena_timing
+  /solano/i,                // solano_framing / solano_protected
+  /surrender/i,             // surrender_drives_pilot / surrender_present
+  /margot/i,                // margot_professional_identity / margot_planted / r9 cass-leak
+  /\bcass\b/i,
+  /transparent.?case/i,
+  /chime/i,
+  /archive.?room/i,
+  /photograph.?wall/i,
+  /younger.?version/i,
+  /no_cass/i,
+  /plant_detection/i,
+];
+
+function isSelvajeSpecificCheckId(id: string): boolean {
+  return SELVAJE_SPECIFIC_CHECK_PATTERNS.some((re) => re.test(id));
+}
+
+/** Filter an `AuditReport` so non-SELVAJE templates don't see SELVAJE-
+ *  specific check rows. Used at the route layer until each validator
+ *  threads `template` through and gates its own blocks. SELVAJE
+ *  (templateId === "selvaje" or undefined) gets the unfiltered report. */
+export function filterAuditForTemplate<
+  T extends { checks: Array<{ id: string }>; repairs?: unknown[] }
+>(audit: T, templateId: string | null | undefined): T {
+  if (!templateId || templateId === "selvaje") return audit;
+  return {
+    ...audit,
+    checks: audit.checks.filter((c) => !isSelvajeSpecificCheckId(c.id)),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Per-request active-template context
+// ---------------------------------------------------------------------------
+//
+// Validators (validators.ts) are SYNC and don't currently accept a
+// `templateId` argument. To avoid touching their signatures (which would
+// require updating ~12 audit functions + ~15 route call sites), each
+// validator runs `applyActiveTemplateFilter()` on its return value, and
+// routes set the active template id RIGHT BEFORE calling any audit.
+//
+// Node.js is single-threaded per event-loop turn, and audits are sync,
+// so `withActiveTemplate(id, () => auditAndRepairXxx({...}))` is atomic
+// and safe under concurrency.
+//
+// Default value `undefined` means "no template set" — applyActiveTemplateFilter
+// then returns the audit unfiltered, preserving SELVAJE behavior for
+// every existing caller.
+
+let _activeTemplateId: string | null | undefined = undefined;
+
+/** Set the active template id for any subsequent audit calls.
+ *  Resets to `undefined` automatically when `withActiveTemplate` is used. */
+export function setActiveAuditTemplate(id: string | null | undefined): void {
+  _activeTemplateId = id;
+}
+
+/** Run `fn` with the active audit template set to `id`. Automatically
+ *  resets after the call (even if `fn` throws). Recommended over the
+ *  raw setter so callers can't leak state. */
+export function withActiveAuditTemplate<T>(
+  id: string | null | undefined,
+  fn: () => T
+): T {
+  const prev = _activeTemplateId;
+  _activeTemplateId = id;
+  try {
+    return fn();
+  } finally {
+    _activeTemplateId = prev;
+  }
+}
+
+/** Apply the active template filter to an audit. Called inside each
+ *  audit function's return path. No-op when no active template is set
+ *  or the active template is `"selvaje"`. */
+export function applyActiveTemplateFilter<
+  T extends { checks: Array<{ id: string }>; repairs?: unknown[] }
+>(audit: T): T {
+  return filterAuditForTemplate(audit, _activeTemplateId);
+}

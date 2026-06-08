@@ -45,3 +45,14 @@ export function getR6Overlay(
 }
 
 export { BLANK_TEMPLATE, SELVAJE_TEMPLATE, SELVAJE_R6_OVERLAY };
+
+/** Boolean predicate every validator + agent uses to gate SELVAJE-
+ *  specific blocks. Backward-compat default: when no templateId is
+ *  passed, the SELVAJE path runs (preserves the pre-refactor
+ *  behaviour for every existing call site). New call sites that pass
+ *  `templateId: "blank"` (or anything not "selvaje") skip the SELVAJE
+ *  regex / prompt blocks. */
+export function isSelvajeTemplate(templateId?: string | null): boolean {
+  if (templateId === undefined || templateId === null) return true;
+  return templateId === "selvaje";
+}

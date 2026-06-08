@@ -74,6 +74,7 @@ import {
   auditAndRepairR9Pass2Draft,
   auditAndRepairSeasonArc,
 } from "../redevelopment/validators.js";
+import { filterAuditForTemplate, setActiveAuditTemplate } from "../redevelopment/templateChecks.js";
 import { generateR6Guardrails } from "../redevelopment/r6GuardrailsAgent.js";
 import { generateR6RewritePlan } from "../redevelopment/r6RewriteAgent.js";
 import { generateR6Pass2 } from "../redevelopment/r6Pass2Agent.js";
@@ -238,6 +239,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief?.approvedAt) {
         throw new Error("R1 Brief must be approved before generating bibles");
       }
@@ -353,6 +355,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief?.approvedAt) {
         throw new Error("R1 Brief must be approved before generating modules");
       }
@@ -508,6 +511,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief?.approvedAt) {
         throw new Error("R1 Brief must be approved before generating the season arc");
       }
@@ -586,6 +590,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const arc = pass.seasonArc;
       if (!arc || !arc.episodes || arc.episodes.length === 0) {
         return {
@@ -635,6 +640,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief?.approvedAt) {
         throw new Error("R1 Brief must be approved before R5");
       }
@@ -717,6 +723,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const strat = pass.pilotStrategy;
       if (!strat) {
         return {
@@ -765,6 +772,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief) {
         return {
           brief: "",
@@ -880,6 +888,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief?.approvedAt) {
         throw new Error("R1 Brief must be approved before R6 Pass 1");
       }
@@ -969,6 +978,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const rewrite = pass.pilotRewrite;
       if (!rewrite || !rewrite.plan || rewrite.plan.length === 0) {
         return {
@@ -1025,6 +1035,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief?.approvedAt) {
         throw new Error("R1 Brief must be approved before R6 guardrails");
       }
@@ -1070,6 +1081,7 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const bundle = normalizeR6Guardrails(pass.r6Guardrails);
       if (bundle.perCharacter.length === 0) {
         return {
@@ -1168,6 +1180,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.brief?.approvedAt) {
         throw new Error("R1 Brief must be approved before R6 Pass 2");
       }
@@ -1250,6 +1263,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const rewrite = pass.pilotRewrite;
       if (!rewrite || !rewrite.proposedDraftText) {
         return {
@@ -1368,6 +1382,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       }
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const rewrite = pass.pilotRewrite;
       if (!rewrite || !rewrite.proposedDraftText) {
         throw new Error(
@@ -1475,6 +1490,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       if (!pass.pilotStrategy?.approvedAt) {
         throw new Error("R5 Pilot Strategy must be approved before R7");
       }
@@ -1597,6 +1613,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const plan = pass.r7Polish;
       if (!plan || !plan.items || plan.items.length === 0) {
         return {
@@ -1644,6 +1661,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const polish = pass.r7Polish;
       if (!polish || !polish.planApprovedAt) {
         throw new Error("R7 polish plan must be APPROVED before applying");
@@ -1740,6 +1758,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const polish = pass.r7Polish;
       if (!polish || !polish.polishedDraftText) {
         return {
@@ -1851,6 +1870,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
 
       const r7 = pass.r7Polish;
       if (!r7 || !r7.approvedAt || !r7.promotedScriptId) {
@@ -1973,6 +1993,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const plan = pass.r8VoicePolish;
       if (!plan) {
         return {
@@ -2016,6 +2037,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const plan = pass.r8VoicePolish;
       if (!plan || !plan.planApprovedAt) {
         throw new Error("R8 voice plan must be APPROVED before applying");
@@ -2110,6 +2132,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const plan = pass.r8VoicePolish;
       if (!plan || !plan.polishedDraftText) {
         return {
@@ -2220,6 +2243,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
 
       const r8 = pass.r8VoicePolish;
       if (!r8 || !r8.approvedAt || !r8.promotedScriptId) {
@@ -2342,6 +2366,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const plan = pass.r9FinalPolish;
       if (!plan) {
         return {
@@ -2385,6 +2410,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         .parse(req.body ?? {});
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const plan = pass.r9FinalPolish;
       if (!plan || !plan.planApprovedAt) {
         throw new Error("R9 plan must be APPROVED before applying");
@@ -2479,6 +2505,7 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       await assertProjectMember(user.id, id);
       const pass = await getPass(id, passId);
       if (!pass) throw new Error("pass not found");
+      setActiveAuditTemplate(pass.redevTemplateId);
       const plan = pass.r9FinalPolish;
       if (!plan || !plan.polishedDraftText) {
         return {

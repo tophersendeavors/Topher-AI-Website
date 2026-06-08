@@ -527,19 +527,25 @@ function R1BriefStage({
 }) {
   const existing = report.pass.brief;
   const approved = !!existing?.approvedAt;
-  const [whatChanged, setWhatChanged] = useState(existing?.whatChanged ?? SELVAJE_DEFAULTS.whatChanged);
-  const [newCorePrinciple, setNewCorePrinciple] = useState(existing?.newCorePrinciple ?? SELVAJE_DEFAULTS.newCorePrinciple);
-  const [newSeasonQuestion, setNewSeasonQuestion] = useState(existing?.newSeasonQuestion ?? SELVAJE_DEFAULTS.newSeasonQuestion);
-  const [primaryMystery, setPrimaryMystery] = useState(existing?.primaryMystery ?? SELVAJE_DEFAULTS.primaryMystery);
-  const [secondaryMystery, setSecondaryMystery] = useState(existing?.secondaryMystery ?? SELVAJE_DEFAULTS.secondaryMystery);
-  const [mustNotChange, setMustNotChange] = useState(existing?.mustNotChange ?? SELVAJE_DEFAULTS.mustNotChange);
-  const [targets, setTargets] = useState(existing?.targetsForRedevelopment ?? SELVAJE_DEFAULTS.targetsForRedevelopment);
-  // v2 — added to capture audience promise, protocol philosophy, the
-  // Solano rule, and forbidden tones. Every downstream agent uses these.
-  const [audiencePromise, setAudiencePromise] = useState(existing?.audiencePromise ?? SELVAJE_DEFAULTS.audiencePromise);
-  const [protocolPhilosophy, setProtocolPhilosophy] = useState(existing?.protocolPhilosophy ?? SELVAJE_DEFAULTS.protocolPhilosophy);
-  const [solanoRule, setSolanoRule] = useState(existing?.solanoRule ?? SELVAJE_DEFAULTS.solanoRule);
-  const [forbiddenTones, setForbiddenTones] = useState(existing?.forbiddenTones ?? SELVAJE_DEFAULTS.forbiddenTones);
+  // Auto-prefill SELVAJE defaults ONLY when the active redev template
+  // is SELVAJE (or unset for backward-compat with the live SELVAJE
+  // pass which predates the template field). Brand-new projects on
+  // `blank` or any other template start with empty fields and never
+  // inherit SELVAJE language. See backend/src/redevelopment/templates/.
+  const passTemplateId = (report.pass as { redevTemplateId?: string | null }).redevTemplateId;
+  const useSelvajeDefaults = !passTemplateId || passTemplateId === "selvaje";
+  const D = (v: string) => (useSelvajeDefaults ? v : "");
+  const [whatChanged, setWhatChanged] = useState(existing?.whatChanged ?? D(SELVAJE_DEFAULTS.whatChanged));
+  const [newCorePrinciple, setNewCorePrinciple] = useState(existing?.newCorePrinciple ?? D(SELVAJE_DEFAULTS.newCorePrinciple));
+  const [newSeasonQuestion, setNewSeasonQuestion] = useState(existing?.newSeasonQuestion ?? D(SELVAJE_DEFAULTS.newSeasonQuestion));
+  const [primaryMystery, setPrimaryMystery] = useState(existing?.primaryMystery ?? D(SELVAJE_DEFAULTS.primaryMystery));
+  const [secondaryMystery, setSecondaryMystery] = useState(existing?.secondaryMystery ?? D(SELVAJE_DEFAULTS.secondaryMystery));
+  const [mustNotChange, setMustNotChange] = useState(existing?.mustNotChange ?? D(SELVAJE_DEFAULTS.mustNotChange));
+  const [targets, setTargets] = useState(existing?.targetsForRedevelopment ?? D(SELVAJE_DEFAULTS.targetsForRedevelopment));
+  const [audiencePromise, setAudiencePromise] = useState(existing?.audiencePromise ?? D(SELVAJE_DEFAULTS.audiencePromise));
+  const [protocolPhilosophy, setProtocolPhilosophy] = useState(existing?.protocolPhilosophy ?? D(SELVAJE_DEFAULTS.protocolPhilosophy));
+  const [solanoRule, setSolanoRule] = useState(existing?.solanoRule ?? D(SELVAJE_DEFAULTS.solanoRule));
+  const [forbiddenTones, setForbiddenTones] = useState(existing?.forbiddenTones ?? D(SELVAJE_DEFAULTS.forbiddenTones));
 
   // Same transient "Saved ✓" pattern as the R2 character bibles —
   // gives the showrunner explicit confirmation that the brief saved.
@@ -795,11 +801,15 @@ function R2CharacterBiblesStage({
   const [newName, setNewName] = useState("");
   const [newSeed, setNewSeed] = useState("");
 
-  // Hydrate the SELVAJE starter cast on first visit when the bible list
-  // is empty — only as PLACEHOLDERS; the showrunner can remove or rename
-  // any row before generating.
+  // Hydrate the starter cast on first visit when the bible list is
+  // empty. Auto-prefill only when the active redev template is SELVAJE
+  // (or unset for backward-compat). Other templates start with no
+  // pre-seeded characters — the writer adds their own.
+  const passTemplateId = (report.pass as { redevTemplateId?: string | null }).redevTemplateId;
+  const useSelvajeCast = !passTemplateId || passTemplateId === "selvaje";
   const bibles = useMemo<RedevCharacterBible[]>(() => {
     if (report.pass.characterBibles.length > 0) return report.pass.characterBibles;
+    if (!useSelvajeCast) return [];
     return SELVAJE_CAST.map((c) => ({
       liveCharacterId: null,
       characterName: c.name,
@@ -808,7 +818,7 @@ function R2CharacterBiblesStage({
       approvedAt: null,
       approvedBy: null,
     }));
-  }, [report.pass.characterBibles]);
+  }, [report.pass.characterBibles, useSelvajeCast]);
 
   const persistBibles = useMutation({
     mutationFn: (bibles: RedevCharacterBible[]) =>

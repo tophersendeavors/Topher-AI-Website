@@ -20,6 +20,8 @@ import {
   type RedevR6RewriteScenePlan,
   type RedevR7PolishItem,
   type RedevR7PolishPlan,
+  type RedevR8VoicePolishItem,
+  type RedevR8VoicePolishPlan,
 } from "./types.js";
 import { normalizeR6Guardrails } from "./types.js";
 
@@ -843,6 +845,192 @@ export async function promoteR7Pass2Draft(args: {
   };
 }
 
+// ============================================================================
+// R8 Voice & Scene Life Pass
+// ============================================================================
+
+export async function setR8VoicePolishPlan(args: {
+  projectId: string;
+  passId: string;
+  items: RedevR8VoicePolishItem[];
+  approachSummary: string;
+  priorScriptId: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const prior = passes[ix].r8VoicePolish;
+  // Preserve plan-approval only if the structural payload is unchanged.
+  const sameStructure =
+    !!prior &&
+    canonicalize({ items: prior.items, approachSummary: prior.approachSummary }) ===
+      canonicalize({ items: args.items, approachSummary: args.approachSummary });
+  const next: RedevR8VoicePolishPlan = {
+    priorScriptId: args.priorScriptId,
+    approachSummary: args.approachSummary,
+    items: args.items,
+    planApprovedAt: sameStructure ? prior?.planApprovedAt ?? null : null,
+    polishedDraftText: prior?.polishedDraftText ?? null,
+    polishedDraftAt: prior?.polishedDraftAt ?? null,
+    changeNotes: prior?.changeNotes ?? [],
+    promotedScriptId: prior?.promotedScriptId ?? null,
+    promotedDraftNumber: prior?.promotedDraftNumber ?? null,
+    approvedAt: prior?.approvedAt ?? null,
+  };
+  passes[ix].r8VoicePolish = next;
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+export async function approveR8VoicePolishPlan(args: {
+  projectId: string;
+  passId: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const plan = passes[ix].r8VoicePolish;
+  if (!plan || !plan.items || plan.items.length === 0) {
+    throw new Error("no R8 voice plan to approve — generate one first");
+  }
+  passes[ix].r8VoicePolish = {
+    ...plan,
+    planApprovedAt: new Date().toISOString(),
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+// ----- R8 Pass 2 (apply) ----------------------------------------------
+
+export async function setR8Pass2Draft(args: {
+  projectId: string;
+  passId: string;
+  polishedFountain: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const prior = passes[ix].r8VoicePolish;
+  if (!prior) {
+    throw new Error("cannot set R8 Pass 2 draft — no R8 voice plan in pass");
+  }
+  if (!prior.planApprovedAt) {
+    throw new Error(
+      "R8 voice plan must be APPROVED before applying Pass 2"
+    );
+  }
+  passes[ix].r8VoicePolish = {
+    ...prior,
+    polishedDraftText: args.polishedFountain,
+    polishedDraftAt: new Date().toISOString(),
+    approvedAt: null,
+    promotedScriptId: prior.promotedScriptId ?? null,
+    promotedDraftNumber: prior.promotedDraftNumber ?? null,
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+/** Promote the R8-polished draft to a NEW `scripts` row (Draft N+1).
+ *  Mirrors `promoteR7Pass2Draft`. */
+export async function promoteR8Pass2Draft(args: {
+  projectId: string;
+  passId: string;
+  approvedBy: string;
+}): Promise<{
+  pass: RedevelopmentPass;
+  scriptId: string;
+  draftNumber: number;
+}> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const plan = passes[ix].r8VoicePolish;
+  if (!plan || !plan.polishedDraftText) {
+    throw new Error(
+      "no R8 polished draft to approve — apply the voice polish first"
+    );
+  }
+  if (!plan.planApprovedAt) {
+    throw new Error(
+      "R8 plan must be approved before promoting the polished draft"
+    );
+  }
+
+  const { data: eps, error: epErr } = await supabase
+    .from("episodes")
+    .select("id, number, title, project_id")
+    .eq("project_id", args.projectId)
+    .order("number", { ascending: true })
+    .limit(1);
+  if (epErr) throw new Error(`load episode failed: ${epErr.message}`);
+  const ep = eps?.[0];
+  if (!ep) throw new Error("no EP01 episode found for this project");
+
+  await supabase
+    .from("scripts")
+    .update({ current: false })
+    .eq("project_id", args.projectId)
+    .eq("episode_id", ep.id)
+    .eq("current", true);
+
+  const { data: priorScripts } = await supabase
+    .from("scripts")
+    .select("draft_number")
+    .eq("project_id", args.projectId)
+    .eq("episode_id", ep.id)
+    .order("draft_number", { ascending: false })
+    .limit(1);
+  const nextDraft =
+    priorScripts && priorScripts.length > 0
+      ? ((priorScripts[0].draft_number as number) ?? 0) + 1
+      : 1;
+
+  const title = `Episode ${ep.number} — ${ep.title ?? "Untitled"} (R8 voice polish)`;
+
+  const { data: newScript, error: insertErr } = await supabase
+    .from("scripts")
+    .insert({
+      project_id: args.projectId,
+      episode_id: ep.id,
+      title,
+      draft_number: nextDraft,
+      current: true,
+      fountain: plan.polishedDraftText,
+      metadata: {
+        source: "r8_pass2_voice_polish",
+        priorScriptId: plan.priorScriptId,
+        redevelopmentPassId: args.passId,
+        promotedAt: new Date().toISOString(),
+        promotedBy: args.approvedBy,
+        voiceItemCount: plan.items.length,
+      },
+    })
+    .select("*")
+    .single();
+  if (insertErr) throw new Error(`promote failed: ${insertErr.message}`);
+  if (!newScript) throw new Error("promote failed: no script returned");
+
+  passes[ix].r8VoicePolish = {
+    ...plan,
+    approvedAt: new Date().toISOString(),
+    promotedScriptId: newScript.id as string,
+    promotedDraftNumber: nextDraft,
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+
+  return {
+    pass: passes[ix],
+    scriptId: newScript.id as string,
+    draftNumber: nextDraft,
+  };
+}
+
 /** Key-order-independent canonical form (matches the routes helper).
  *  Used here so set-seasonArc can detect "structurally same payload"
  *  even when Postgres jsonb and zod produce different key orders. */
@@ -891,6 +1079,12 @@ function isStageApproved(pass: RedevelopmentPass, stage: RedevStageKey): boolean
       // we treat planApproved as the approval signal so the gate logic
       // can compute downstream stage states even before Pass 2 ships.
       return !!pass.r7Polish?.approvedAt || !!pass.r7Polish?.planApprovedAt;
+    case "r8_voice_polish":
+      // R8 mirrors R7's gate semantics.
+      return (
+        !!pass.r8VoicePolish?.approvedAt ||
+        !!pass.r8VoicePolish?.planApprovedAt
+      );
   }
 }
 
@@ -910,6 +1104,8 @@ function isStageStarted(pass: RedevelopmentPass, stage: RedevStageKey): boolean 
       return !!pass.pilotRewrite;
     case "r7_pilot_polish":
       return !!pass.r7Polish;
+    case "r8_voice_polish":
+      return !!pass.r8VoicePolish;
   }
 }
 

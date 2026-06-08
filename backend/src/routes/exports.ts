@@ -4,7 +4,7 @@ import { assertProjectMember } from "../db/queries.js";
 import { supabase } from "../db/client.js";
 import { parseFountain, formatFountain } from "../screenplay/fountain.js";
 import { exportFDX } from "../screenplay/fdx.js";
-import { exportPDF } from "../screenplay/pdf.js";
+import { exportPDF, auditPdfText } from "../screenplay/pdf.js";
 import { exportMarkdown } from "../screenplay/markdown.js";
 import {
   resolveTitlePage,
@@ -125,25 +125,62 @@ export default async function exportsRoutes(app: FastifyInstance) {
         // CRITICAL: title-page block at the top; ONE blank line; then body.
         // The script body never starts before the title page metadata.
         const out = `${block}\n\n${body}`;
-        reply.header("Content-Type", "text/x-fountain");
+        // Set charset=utf-8 explicitly so browsers don't fall back to a
+        // legacy 8-bit codec for em dashes / curly quotes / accents.
+        reply.header("Content-Type", "text/x-fountain; charset=utf-8");
         reply.header("Content-Disposition", `attachment; filename="${fileStem}.fountain"`);
         return out;
       }
 
       case "markdown":
-        reply.header("Content-Type", "text/markdown");
+        reply.header("Content-Type", "text/markdown; charset=utf-8");
         reply.header("Content-Disposition", `attachment; filename="${fileStem}.md"`);
         return exportMarkdown(parsed);
 
       case "fdx":
-        reply.header("Content-Type", "application/vnd.finaldraft+xml");
+        reply.header("Content-Type", "application/vnd.finaldraft+xml; charset=utf-8");
         reply.header("Content-Disposition", `attachment; filename="${fileStem}.fdx"`);
         return exportFDX(parsed);
 
-      case "pdf":
+      case "pdf": {
+        // Audit the screenplay text BEFORE encoding to PDF — surfaces:
+        //   • upstream UTF-8 decode failures (U+FFFD in source)
+        //   • codepoints that would be substituted with `?`
+        //   • round-trip preservation of "San José", "Tilarán", em dashes,
+        //     curly quotes, and ellipsis
+        // Warnings are exposed via response headers so the UI can pick
+        // them up; we still serve the PDF (the encoder substitutes safely).
+        const audit = auditPdfText(parsed);
         reply.header("Content-Type", "application/pdf");
         reply.header("Content-Disposition", `attachment; filename="${fileStem}.pdf"`);
+        reply.header("X-Export-Audit-Ok", audit.ok ? "1" : "0");
+        reply.header(
+          "X-Export-Audit-Unsupported",
+          String(audit.unsupportedCharCount)
+        );
+        if (audit.replacementCharsInInput > 0) {
+          reply.header(
+            "X-Export-Audit-Replacement-Chars",
+            String(audit.replacementCharsInInput)
+          );
+        }
+        if (audit.unsupportedSamples.length > 0) {
+          reply.header(
+            "X-Export-Audit-Samples",
+            audit.unsupportedSamples.join(",")
+          );
+        }
+        const failedRoundTrips = audit.roundTripChecks.filter(
+          (c) => !c.preserved
+        );
+        if (failedRoundTrips.length > 0) {
+          reply.header(
+            "X-Export-Audit-Roundtrip-Failed",
+            failedRoundTrips.map((c) => c.input).join(" | ")
+          );
+        }
         return Buffer.from(exportPDF(parsed));
+      }
     }
   });
 }

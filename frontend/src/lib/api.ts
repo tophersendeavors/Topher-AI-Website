@@ -3372,6 +3372,99 @@ export const api = {
       { method: "POST", body: "{}" }
     ),
 
+  // R8 Voice & Scene Life Pass
+  generateRedevR8VoicePlan: (
+    projectId: string,
+    passId: string,
+    body?: { notes?: string }
+  ) =>
+    request<{
+      plan: {
+        approachSummary: string;
+        items: RedevR8VoicePolishItem[];
+        priorScriptId: string;
+      };
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource: "r8_voice_polish_plan_generation";
+      report: RedevPassReport;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r8-voice/plan/generate`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  saveRedevR8VoicePlan: (
+    projectId: string,
+    passId: string,
+    body: {
+      approachSummary: string;
+      items: RedevR8VoicePolishItem[];
+      priorScriptId: string;
+    }
+  ) =>
+    request<{ report: RedevPassReport }>(
+      `/projects/${projectId}/redevelopment/${passId}/r8-voice/plan`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+  approveRedevR8VoicePlan: (projectId: string, passId: string) =>
+    request<{ report: RedevPassReport }>(
+      `/projects/${projectId}/redevelopment/${passId}/r8-voice/plan/approve`,
+      { method: "POST", body: "{}" }
+    ),
+  auditRedevR8VoicePlan: (projectId: string, passId: string) =>
+    request<{
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource?: "current_stored_r8_plan";
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r8-voice/plan/audit`
+    ),
+  applyRedevR8Voice: (
+    projectId: string,
+    passId: string,
+    body?: { notes?: string }
+  ) =>
+    request<{
+      polishedFountain: string;
+      applied: Array<{
+        category: string;
+        location: string;
+        before: string;
+        after: string;
+        replacementKind: "action" | "dialogue" | "continuity_correction" | "removal";
+      }>;
+      unapplied: Array<{ itemIndex: number; reason: string }>;
+      fountainChanged: boolean;
+      bytesDelta: number;
+      baseLen: number;
+      newLen: number;
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource: "r8_apply_polished_draft";
+      report: RedevPassReport;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r8-voice/apply`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  auditRedevR8PolishedDraft: (projectId: string, passId: string) =>
+    request<{
+      audit: RedevAuditReport;
+      approvedAt: string | null;
+      auditedAt: string;
+      auditSource: "current_stored_r8_polished_draft";
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r8-voice/draft/audit`
+    ),
+  approveRedevR8PolishedDraft: (projectId: string, passId: string) =>
+    request<{
+      report: RedevPassReport;
+      scriptId: string;
+      draftNumber: number;
+      sceneIndexWarning?: string;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r8-voice/draft/approve`,
+      { method: "POST", body: "{}" }
+    ),
+
   repairRedevR6Pass2Draft: (
     projectId: string,
     passId: string,
@@ -3424,7 +3517,8 @@ export type RedevStageKey =
   | "r4_season_arc"
   | "r5_pilot_strategy"
   | "r6_pilot_rewrite"
-  | "r7_pilot_polish";
+  | "r7_pilot_polish"
+  | "r8_voice_polish";
 
 export type RedevR7PolishCategory =
   | "surrender_continuity"
@@ -3457,6 +3551,47 @@ export interface RedevR7PolishPlan {
   items: RedevR7PolishItem[];
   planApprovedAt: string | null;
   // Pass 2 (apply) fields:
+  polishedDraftText?: string | null;
+  polishedDraftAt?: string | null;
+  approvedAt?: string | null;
+  promotedScriptId?: string | null;
+  promotedDraftNumber?: number | null;
+}
+
+// R8 Voice & Scene Life Pass
+export type RedevR8VoicePolishCategory =
+  | "dialogue_naturalness"
+  | "character_voice"
+  | "emotional_tension"
+  | "scene_rhythm"
+  | "subtext_moment"
+  | "behavioral_de_repetition";
+
+export const R8_VOICE_CATEGORY_LABEL: Record<RedevR8VoicePolishCategory, string> = {
+  dialogue_naturalness: "Dialogue naturalness",
+  character_voice: "Character-specific voice",
+  emotional_tension: "Emotional tension micro-beats",
+  scene_rhythm: "Scene rhythm",
+  subtext_moment: "Subtext moments",
+  behavioral_de_repetition: "Behavioral de-repetition",
+};
+
+export interface RedevR8VoicePolishItem {
+  existingSceneOrd: number | null;
+  existingSlugline?: string;
+  character?: string;
+  category: RedevR8VoicePolishCategory;
+  diagnosis: string;
+  fixDirection: string;
+  severity?: "high" | "medium" | "low";
+  scope?: "line" | "beat" | "scene";
+}
+
+export interface RedevR8VoicePolishPlan {
+  priorScriptId: string;
+  approachSummary: string;
+  items: RedevR8VoicePolishItem[];
+  planApprovedAt: string | null;
   polishedDraftText?: string | null;
   polishedDraftAt?: string | null;
   approvedAt?: string | null;
@@ -3581,6 +3716,8 @@ export interface RedevelopmentPass {
   /** R7 Pilot Polish Pass. Plan-only on first build; Pass 2 (apply)
    *  ships next. */
   r7Polish?: RedevR7PolishPlan | null;
+  /** R8 Character Voice & Scene Life Pass. Same two-pass shape as R7. */
+  r8VoicePolish?: RedevR8VoicePolishPlan | null;
 }
 
 /** Per-character protection contract honored by R6 (pilot rewrite). */

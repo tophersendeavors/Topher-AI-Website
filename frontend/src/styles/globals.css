@@ -45,6 +45,17 @@
   --os-attn: #e8b765;
   --os-red: #e88078;
 
+  /* Toburt ember — warm orange-red, the studio's signature accent. Mirrors
+     the Tailwind `ember` family so CSS + utility classes stay in sync. */
+  --os-ember:        #ff7a45;
+  --os-ember-soft:   #ffa67f;
+  --os-ember-deep:   #d83b0e;
+  --os-ember-wash:   rgba(255, 122, 69, 0.13);
+  --os-ember-wash-strong: rgba(255, 122, 69, 0.22);
+  --os-ember-edge:   rgba(255, 122, 69, 0.34);
+  --os-ember-edge-strong: rgba(255, 122, 69, 0.55);
+  --os-ember-glow:   0 0 28px -6px rgba(255, 122, 69, 0.45);
+
   /* tints */
   --os-blue-wash: rgba(127, 176, 239, 0.14);
   --os-blue-edge: rgba(127, 176, 239, 0.32);
@@ -138,11 +149,23 @@ body {
   .glass-strong {
     @apply bg-white/[0.072] border border-white/[0.18] backdrop-blur-xl shadow-glass;
   }
+  /* Premium panel — soft inner highlight, refined shadow. Used by the
+     <Panel/> component which wraps almost every page section, so this is
+     the single highest-leverage style upgrade. */
   .panel {
-    @apply glass rounded-2xl;
+    background: var(--os-glass-1);
+    border: 1px solid var(--os-brd);
+    border-radius: var(--os-r-lg);
+    backdrop-filter: var(--os-blur);
+    -webkit-backdrop-filter: var(--os-blur);
+    box-shadow: var(--os-hi-soft), var(--os-sh-2);
   }
   .panel-strong {
-    @apply glass-strong rounded-2xl;
+    background: var(--os-glass-2);
+    border: 1px solid var(--os-brd-strong);
+    border-radius: var(--os-r-lg);
+    backdrop-filter: var(--os-blur);
+    box-shadow: var(--os-hi), var(--os-sh-3);
   }
 
   /* ---- OS-styled glass cards ---- */
@@ -188,21 +211,53 @@ body {
     font-weight: 600;
   }
 
-  /* ---- Buttons (legacy — preserved for existing comps) ---- */
+  /* ---- Buttons (legacy classes, premium ember treatment) ---- */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2
-           text-sm font-medium transition-colors duration-150
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2
+           text-sm font-medium transition-all duration-150
            focus:outline-none focus:ring-2 focus:ring-ember-500/40;
   }
+  /* Primary action — warm ember glass with a soft glow. The mockup's
+     "Approve & save" CTA tone; bound to legacy `btn-primary` so every
+     existing `<Button variant="primary">` upgrades automatically. */
   .btn-primary {
-    @apply btn bg-ember-500/90 text-white hover:bg-ember-400
-           shadow-[0_8px_24px_-12px_rgba(243,80,26,0.6)];
+    @apply btn text-white;
+    background: linear-gradient(180deg, rgba(255, 122, 69, 0.95), rgba(216, 59, 14, 0.92));
+    border: 1px solid rgba(255, 122, 69, 0.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.20),
+      0 8px 22px -10px rgba(255, 122, 69, 0.55);
+    font-weight: 600;
+  }
+  .btn-primary:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      0 12px 28px -10px rgba(255, 122, 69, 0.65);
+  }
+  .btn-primary:disabled, .btn-primary[disabled] {
+    opacity: 0.45;
+    transform: none;
+    cursor: not-allowed;
   }
   .btn-ghost {
-    @apply btn text-bone-100 hover:bg-white/5;
+    @apply btn text-bone-100;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid transparent;
+  }
+  .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
   }
   .btn-outline {
-    @apply btn border border-white/10 text-bone-100 hover:bg-white/[0.04];
+    @apply btn text-bone-100;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(12px);
+  }
+  .btn-outline:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.18);
   }
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full border border-white/10
@@ -315,6 +370,7 @@ body {
   .os-chip-attn     { color: var(--os-attn);    border-color: var(--os-attn-edge);    background: var(--os-attn-wash); }
   .os-chip-blocking { color: var(--os-red);     border-color: var(--os-red-edge);     background: var(--os-red-wash); }
   .os-chip-gold     { color: var(--os-amber-soft); border-color: var(--os-amber-edge); background: var(--os-amber-wash); }
+  .os-chip-ember    { color: var(--os-ember-soft); border-color: var(--os-ember-edge); background: var(--os-ember-wash); }
   .os-chip-locked   { color: var(--os-t-3); }
 
   /* ---- Status dot (used inline beside labels) ---- */
@@ -888,6 +944,312 @@ body {
   @keyframes osFadeIn {
     from { transform: translateY(8px); opacity: 0.5; }
     to { transform: none; opacity: 1; }
+  }
+
+  /* =================================================================
+     TOBURT 2.0 — premium ember accent layer
+     ================================================================= */
+
+  /* Primary ember button — the studio's signature CTA. Warm orange
+     glass with a soft inner highlight + ember glow on hover. */
+  .os-btn-ember {
+    background: linear-gradient(180deg, rgba(255, 122, 69, 0.92), rgba(216, 59, 14, 0.85));
+    color: #1a0a04;
+    border-color: rgba(255, 122, 69, 0.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      0 8px 22px -8px rgba(255, 122, 69, 0.42);
+    font-weight: 600;
+  }
+  .os-btn-ember:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      0 12px 30px -8px rgba(255, 122, 69, 0.55);
+  }
+
+  /* Ember-tinted glass — slightly warmer than the neutral os-card. */
+  .os-card-ember {
+    background:
+      linear-gradient(135deg, rgba(255, 122, 69, 0.08), rgba(255, 255, 255, 0.045) 55%);
+    border: 1px solid var(--os-ember-edge);
+    border-radius: var(--os-r-lg);
+    backdrop-filter: var(--os-blur);
+    -webkit-backdrop-filter: var(--os-blur);
+    box-shadow: var(--os-hi), var(--os-sh-2), var(--os-ember-glow);
+    color: var(--os-t-1);
+  }
+
+  /* Field card — the inner per-field panels inside content panels
+     (the mockup's "What changed about the show" / "Audience promise"
+     glass tiles). Icon prefix lives outside the textarea. */
+  .os-field-card {
+    background: var(--os-glass-1);
+    border: 1px solid var(--os-brd-soft);
+    border-radius: var(--os-r-md);
+    padding: 18px 20px;
+    transition: 0.18s;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .os-field-card:hover {
+    background: var(--os-glass-2);
+    border-color: var(--os-brd);
+  }
+  .os-field-card.is-focused {
+    background: var(--os-glass-2);
+    border-color: var(--os-ember-edge);
+    box-shadow: var(--os-hi-soft), 0 0 0 1px var(--os-ember-edge);
+  }
+  .os-field-ic {
+    width: 28px; height: 28px; flex: 0 0 auto;
+    border-radius: 8px; display: grid; place-items: center;
+    background: var(--os-glass-2); border: 1px solid var(--os-brd-soft);
+    color: var(--os-amber);
+  }
+  .os-field-label {
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--os-t-3);
+  }
+  .os-field-help {
+    font-size: 12.5px; line-height: 1.5;
+    color: var(--os-t-4); margin-top: 2px;
+  }
+  .os-field-value {
+    font-size: 14.5px; line-height: 1.6;
+    color: var(--os-t-2); margin-top: 8px;
+    white-space: pre-wrap; text-wrap: pretty;
+  }
+  .os-field-textarea {
+    width: 100%;
+    font-family: var(--os-sans);
+    font-size: 14.5px; line-height: 1.6;
+    color: var(--os-t-1);
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--os-brd-soft);
+    border-radius: 10px;
+    padding: 11px 13px;
+    margin-top: 8px;
+    resize: vertical;
+    transition: 0.15s;
+  }
+  .os-field-textarea:focus {
+    outline: none;
+    border-color: var(--os-ember-edge);
+    box-shadow: 0 0 0 3px var(--os-ember-wash);
+  }
+
+  /* Approval stamp — the bottom-right ribbon the mockup shows. */
+  .os-approve-stamp {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 8px 14px; border-radius: 100px;
+    background: var(--os-emerald-wash);
+    border: 1px solid var(--os-emerald-edge);
+    color: var(--os-emerald);
+    font-size: 13px; font-weight: 600;
+    box-shadow: var(--os-hi-soft);
+  }
+  .os-approve-stamp-time {
+    color: var(--os-t-4);
+    font-size: 12px;
+    font-weight: 500;
+    margin-left: 8px;
+  }
+
+  /* Sidebar (premium dark) — replaces the older .sidebar look. */
+  .os-sidebar {
+    background:
+      radial-gradient(120% 60% at 0% 0%, rgba(255, 122, 69, 0.07), transparent 60%),
+      linear-gradient(180deg, rgba(8, 10, 13, 0.92), rgba(7, 8, 11, 0.96));
+    border-right: 1px solid var(--os-brd-soft);
+    backdrop-filter: var(--os-blur-lg);
+  }
+  .os-sidebar-brand {
+    display: flex; align-items: center; gap: 12px;
+    padding: 20px 22px 18px;
+  }
+  .os-sidebar-brand-mark {
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--os-ember) 0%, var(--os-ember-deep) 100%);
+    color: #fff;
+    font-weight: 700; font-size: 18px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      0 6px 18px -6px rgba(255, 122, 69, 0.55);
+  }
+  .os-sidebar-brand-eyebrow {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--os-t-4);
+    line-height: 1;
+  }
+  .os-sidebar-brand-name {
+    font-family: var(--os-display);
+    font-size: 14.5px; font-weight: 600;
+    color: var(--os-t-1); letter-spacing: -0.01em;
+    margin-top: 4px;
+  }
+  .os-nav-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 14px;
+    margin: 1px 8px;
+    border-radius: 10px;
+    font-size: 13.5px; font-weight: 500;
+    color: var(--os-t-3);
+    transition: 0.15s;
+    cursor: pointer;
+  }
+  .os-nav-item:hover {
+    color: var(--os-t-1);
+    background: var(--os-glass-1);
+  }
+  .os-nav-item.is-active {
+    color: var(--os-t-1);
+    background: var(--os-glass-2);
+    box-shadow: inset 0 0 0 1px var(--os-brd);
+  }
+  .os-nav-item.is-active .os-nav-icon { color: var(--os-ember); }
+  .os-nav-icon {
+    width: 17px; height: 17px;
+    color: var(--os-t-4);
+    flex: 0 0 auto;
+    transition: color 0.15s;
+  }
+  .os-nav-item:hover .os-nav-icon { color: var(--os-t-2); }
+  .os-nav-section {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--os-t-4);
+    padding: 16px 22px 6px;
+  }
+
+  /* Project card — the SELVAJE block in the sidebar. */
+  .os-project-card {
+    position: relative;
+    margin: 6px 14px 4px;
+    padding: 14px 16px;
+    border-radius: var(--os-r-md);
+    background:
+      linear-gradient(135deg, rgba(255, 122, 69, 0.10), rgba(255, 255, 255, 0.03) 60%);
+    border: 1px solid var(--os-brd);
+    box-shadow: var(--os-hi-soft), 0 8px 22px -16px rgba(255, 122, 69, 0.4);
+    overflow: hidden;
+  }
+  .os-project-card-eyebrow {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--os-t-4);
+  }
+  .os-project-card-title {
+    font-family: var(--os-display);
+    font-size: 18px; font-weight: 600;
+    color: var(--os-t-1); letter-spacing: -0.015em;
+    margin-top: 6px;
+    text-transform: uppercase;
+  }
+  .os-project-tier {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 10px;
+    padding: 4px 10px; border-radius: 100px;
+    background: var(--os-ember-wash);
+    border: 1px solid var(--os-ember-edge);
+    color: var(--os-ember);
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .os-project-tier .os-tier-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--os-ember);
+  }
+
+  /* Ember status dot — used for "active R1" stage in the rail. */
+  .os-dot-ember {
+    background: var(--os-ember);
+    box-shadow: 0 0 0 4px var(--os-ember-wash), 0 0 12px var(--os-ember);
+  }
+  .os-stage-node-ember {
+    background: var(--os-ember);
+    border-color: var(--os-ember);
+    box-shadow: 0 0 0 5px var(--os-ember-wash), 0 0 16px var(--os-ember);
+  }
+  .os-stage-row.is-on-ember .os-stage-body {
+    background:
+      linear-gradient(120deg, var(--os-ember-wash), var(--os-glass-2) 55%);
+    box-shadow:
+      var(--os-hi-soft),
+      inset 0 0 0 1px var(--os-ember-edge);
+  }
+  .os-stage-row.is-on-ember .os-stage-n,
+  .os-stage-row.is-on-ember .os-stage-title {
+    color: var(--os-ember-soft);
+  }
+  .os-stage-status-ember { color: var(--os-ember); }
+
+  /* Section eyebrow with ember tone (for "R1 · REDEVELOPMENT BRIEF"). */
+  .os-eyebrow-ember {
+    font-size: 11.5px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--os-ember);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .os-eyebrow-ember::before {
+    content: ""; width: 14px; height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, var(--os-ember), var(--os-ember-deep));
+    box-shadow: 0 0 12px -2px var(--os-ember);
+    transform: rotate(45deg);
+  }
+
+  /* Premium content panel — the right-side glass card in the mockup
+     that wraps R1's heading + body + fields. */
+  .os-content-panel {
+    background:
+      radial-gradient(80% 60% at 100% 0%, rgba(255, 122, 69, 0.05), transparent 55%),
+      var(--os-glass-1);
+    border: 1px solid var(--os-brd);
+    border-radius: var(--os-r-xl);
+    padding: 28px 30px 26px;
+    backdrop-filter: var(--os-blur-lg);
+    box-shadow: var(--os-hi), var(--os-sh-3);
+    position: relative;
+  }
+  .os-content-panel-h1 {
+    font-family: var(--os-display);
+    font-size: 28px; font-weight: 600;
+    letter-spacing: -0.025em; color: var(--os-t-1);
+    margin: 8px 0 6px; line-height: 1.18;
+  }
+  .os-content-panel-lede {
+    font-size: 14px; line-height: 1.6;
+    color: var(--os-t-3); max-width: 64ch;
+    text-wrap: pretty; margin-bottom: 22px;
+  }
+
+  /* Icon button used as panel actions ("Copy", expand). */
+  .os-icon-action {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 12px;
+    font-size: 12.5px; font-weight: 500;
+    color: var(--os-t-2);
+    background: var(--os-glass-1);
+    border: 1px solid var(--os-brd-soft);
+    border-radius: 9px;
+    transition: 0.15s;
+    cursor: pointer;
+  }
+  .os-icon-action:hover {
+    color: var(--os-t-1);
+    background: var(--os-glass-2);
+    border-color: var(--os-brd);
+  }
+  .os-icon-action svg {
+    width: 14px; height: 14px;
   }
 }
 

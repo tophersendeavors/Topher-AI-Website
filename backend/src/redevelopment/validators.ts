@@ -31,6 +31,8 @@ import type {
   RedevR6RewriteTarget,
   RedevR7PolishCategory,
   RedevR7PolishItem,
+  RedevR8VoicePolishCategory,
+  RedevR8VoicePolishItem,
   RedevSeasonArcEpisode,
 } from "./types.js";
 import { R6_REWRITE_TARGET_LABEL } from "./types.js";
@@ -2326,5 +2328,465 @@ export function auditAndRepairR7Pass2Draft(args: {
       : `Polished draft looks malformed (slugs: ${sluglineCount}, length: ${text.length}). The polish may have damaged the Fountain structure.`,
   });
 
+  return { checks, repairs };
+}
+
+// ============================================================================
+// R8 — Voice & Scene Life Polish Plan audit (warning-only)
+// ============================================================================
+//
+// Plan-level checks for the R8 voice polish. Warns when the plan drifts
+// outside the six locked categories, when it touches architecture, when
+// it surfaces protected reveals, or when it tries to add exposition.
+
+const R8_VALID_CATEGORIES: RedevR8VoicePolishCategory[] = [
+  "dialogue_naturalness",
+  "character_voice",
+  "emotional_tension",
+  "scene_rhythm",
+  "subtext_moment",
+  "behavioral_de_repetition",
+];
+
+const R8_CATEGORY_LABEL: Record<RedevR8VoicePolishCategory, string> = {
+  dialogue_naturalness: "Dialogue naturalness",
+  character_voice: "Character-specific voice",
+  emotional_tension: "Emotional tension micro-beats",
+  scene_rhythm: "Scene rhythm",
+  subtext_moment: "Subtext moments",
+  behavioral_de_repetition: "Behavioral de-repetition",
+};
+
+export function auditAndRepairR8VoicePolishPlan(args: {
+  items: RedevR8VoicePolishItem[];
+  approachSummary: string;
+}): AuditReport {
+  const checks: AuditCheck[] = [];
+  const repairs: AuditRepair[] = [];
+  const { items, approachSummary } = args;
+
+  // 1. At least one item present.
+  checks.push({
+    id: "r8plan_items_present" as AuditCheckId,
+    label: "Voice items present",
+    status: items.length > 0 ? "passed" : "warning",
+    message:
+      items.length > 0
+        ? `${items.length} voice/life item${items.length === 1 ? "" : "s"} proposed.`
+        : "No voice items generated. Regenerate the plan or accept that the R7-polished draft needs no voice work.",
+  });
+
+  // 2. Category coverage. Aim for 4 of 6 categories on a healthy plan.
+  const seenCategories = new Set<RedevR8VoicePolishCategory>();
+  for (const it of items) seenCategories.add(it.category);
+  const missingCategories = R8_VALID_CATEGORIES.filter(
+    (c) => !seenCategories.has(c)
+  );
+  const coverageOk = seenCategories.size >= 4;
+  checks.push({
+    id: "r8plan_categories_covered" as AuditCheckId,
+    label: "Voice categories covered",
+    status: coverageOk ? "passed" : "warning",
+    message: coverageOk
+      ? `${seenCategories.size} of 6 categories addressed.`
+      : `Only ${seenCategories.size} of 6 categories addressed — missing: ${missingCategories
+          .map((c) => R8_CATEGORY_LABEL[c])
+          .join(", ")}. Either the draft is clean there, or the plan missed them.`,
+  });
+
+  // 3. No screenplay text in diagnosis / fixDirection.
+  const SCREENPLAY = [
+    /\bFADE\s+(IN|OUT)\b/,
+    /\b(INT|EXT)\.\s+[A-Z]+/,
+    /\([A-Z][a-z]+\s+[a-z]+,?\s+(then|now|softly|quietly)\)/,
+    /\bCUT\s+TO:/,
+    /\bV\.O\.\b/,
+    /\bO\.S\.\b/,
+  ];
+  const flatText = items
+    .map((i) => `${i.diagnosis}\n${i.fixDirection}`)
+    .join("\n");
+  const screenplayHit = SCREENPLAY.some((re) => re.test(flatText));
+  checks.push({
+    id: "r8plan_no_screenplay_text" as AuditCheckId,
+    label: "Plan stayed at plan level",
+    status: screenplayHit ? "warning" : "passed",
+    message: screenplayHit
+      ? "Plan contains screenplay formatting (FADE IN, INT./EXT., parentheticals). R8 Pass 1 is plan-level only — screenplay text comes in Pass 2 apply."
+      : "Plan stayed at plan level — no screenplay text leaked in.",
+  });
+
+  // 4. Paul reveal protected.
+  const PAUL_LATE = [
+    /\b(reveal|expose|show|surface)\b[^.]{0,80}\bpaul'?s?\s+(texting|accident|guilt|timestamp|crash)\b/i,
+    /\bpaul\b[^.]{0,40}\b(killed|caused|responsible)\b/i,
+    /\btimestamp\s+evidence\b/i,
+  ];
+  const paulLeak = unnegatedHit(flatText, PAUL_LATE);
+  checks.push({
+    id: "r8plan_paul_reveal_protected" as AuditCheckId,
+    label: "Paul reveal protected in voice plan",
+    status: paulLeak ? "warning" : "passed",
+    message: paulLeak
+      ? "Voice plan proposes surfacing Paul's late-season reveal (texting / accident / timestamp / guilt). R8 cannot reveal this."
+      : "Voice plan keeps Paul's late-season reveal protected.",
+  });
+
+  // 5. Elena protected.
+  const ELENA = [
+    /\belena\b[^.]{0,60}\b(is|was)\b[^.]{0,40}\bsister\b/i,
+    /\bnadia'?s?\s+sister\b/i,
+    /\b(reveal|name|expose)\b[^.]{0,40}\bsister\b[^.]{0,30}\belena\b/i,
+  ];
+  const elenaLeak = unnegatedHit(flatText, ELENA);
+  checks.push({
+    id: "r8plan_elena_protected" as AuditCheckId,
+    label: "Elena sister relationship protected",
+    status: elenaLeak ? "warning" : "passed",
+    message: elenaLeak
+      ? "Voice plan proposes revealing the Elena / sister relationship. R8 cannot reveal this — it's a later-season landing."
+      : "Voice plan keeps the Elena / sister relationship protected.",
+  });
+
+  // 6. Solano framing protected.
+  const SOLANO_FRAUD = [
+    /\bsolano\b[^.]{0,80}\b(fraud|liar|con\b|cult|manipulat|deceiv)/i,
+    /\bframe\s+solano\b/i,
+  ];
+  const solanoLeak = unnegatedHit(flatText, SOLANO_FRAUD);
+  checks.push({
+    id: "r8plan_solano_framing_protected" as AuditCheckId,
+    label: "Solano framing protected",
+    status: solanoLeak ? "warning" : "passed",
+    message: solanoLeak
+      ? "Voice plan drifts into framing Solano as fraud/cult/con/manipulator. Solano Rule: Protocol works; she is unsettlingly certain."
+      : "Voice plan keeps the Solano Rule intact.",
+  });
+
+  // 7. Surrender preserved.
+  const SURRENDER_REMOVE = [
+    /\bremove\b[^.]{0,40}\bsurrender\b/i,
+    /\breplace\b[^.]{0,40}\bsurrender\b/i,
+    /\bcut\b[^.]{0,40}\bsurrender\s+(scene|sequence|beat|module)\b/i,
+  ];
+  const surrenderRemove = SURRENDER_REMOVE.some((re) => re.test(flatText));
+  checks.push({
+    id: "r8plan_surrender_preserved" as AuditCheckId,
+    label: "Surrender preserved as pilot engine",
+    status: surrenderRemove ? "warning" : "passed",
+    message: surrenderRemove
+      ? "Voice plan proposes removing or replacing Surrender. Surrender stays — voice polish only."
+      : "Voice plan keeps Surrender as the pilot engine.",
+  });
+
+  // 8. Final hook preserved.
+  const HOOK_REMOVE = [
+    /\bremove\b[^.]{0,60}\b(transparent\s+case|chime|hook)\b/i,
+    /\breplace\b[^.]{0,60}\b(transparent\s+case|chime|final\s+hook)\b/i,
+    /\bcut\b[^.]{0,40}\b(transparent\s+case|chime|final\s+hook)\b/i,
+    /\bdrop\b[^.]{0,40}\b(transparent\s+case|chime|final\s+hook)\b/i,
+  ];
+  const hookRemove = HOOK_REMOVE.some((re) => re.test(flatText));
+  checks.push({
+    id: "r8plan_final_hook_preserved" as AuditCheckId,
+    label: "Final hook preserved",
+    status: hookRemove ? "warning" : "passed",
+    message: hookRemove
+      ? "Voice plan proposes removing/replacing the final transparent-case / chime hook. The hook stays."
+      : "Voice plan preserves the final hook.",
+  });
+
+  // 9. No architecture drift.
+  const ARCH_DRIFT = [
+    /\brewrite\s+(the\s+)?(series|architecture|engine|arc|season|bible|principle|module)\b/i,
+    /\b(redefine|redevelop|reframe)\s+(the\s+)?(series|engine|arc|module|principle)\b/i,
+    /\bchange\s+(the\s+)?protocol\b/i,
+    /\bchange\s+(the\s+)?series\s+question\b/i,
+    /\badd\s+(a\s+)?(new\s+)?(scene|subplot|storyline)\b/i,
+  ];
+  const archDrift = ARCH_DRIFT.some((re) => re.test(flatText));
+  checks.push({
+    id: "r8plan_no_architecture_drift" as AuditCheckId,
+    label: "No architecture drift",
+    status: archDrift ? "warning" : "passed",
+    message: archDrift
+      ? "Voice plan proposes architecture-level changes (rewriting engine / arc / modules / new scenes). R8 is voice/life polish only."
+      : "Voice plan stays within R8 scope — no architecture drift.",
+  });
+
+  // 10. No new exposition / backstory.
+  const NEW_EXPOSITION = [
+    /\badd\s+(a\s+|some\s+)?(new\s+)?(backstory|exposition|history|background)\b/i,
+    /\bexplain\s+(why|how|what)\s+\w+\s+(feels?|wants?|needs?|did|happened)\b/i,
+    /\breveal\s+(more|new|why|what)\b/i,
+    /\b(introduce|surface)\s+(a\s+|the\s+)?(new\s+)?(backstory|history|reveal)\b/i,
+  ];
+  const newExpo = NEW_EXPOSITION.some((re) => re.test(flatText));
+  checks.push({
+    id: "r8plan_no_new_exposition" as AuditCheckId,
+    label: "No new exposition / backstory",
+    status: newExpo ? "warning" : "passed",
+    message: newExpo
+      ? "Voice plan proposes adding new exposition or backstory. R8 polishes EXISTING text — it never adds new information."
+      : "Voice plan adds no new exposition or backstory.",
+  });
+
+  // 11. Subtext rule — if a subtext_moment item exists, fixDirection must
+  //     not propose new explanatory prose. Check for "the audience" /
+  //     "the room knows" / "the body" patterns in fixDirection.
+  const subtextItems = items.filter((it) => it.category === "subtext_moment");
+  const subtextNewMeta = subtextItems.some((it) =>
+    R8_PLAN_META_PHRASES.some((re) => re.test(it.fixDirection))
+  );
+  checks.push({
+    id: "r8plan_subtext_no_meta_narration" as AuditCheckId,
+    label: "Subtext fixes don't add meta-narration",
+    status: subtextNewMeta ? "warning" : "passed",
+    message: subtextNewMeta
+      ? "A subtext item proposes adding meta-narration ('the audience…', 'the room knows…', 'the body understands…'). Subtext replacements must be filmable action, silence, or a tangential line — not new explanatory prose."
+      : "Subtext fixes stay filmable — no meta-narration proposed.",
+  });
+
+  void approachSummary;
+  return { checks, repairs };
+}
+
+// Meta-narration patterns reused in the R8 plan AND apply audits. Matches
+// the R7 list — R8 inherits the "no explanatory replacement" rule. We
+// keep a separate constant rather than importing the R7 one so the two
+// rules stay independently editable.
+const R8_PLAN_META_PHRASES: RegExp[] = [
+  /\bthe\s+audience\s+(feels?|knows?|sees?|understands?)/i,
+  /\bthe\s+room\s+(knows?|understands?)/i,
+  /\bthe\s+body\s+(knows?|understands?)/i,
+  /\bthe\s+wound\s+(is|sits|lives|remains|stays)/i,
+  /\bthe\s+avoidance\s+strategies?\b/i,
+  /\bthe\s+system\s+(is|was|remains|stays)\s+\w+ing\b/i,
+];
+
+// ============================================================================
+// R8 Pass 2 (apply) — full-document audit (warning-only)
+// ============================================================================
+//
+// Runs on the Fountain R8 Pass 2 produced. Verifies:
+//   1. The draft actually changed.
+//   2. R6 protections still intact (Paul / Elena / Solano / Surrender /
+//      final hook / no flashbacks / no confession / no therapy).
+//   3. R8 didn't introduce new showrunner-note prose (same rule as R7).
+//   4. R8 didn't expand the draft significantly (voice polish should
+//      NOT inflate the page count — it's sharpening, not adding).
+//   5. Screenplay structure sanity.
+
+const R8_EXPLANATORY_PHRASES: RegExp[] = [
+  /\bthe\s+audience\s+(feels?|knows?|sees?|understands?)/i,
+  /\bthe\s+room\s+(knows?|understands?)/i,
+  /\bthe\s+body\s+(knows?|understands?)/i,
+  /\bthe\s+wound\s+(is|sits|lives|remains|stays)/i,
+  /\bthe\s+avoidance\s+strategies?\b/i,
+  /\bthe\s+system\s+(is|was|remains|stays)\s+\w+ing\b/i,
+  /\bthe\s+system\s+is\s+running\b/i,
+  /\bwhat\s+\w+\s+(is|are|isn'?t|aren'?t)\s+saying\b/i,
+];
+
+export function auditAndRepairR8Pass2Draft(args: {
+  baseFountain: string;
+  polishedFountain: string;
+  guardrails: RedevR6GuardrailsBundle;
+  planItems: RedevR8VoicePolishItem[];
+}): AuditReport {
+  const checks: AuditCheck[] = [];
+  const repairs: AuditRepair[] = [];
+  const text = args.polishedFountain ?? "";
+  const base = args.baseFountain ?? "";
+
+  // 1. Draft actually changed.
+  const changed = text !== base && text.trim().length > 0;
+  checks.push({
+    id: "r8apply_draft_changed" as AuditCheckId,
+    label: "Draft changed vs. base",
+    status: changed ? "passed" : "warning",
+    message: changed
+      ? `Polished draft differs from base (${text.length.toLocaleString()} chars vs ${base.length.toLocaleString()}).`
+      : "Polished draft is identical to the base. No voice polish applied.",
+  });
+
+  // 2-9. Re-run the protection set on the polished draft.
+  const PAUL_LATE = [
+    /\bpaul\b[^.]{0,80}\b(texting|texts|texted)\b/i,
+    /\b(reveal|expose|admit|confess)\b[^.]{0,40}\b(accident|timestamp|guilt)/i,
+    /\bpaul'?s?\s+guilt\b/i,
+    /\btimestamp\s+evidence\b/i,
+  ];
+  const paulLeak = unnegatedHit(text, PAUL_LATE);
+  checks.push({
+    id: "r8apply_paul_reveal_protected" as AuditCheckId,
+    label: "Paul reveal still protected after voice polish",
+    status: paulLeak ? "warning" : "passed",
+    message: paulLeak
+      ? "Polished draft exposes Paul's late-season reveal."
+      : "Paul's late-season reveal remains protected.",
+  });
+
+  const ELENA = [
+    /\belena\b[^.]{0,60}\b(is|was)\b[^.]{0,40}\bsister\b/i,
+    /\bnadia'?s?\s+sister\b/i,
+    /\bmy\s+sister\b[^.]{0,30}\belena\b/i,
+  ];
+  const elenaLeak = unnegatedHit(text, ELENA);
+  checks.push({
+    id: "r8apply_elena_protected" as AuditCheckId,
+    label: "Elena sister relationship still protected",
+    status: elenaLeak ? "warning" : "passed",
+    message: elenaLeak
+      ? "Polished draft reveals the sister relationship."
+      : "Sister relationship stays protected.",
+  });
+
+  const SOLANO_FRAUD = [
+    /\bsolano\b[^.]{0,80}\b(lying|liar|fraud|fake|con\b|cult|deceiv|manipulat)/i,
+  ];
+  const solanoLeak = unnegatedHit(text, SOLANO_FRAUD);
+  checks.push({
+    id: "r8apply_solano_protected" as AuditCheckId,
+    label: "Solano rule still protected",
+    status: solanoLeak ? "warning" : "passed",
+    message: solanoLeak
+      ? "Polished draft drifts into Solano-as-fraud framing."
+      : "Solano framing honors the Solano Rule.",
+  });
+
+  const surrenderPresent = /\bsurrender\b/i.test(text);
+  checks.push({
+    id: "r8apply_surrender_present" as AuditCheckId,
+    label: "Surrender preserved as pilot engine",
+    status: surrenderPresent ? "passed" : "warning",
+    message: surrenderPresent
+      ? "Surrender remains present in the polished pilot."
+      : "Surrender is missing from the polished pilot. Voice polish stripped the engine.",
+  });
+
+  const tail = text.slice(Math.max(0, text.length - 3000));
+  const hookAnchors = {
+    bodies: /\bbodies\b/i.test(tail) || /\bafter\s+surrender\b/i.test(tail),
+    case: /\btransparent\s+case\b/i.test(tail),
+    chime:
+      /\b(chime|notification|phone)\b/i.test(tail) && /\bpaul\b/i.test(tail),
+  };
+  const anchorCount = [
+    hookAnchors.bodies,
+    hookAnchors.case,
+    hookAnchors.chime,
+  ].filter(Boolean).length;
+  checks.push({
+    id: "r8apply_final_hook_present" as AuditCheckId,
+    label: "Final blended hook still present",
+    status: anchorCount >= 2 ? "passed" : "warning",
+    message:
+      anchorCount >= 2
+        ? `Final hook anchors detected: ${[
+            hookAnchors.bodies && "bodies",
+            hookAnchors.case && "transparent case",
+            hookAnchors.chime && "Paul + chime",
+          ]
+            .filter(Boolean)
+            .join(", ")}.`
+        : "Final hook anchors not detected in the closing. Voice polish must preserve the hook.",
+  });
+
+  const FLASHBACK = [
+    /\bFLASHBACK\b/,
+    /\bINT\.\s+[A-Z][^\n]*?\b-\s*FLASHBACK\b/,
+    /\bEXT\.\s+[A-Z][^\n]*?\b-\s*FLASHBACK\b/,
+    /\b\(FLASHBACK\)/,
+  ];
+  const flashback = FLASHBACK.some((re) => re.test(text));
+  checks.push({
+    id: "r8apply_no_flashbacks" as AuditCheckId,
+    label: "No flashbacks introduced",
+    status: flashback ? "warning" : "passed",
+    message: flashback
+      ? "Voice polish introduced FLASHBACK markers. Global rule forbids flashbacks."
+      : "No flashbacks introduced.",
+  });
+
+  const confession = /\bconfession\s+circle\b/i.test(text);
+  checks.push({
+    id: "r8apply_no_confession_circles" as AuditCheckId,
+    label: "No confession circles introduced",
+    status: confession ? "warning" : "passed",
+    message: confession
+      ? "Voice polish introduced a confession-circle beat."
+      : "No confession circles introduced.",
+  });
+
+  const THERAPY = [
+    /\btell\s+me\s+about\s+your\s+(childhood|mother|father|family)\b/i,
+    /\bhow\s+does\s+that\s+make\s+you\s+feel\b/i,
+    /\band\s+how\s+do\s+you\s+feel\s+about\b/i,
+  ];
+  const therapy = THERAPY.some((re) => re.test(text));
+  checks.push({
+    id: "r8apply_no_therapy_exposition" as AuditCheckId,
+    label: "No therapy exposition introduced",
+    status: therapy ? "warning" : "passed",
+    message: therapy
+      ? "Voice polish introduced therapy-style exposition. Global rule forbids it."
+      : "No therapy exposition introduced.",
+  });
+
+  // 10. NO EXPLANATORY REPLACEMENT — the showrunner's R7 rule, applied
+  //     to R8 as well. Compare base vs polished explanatory phrase counts.
+  const countExplanatory = (s: string): number => {
+    let n = 0;
+    for (const re of R8_EXPLANATORY_PHRASES) {
+      const gre = new RegExp(
+        re.source,
+        re.flags.includes("g") ? re.flags : re.flags + "g"
+      );
+      const matches = s.match(gre);
+      if (matches) n += matches.length;
+    }
+    return n;
+  };
+  const baseCount = countExplanatory(base);
+  const polishedCount = countExplanatory(text);
+  const introducedNew = polishedCount > baseCount;
+  checks.push({
+    id: "r8apply_no_explanatory_replacement" as AuditCheckId,
+    label: "No new showrunner-note prose introduced",
+    status: introducedNew ? "warning" : "passed",
+    message: introducedNew
+      ? `Voice polish added ${polishedCount - baseCount} new line(s) containing meta-narration phrases. Replacements must be FILMABLE ACTION, SHORT CHARACTER-SPECIFIC DIALOGUE, or REMOVAL — never new explanatory prose.`
+      : `No new showrunner-note prose introduced (base: ${baseCount}, polished: ${polishedCount}).`,
+  });
+
+  // 11. No-bloat check — voice polish should typically TIGHTEN. A
+  //     polished draft that's >20% longer than the base suggests the
+  //     agent added new prose instead of sharpening existing lines.
+  const bytesDelta = text.length - base.length;
+  const pctDelta = base.length > 0 ? bytesDelta / base.length : 0;
+  const bloated = pctDelta > 0.2;
+  checks.push({
+    id: "r8apply_no_bloat" as AuditCheckId,
+    label: "Voice polish didn't bloat the draft",
+    status: bloated ? "warning" : "passed",
+    message: bloated
+      ? `Polished draft is ${(pctDelta * 100).toFixed(1)}% larger than base (${bytesDelta.toLocaleString()} chars added). Voice polish sharpens — it should rarely inflate. Review for added prose.`
+      : `Draft size change: ${bytesDelta > 0 ? "+" : ""}${bytesDelta.toLocaleString()} chars (${(pctDelta * 100).toFixed(1)}%). Within tolerance.`,
+  });
+
+  // 12. Screenplay structure sanity.
+  const sluglineCount = (text.match(/^(INT\.|EXT\.)\s+[A-Z]/gm) ?? []).length;
+  const validStructure = sluglineCount >= 3 && text.length >= 1000;
+  checks.push({
+    id: "r8apply_no_screenplay_drift" as AuditCheckId,
+    label: "Polished draft is still a valid screenplay",
+    status: validStructure ? "passed" : "warning",
+    message: validStructure
+      ? `Polished draft has ${sluglineCount} scene headings — structure intact.`
+      : `Polished draft looks malformed (slugs: ${sluglineCount}, length: ${text.length}). The polish may have damaged the Fountain structure.`,
+  });
+
+  void args.planItems;
   return { checks, repairs };
 }

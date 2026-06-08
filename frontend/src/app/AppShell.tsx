@@ -54,35 +54,24 @@ export function AppShell() {
 
   return (
     <div className="grid h-screen grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="relative flex flex-col border-r border-white/[0.06] bg-ink-900/60 backdrop-blur-xl">
-        <div className="absolute inset-x-0 top-0 h-24 bg-ember-glow opacity-70 pointer-events-none" />
-
-        <NavLink to="/projects" className="relative flex items-center gap-3 px-5 py-5">
-          <div className="grid h-9 w-9 place-items-center rounded-md bg-gradient-to-br from-ember-500 to-ember-700 text-white font-semibold shadow-ember">
-            T
-          </div>
-          <div className="leading-tight">
-            <div className="text-[10px] uppercase tracking-[0.25em] text-bone-400/80">
-              TOBURT
-            </div>
-            <div className="text-sm font-semibold text-bone-50">Studios OS</div>
+      <aside className="os-sidebar relative flex flex-col">
+        <NavLink to="/projects" className="os-sidebar-brand">
+          <div className="os-sidebar-brand-mark">T</div>
+          <div>
+            <div className="os-sidebar-brand-eyebrow">TOBURT</div>
+            <div className="os-sidebar-brand-name">Studios OS</div>
           </div>
         </NavLink>
 
-        <div className="px-5 pb-3">
+        <div className="px-3 pb-2">
           <NavLink
             to="/projects"
             end
             className={({ isActive }) =>
-              clsx(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-white/[0.06] text-bone-50"
-                  : "text-bone-300 hover:bg-white/[0.04] hover:text-bone-50"
-              )
+              clsx("os-nav-item", isActive && "is-active")
             }
           >
-            <Megaphone className="h-4 w-4" />
+            <Megaphone className="os-nav-icon" />
             All Projects
           </NavLink>
         </div>
@@ -90,7 +79,7 @@ export function AppShell() {
         {projectId && <CurrentProjectChip projectId={projectId} />}
 
         {projectId ? (
-          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-4">
+          <nav className="flex flex-1 flex-col overflow-y-auto pb-4">
             <SectionLabel label="Plan" />
             {NAV.filter((n) => n.section === 1).map((n) => (
               <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
@@ -155,16 +144,18 @@ export function AppShell() {
 function ModeSwitch() {
   const { mode, setMode } = useUIMode();
   return (
-    <div className="border-t border-white/[0.06] px-5 py-3 text-[11px]">
-      <div className="mb-1 uppercase tracking-wide text-bone-500">Mode</div>
-      <div className="flex rounded-md border border-white/8 bg-white/[0.02] p-0.5">
+    <div className="border-t border-white/[0.06] px-5 py-4 text-[11px]">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-bone-400/70">
+        Mode
+      </div>
+      <div className="flex gap-1.5 rounded-xl border border-white/[0.07] bg-white/[0.025] p-1">
         <button
           onClick={() => setMode("simple")}
           className={clsx(
-            "flex-1 rounded px-2 py-1 transition-colors",
+            "flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-all",
             mode === "simple"
-              ? "bg-white/[0.08] text-bone-50"
-              : "text-bone-400 hover:text-bone-200"
+              ? "bg-white/[0.08] text-bone-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+              : "text-bone-400 hover:text-bone-100 hover:bg-white/[0.04]"
           )}
           title="Non-expert mode. AI drafts; you review. Jargon is explained inline."
         >
@@ -173,10 +164,10 @@ function ModeSwitch() {
         <button
           onClick={() => setMode("advanced")}
           className={clsx(
-            "flex-1 rounded px-2 py-1 transition-colors",
+            "flex-1 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-all",
             mode === "advanced"
-              ? "bg-white/[0.08] text-bone-50"
-              : "text-bone-400 hover:text-bone-200"
+              ? "bg-gradient-to-b from-ember-400/95 to-ember-600/85 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_14px_-6px_rgba(243,80,26,0.55)]"
+              : "text-bone-400 hover:text-bone-100 hover:bg-white/[0.04]"
           )}
           title="Writers / producers. Full controls, version history, scoring details, prompt internals."
         >
@@ -200,34 +191,16 @@ function Item({
     <NavLink
       to={to}
       end
-      className={({ isActive }) =>
-        clsx(
-          "group flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
-          isActive
-            ? "bg-white/[0.06] text-bone-50"
-            : "text-bone-300 hover:bg-white/[0.04] hover:text-bone-50"
-        )
-      }
+      className={({ isActive }) => clsx("os-nav-item", isActive && "is-active")}
     >
-      {({ isActive }) => (
-        <>
-          <Icon
-            className={clsx(
-              "h-4 w-4 transition-colors",
-              isActive ? "text-ember-400" : "text-bone-400 group-hover:text-bone-200"
-            )}
-          />
-          {label}
-        </>
-      )}
+      <Icon className="os-nav-icon" />
+      {label}
     </NavLink>
   );
 }
 
 function SectionLabel({ label }: { label: string }) {
-  return (
-    <div className="label-eyebrow mt-3 px-3 pb-1">{label}</div>
-  );
+  return <div className="os-nav-section">{label}</div>;
 }
 
 // Always-visible "current project" card in the sidebar. Shows the project
@@ -248,29 +221,20 @@ function CurrentProjectChip({ projectId }: { projectId: string }) {
       : tier === "mini_series"
       ? "Mini Series"
       : "Prestige Series";
-  const tierClass =
-    tier === "micro_drama"
-      ? "border-amber-700/40 bg-amber-900/20 text-amber-200"
-      : tier === "mini_series"
-      ? "border-emerald-700/40 bg-emerald-900/20 text-emerald-200"
-      : "border-white/12 bg-white/[0.04] text-bone-200";
   return (
-    <div className="mx-5 mb-3 rounded-md border border-white/8 bg-white/[0.02] p-3">
-      <div className="label-eyebrow text-bone-500">Current project</div>
+    <div className="os-project-card">
+      <div className="os-project-card-eyebrow">Current Project</div>
       {project.isLoading ? (
-        <div className="mt-1 h-4 animate-pulse-soft rounded-sm bg-white/[0.04]" />
+        <div className="mt-2 h-5 animate-pulse-soft rounded-sm bg-white/[0.04]" />
       ) : (
         <>
-          <div className="mt-1 truncate font-serif text-sm text-bone-50">
+          <div className="os-project-card-title">
             {project.data?.title ?? "Untitled"}
           </div>
-          <div className="mt-1 flex items-center gap-1">
-            <span className={"chip text-[10px] " + tierClass}>
-              {tier === "micro_drama" && (
-                <Smartphone className="h-3 w-3" />
-              )}
-              {tierLabel}
-            </span>
+          <div className="os-project-tier">
+            <span className="os-tier-dot" />
+            {tier === "micro_drama" && <Smartphone className="h-3 w-3" />}
+            {tierLabel}
           </div>
         </>
       )}

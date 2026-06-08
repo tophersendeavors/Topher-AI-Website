@@ -17,7 +17,8 @@ export type RedevStageKey =
   | "r4_season_arc"
   | "r5_pilot_strategy"
   | "r6_pilot_rewrite"
-  | "r7_pilot_polish";
+  | "r7_pilot_polish"
+  | "r8_voice_polish";
 
 export const REDEV_STAGE_ORDER: RedevStageKey[] = [
   "r1_brief",
@@ -27,6 +28,7 @@ export const REDEV_STAGE_ORDER: RedevStageKey[] = [
   "r5_pilot_strategy",
   "r6_pilot_rewrite",
   "r7_pilot_polish",
+  "r8_voice_polish",
 ];
 
 export const REDEV_STAGE_LABEL: Record<RedevStageKey, string> = {
@@ -37,11 +39,14 @@ export const REDEV_STAGE_LABEL: Record<RedevStageKey, string> = {
   r5_pilot_strategy: "Pilot Rewrite Strategy",
   r6_pilot_rewrite: "Pilot Rewrite",
   r7_pilot_polish: "Pilot Polish Pass",
+  r8_voice_polish: "Character Voice & Scene Life Pass",
 };
 
 /** Gate dependencies. Each stage may only be approved after its
  *  prerequisites are approved. The Pilot Rewrite (R6) is locked until
- *  R2 + R3 + R4 are ALL approved — the user's explicit requirement. */
+ *  R2 + R3 + R4 are ALL approved — the user's explicit requirement.
+ *  R8 (voice/life polish) only opens once R7 has been approved AND
+ *  promoted — voice work targets the R7-polished draft. */
 export const REDEV_STAGE_DEPS: Record<RedevStageKey, RedevStageKey[]> = {
   r1_brief: [],
   r2_character_bibles: ["r1_brief"],
@@ -50,6 +55,7 @@ export const REDEV_STAGE_DEPS: Record<RedevStageKey, RedevStageKey[]> = {
   r5_pilot_strategy: ["r4_season_arc"],
   r6_pilot_rewrite: ["r2_character_bibles", "r3_protocol_modules", "r4_season_arc", "r5_pilot_strategy"],
   r7_pilot_polish: ["r6_pilot_rewrite"],
+  r8_voice_polish: ["r7_pilot_polish"],
 };
 
 // =============================================================================
@@ -390,6 +396,95 @@ export interface RedevR7PolishPlan {
   approvedAt?: string | null;
 }
 
+// =============================================================================
+// R8 — Character Voice & Scene Life Pass
+// =============================================================================
+//
+// R8 sits on top of the R7-polished promoted draft. Its job is to make the
+// script feel less engineered and more alive WITHOUT touching the locked
+// architecture. Six diagnostic lenses (none of them invent backstory; all
+// of them sharpen what's already on the page):
+//
+//   1. dialogue_naturalness — lines that read theatrical / written
+//      replaced with how a real human in that scene would actually speak.
+//   2. character_voice — generic lines that could belong to anyone are
+//      sharpened into voice the character can own.
+//   3. emotional_tension — flat scenes get a micro-beat (a held breath, a
+//      look that doesn't land, a withheld response) to lift internal stakes.
+//   4. scene_rhythm — dragging passages tighten; rushed ones breathe.
+//   5. subtext_moment — on-the-nose lines are replaced with action that
+//      contradicts the words, or silence that holds the room.
+//   6. behavioral_de_repetition — the same observation said three times
+//      collapses to one stronger version.
+//
+// R8 must NEVER violate the locked protections (Paul reveal, Elena sister,
+// Solano framing, Surrender engine, final hook). It must NEVER add new
+// showrunner-note prose (same rule as R7). It must NEVER reveal backstory.
+
+/** Six locked voice/life categories. The agent must use only these tokens. */
+export type RedevR8VoicePolishCategory =
+  | "dialogue_naturalness"
+  | "character_voice"
+  | "emotional_tension"
+  | "scene_rhythm"
+  | "subtext_moment"
+  | "behavioral_de_repetition";
+
+export const R8_VOICE_CATEGORY_LABEL: Record<RedevR8VoicePolishCategory, string> = {
+  dialogue_naturalness: "Dialogue naturalness",
+  character_voice: "Character-specific voice",
+  emotional_tension: "Emotional tension micro-beats",
+  scene_rhythm: "Scene rhythm",
+  subtext_moment: "Subtext moments",
+  behavioral_de_repetition: "Remove behavioral repetition",
+};
+
+export type RedevR8VoicePolishSeverity = "high" | "medium" | "low";
+
+/** One voice/life polish item — a targeted edit the showrunner should
+ *  sign off on before R8 Pass 2 (apply) runs. Plan-level prose only —
+ *  no screenplay text. */
+export interface RedevR8VoicePolishItem {
+  /** Existing scene ord in the promoted R7 draft. null = pilot-level
+   *  note (e.g. a rhythm note that spans multiple scenes). */
+  existingSceneOrd: number | null;
+  /** Original slugline (for existing scenes — informational). */
+  existingSlugline?: string;
+  category: RedevR8VoicePolishCategory;
+  /** Optional character this voice item targets (informational —
+   *  helps the showrunner review by character). */
+  character?: string;
+  /** What's wrong (1-2 sentences, plan-level). Quote the existing text
+   *  briefly when useful. */
+  diagnosis: string;
+  /** What to change (1-3 sentences). Behavior-level direction, not
+   *  screenplay text. */
+  fixDirection: string;
+  severity?: RedevR8VoicePolishSeverity;
+  /** Optional scope hint for the apply pass. */
+  scope?: "line" | "beat" | "scene";
+}
+
+export interface RedevR8VoicePolishPlan {
+  /** The promoted R7 script id this voice polish targets. Frozen at
+   *  plan generation time so a later promotion doesn't quietly retarget. */
+  priorScriptId: string;
+  /** Plan-level approach (1-3 sentences) — overall voice/life stance. */
+  approachSummary: string;
+  /** All voice/life polish items, in pilot order where possible. */
+  items: RedevR8VoicePolishItem[];
+  /** Plan-stage approval. Pass 2 (apply) only runs after this is set. */
+  planApprovedAt: string | null;
+  // ----- Pass 2 (apply) outputs:
+  polishedDraftText?: string | null;
+  polishedDraftAt?: string | null;
+  changeNotes?: string[];
+  promotedScriptId?: string | null;
+  promotedDraftNumber?: number | null;
+  /** Final-draft approval (post-apply promotion). */
+  approvedAt?: string | null;
+}
+
 /** Per-character contract for R6 — what the rewrite is allowed to plant,
  *  what it must NOT reveal, what executional moves are forbidden, and
  *  the overall tone the rewrite should land. R6's system prompt MUST
@@ -466,6 +561,9 @@ export interface RedevelopmentPass {
   /** R7 Pilot Polish Pass — targeted polish on the promoted R6 draft.
    *  Plan-stage only on first build (Pass 2 / apply ships next). */
   r7Polish?: RedevR7PolishPlan | null;
+  /** R8 Character Voice & Scene Life Pass — voice/life polish on the
+   *  promoted R7 draft. Same two-pass shape as R7 (plan → apply). */
+  r8VoicePolish?: RedevR8VoicePolishPlan | null;
 }
 
 // =============================================================================

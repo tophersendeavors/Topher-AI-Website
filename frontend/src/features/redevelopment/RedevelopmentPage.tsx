@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
+import clsx from "clsx";
 import {
   AlertTriangle, Check, ChevronLeft, Compass, Copy, Lock, Loader2, Pencil, Plus, RefreshCw, Save, Sparkles, Users,
 } from "lucide-react";
@@ -26,13 +27,16 @@ import type {
   RedevR6RewriteTarget,
   RedevR7PolishCategory,
   RedevR7PolishItem,
+  RedevR8VoicePolishCategory,
+  RedevR8VoicePolishItem,
   RedevSeasonArcEpisode,
   RedevStageKey,
 } from "@/lib/api";
-import { R6_REWRITE_TARGET_LABEL, R7_POLISH_CATEGORY_LABEL, normalizeR6Guardrails } from "@/lib/api";
+import { R6_REWRITE_TARGET_LABEL, R7_POLISH_CATEGORY_LABEL, R8_VOICE_CATEGORY_LABEL, normalizeR6Guardrails } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { ApprovalBadge } from "@/components/ui/ApprovalBadge";
 
 const STAGE_ORDER: RedevStageKey[] = [
   "r1_brief",
@@ -42,6 +46,7 @@ const STAGE_ORDER: RedevStageKey[] = [
   "r5_pilot_strategy",
   "r6_pilot_rewrite",
   "r7_pilot_polish",
+  "r8_voice_polish",
 ];
 
 const STAGE_LABEL: Record<RedevStageKey, string> = {
@@ -52,6 +57,7 @@ const STAGE_LABEL: Record<RedevStageKey, string> = {
   r5_pilot_strategy: "R5 · Pilot Strategy",
   r6_pilot_rewrite: "R6 · Guardrails Setup",
   r7_pilot_polish: "R7 · Pilot Polish Pass",
+  r8_voice_polish: "R8 · Voice & Scene Life Pass",
 };
 
 const STAGE_SUB: Record<RedevStageKey, string> = {
@@ -62,6 +68,7 @@ const STAGE_SUB: Record<RedevStageKey, string> = {
   r5_pilot_strategy: "Plan the pilot rewrite — what to change, what to keep, where to plant.",
   r6_pilot_rewrite: "Lock per-character protection contracts the rewrite must honor. Rewrite generation coming next.",
   r7_pilot_polish: "Polish the promoted R6 pilot — continuity, dialogue, hook strength. Architecture stays locked.",
+  r8_voice_polish: "Voice & scene-life pass on the promoted R7 pilot — make it less engineered, more alive. No architecture changes.",
 };
 
 const SELVAJE_DEFAULTS = {
@@ -312,36 +319,84 @@ function StageRail({
   activeStage: RedevStageKey;
   onPick: (s: RedevStageKey) => void;
 }) {
+  const createdAt = report.pass.createdAt
+    ? new Date(report.pass.createdAt)
+    : null;
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2 h-fit sticky top-4">
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wide text-bone-500">
-        Pass: {report.pass.title}
+    <div className="panel sticky top-4 h-fit p-3">
+      <div className="px-2 pt-2 pb-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-bone-400/70">
+          Pass: {report.pass.title}
+        </div>
+        {createdAt && (
+          <div className="mt-1 text-[11px] text-bone-500">
+            {createdAt.toLocaleString(undefined, {
+              month: "numeric",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              second: "2-digit",
+              hour12: true,
+            })}
+          </div>
+        )}
       </div>
-      <ol className="space-y-0.5 mt-1">
+      <ol className="space-y-1">
         {STAGE_ORDER.map((s) => {
           const status = report.stages[s].status;
           const isActive = s === activeStage;
           const isLocked = status === "locked";
+          // Dot tone: approved=green, in_progress=ember (warm), active=blue, locked=muted.
+          const dotTone =
+            status === "approved"
+              ? "os-dot os-dot-approved"
+              : status === "in_progress"
+                ? "os-dot os-dot-ember"
+                : status === "locked"
+                  ? "os-dot os-dot-locked"
+                  : "os-dot os-dot-active";
           return (
             <li key={s}>
               <button
                 type="button"
                 onClick={() => onPick(s)}
-                className={
-                  "w-full text-left rounded px-2.5 py-2 transition " +
-                  (isActive
-                    ? "bg-white/[0.06] ring-1 ring-white/15"
-                    : "hover:bg-white/[0.04]") +
-                  (isLocked ? " opacity-60" : "")
-                }
+                className={clsx(
+                  "group w-full rounded-xl px-3 py-2.5 text-left transition-all",
+                  isActive
+                    ? "bg-gradient-to-r from-ember-500/[0.12] to-transparent ring-1 ring-ember-500/35 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset]"
+                    : isLocked
+                      ? "opacity-70 hover:bg-white/[0.025]"
+                      : "hover:bg-white/[0.035]"
+                )}
               >
-                <div className="flex items-center gap-2">
-                  <StageStatusDot status={status} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm text-bone-100 truncate">
+                <div className="flex w-full items-center gap-3">
+                  <span className={dotTone} />
+                  <div className="min-w-0 flex-1 text-left">
+                    <div
+                      className={clsx(
+                        "truncate text-[13.5px] font-medium leading-tight",
+                        isActive
+                          ? "text-bone-50"
+                          : isLocked
+                            ? "text-bone-400"
+                            : "text-bone-200"
+                      )}
+                    >
                       {STAGE_LABEL[s]}
                     </div>
-                    <div className="text-[11px] text-bone-500 truncate">
+                    <div
+                      className={clsx(
+                        "mt-1 truncate text-[11px]",
+                        status === "approved"
+                          ? "text-emerald-300/80"
+                          : status === "in_progress"
+                            ? "text-ember-300/90"
+                            : status === "locked"
+                              ? "text-bone-500"
+                              : "text-sky-300/80"
+                      )}
+                    >
                       {status === "locked"
                         ? `Locked — waiting on ${report.stages[s].blockedBy
                             .map((b) => STAGE_LABEL[b].split(" · ")[0])
@@ -361,18 +416,6 @@ function StageRail({
       </ol>
     </div>
   );
-}
-
-function StageStatusDot({ status }: { status: string }) {
-  const color =
-    status === "approved"
-      ? "bg-emerald-400"
-      : status === "in_progress"
-        ? "bg-amber-400"
-        : status === "locked"
-          ? "bg-bone-600"
-          : "bg-sky-400";
-  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -437,6 +480,9 @@ function StageDetail({
   }
   if (stage === "r7_pilot_polish") {
     return <R7PolishStage projectId={projectId} passId={passId} report={report} onChange={onChange} />;
+  }
+  if (stage === "r8_voice_polish") {
+    return <R8VoicePolishStage projectId={projectId} passId={passId} report={report} onChange={onChange} />;
   }
   return <PhasePlaceholder stage={stage} />;
 }
@@ -607,8 +653,18 @@ function R1BriefStage({
 
   return (
     <Panel
+      elevated
+      emberEyebrow
       eyebrow={STAGE_LABEL["r1_brief"]}
       title="Redevelopment Brief"
+      footer={approved && existing?.approvedAt ? (
+        <>
+          <div className="text-[11px] text-bone-500">
+            Last updated by {existing.approvedBy ?? "Toburt"}
+          </div>
+          <ApprovalBadge approvedAt={existing.approvedAt} />
+        </>
+      ) : undefined}
       actions={
         (whatChanged || newCorePrinciple || newSeasonQuestion) && (
           <CopyButton
@@ -632,23 +688,23 @@ function R1BriefStage({
         ) || undefined
       }
     >
-      <p className="text-sm text-bone-300 leading-relaxed">
+      <p className="os-content-panel-lede">
         Define the new engine in writing before any architecture work. This brief
         becomes the system-prompt anchor for every downstream agent (character
         bibles, Protocol modules, season arc).
       </p>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-5 space-y-3">
         {fields.map((f) => (
-          <label key={f.label} className="block">
-            <div className="text-[11px] uppercase tracking-wide text-bone-400">{f.label}</div>
-            <div className="text-[11px] text-bone-500 mb-1">{f.sub}</div>
+          <label key={f.label} className="os-field-card block hover:bg-white/[0.045]">
+            <div className="os-field-label">{f.label}</div>
+            <div className="os-field-help mb-1">{f.sub}</div>
             <textarea
               value={f.value}
               onChange={(e) => f.setter(e.target.value)}
               rows={f.rows}
               disabled={approved}
-              className="w-full rounded border border-white/10 bg-white/[0.04] text-bone-100 px-2 py-1.5 text-sm leading-snug disabled:opacity-70 disabled:cursor-not-allowed"
+              className="os-field-textarea disabled:opacity-70 disabled:cursor-not-allowed"
             />
           </label>
         ))}
@@ -5844,6 +5900,677 @@ function R7Pass2Section({
           </pre>
           <div className="mt-1 text-[11px] text-bone-500">
             {draft.length.toLocaleString()} characters · Approving inserts as Draft N+1; R6 draft preserved.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// R8 — Character Voice & Scene Life Pass
+// ---------------------------------------------------------------------------
+
+const R8_VOICE_CATEGORY_TONE: Record<
+  RedevR8VoicePolishCategory,
+  { bg: string; text: string; border: string }
+> = {
+  dialogue_naturalness:       { bg: "bg-sky-900/20",     text: "text-sky-200",     border: "border-sky-700/40"    },
+  character_voice:            { bg: "bg-indigo-900/20",  text: "text-indigo-200",  border: "border-indigo-700/40" },
+  emotional_tension:          { bg: "bg-rose-900/20",    text: "text-rose-200",    border: "border-rose-700/40"   },
+  scene_rhythm:               { bg: "bg-amber-900/20",   text: "text-amber-200",   border: "border-amber-700/40"  },
+  subtext_moment:             { bg: "bg-violet-900/20",  text: "text-violet-200",  border: "border-violet-700/40" },
+  behavioral_de_repetition:   { bg: "bg-bone-900/30",    text: "text-bone-200",    border: "border-bone-700/40"   },
+};
+
+function R8VoicePolishStage({
+  projectId,
+  passId,
+  report,
+  onChange,
+}: {
+  projectId: string;
+  passId: string;
+  report: RedevPassReport;
+  onChange: () => void;
+}) {
+  const r7 = (report.pass as { r7Polish?: import("@/lib/api").RedevR7PolishPlan | null }).r7Polish ?? null;
+  const r7Promoted = !!r7?.approvedAt && !!r7?.promotedScriptId;
+
+  const stored = (report.pass as { r8VoicePolish?: import("@/lib/api").RedevR8VoicePolishPlan | null }).r8VoicePolish ?? null;
+  const [approachSummary, setApproachSummary] = useState<string>(
+    stored?.approachSummary ?? ""
+  );
+  const [items, setItems] = useState<RedevR8VoicePolishItem[]>(stored?.items ?? []);
+  const [priorScriptId, setPriorScriptId] = useState<string>(
+    stored?.priorScriptId ?? r7?.promotedScriptId ?? ""
+  );
+  const [lastAudit, setLastAudit] = useState<RedevAuditReport | null>(null);
+  const [auditMeta, setAuditMeta] = useState<{ auditedAt: string; source: "generation" | "current_stored" } | null>(null);
+  const planApproved = !!stored?.planApprovedAt;
+  const hasItems = items.length > 0;
+
+  const generate = useMutation({
+    mutationFn: () => api.generateRedevR8VoicePlan(projectId, passId, {}),
+    onSuccess: async (data) => {
+      setApproachSummary(data.plan.approachSummary);
+      setItems(data.plan.items);
+      setPriorScriptId(data.plan.priorScriptId);
+      setLastAudit(data.audit);
+      setAuditMeta({ auditedAt: data.auditedAt, source: "generation" });
+      await api.saveRedevR8VoicePlan(projectId, passId, {
+        approachSummary: data.plan.approachSummary,
+        items: data.plan.items,
+        priorScriptId: data.plan.priorScriptId,
+      });
+      onChange();
+    },
+  });
+
+  const auditCurrent = useMutation({
+    mutationFn: () => api.auditRedevR8VoicePlan(projectId, passId),
+    onSuccess: (data) => {
+      setLastAudit(data.audit);
+      setAuditMeta({ auditedAt: data.auditedAt, source: "current_stored" });
+    },
+  });
+
+  const approvePlan = useMutation({
+    mutationFn: () => api.approveRedevR8VoicePlan(projectId, passId),
+    onSuccess: onChange,
+  });
+
+  if (!r7Promoted) {
+    return (
+      <Panel eyebrow={STAGE_LABEL["r8_voice_polish"]} title="R8 — Locked">
+        <div className="flex items-start gap-3 rounded border border-white/10 bg-white/[0.02] p-4">
+          <Lock className="h-5 w-5 text-bone-400 mt-0.5 shrink-0" />
+          <div className="text-sm text-bone-300 leading-relaxed">
+            R8 unlocks after R7 is approved AND promoted as a new EP01
+            draft. Promote the R7 polish first; then return here for the
+            voice & scene-life pass.
+          </div>
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <Panel
+        eyebrow={STAGE_LABEL["r8_voice_polish"]}
+        title={planApproved ? "Voice plan — Approved" : "Character Voice & Scene Life"}
+        actions={
+          <div className="flex items-center gap-3">
+            {hasItems && (
+              <CopyButton
+                variant="outline"
+                label="Copy plan"
+                successLabel="Copied plan"
+                title="Copy the voice plan as Markdown."
+                text={formatR8VoicePlanAsMarkdown(items, approachSummary, stored?.planApprovedAt ?? null)}
+              />
+            )}
+            <span className="text-[11px] text-bone-500">
+              {hasItems
+                ? `${items.length} voice item${items.length === 1 ? "" : "s"}`
+                : "no plan yet"}
+            </span>
+          </div>
+        }
+      >
+        <p className="text-sm text-bone-300 leading-relaxed">
+          R8 makes the promoted R7 draft feel less engineered and more
+          alive. Six lenses: dialogue naturalness, character-specific
+          voice, emotional tension micro-beats, scene rhythm, subtext
+          moments, and behavioral de-repetition. Architecture stays
+          locked — no series changes, no new backstory, no exposition.
+          Pass 1 is plan-only; Pass 2 (apply) ships after you approve
+          this plan.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => generate.mutate()}
+            disabled={generate.isPending || planApproved}
+            variant={hasItems ? "outline" : "primary"}
+            title="Run the R8 voice-plan agent on the promoted R7 draft. Plan-level only — no screenplay text."
+          >
+            {generate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {hasItems ? "Regenerate voice plan" : "Generate voice plan"}
+          </Button>
+          {hasItems && (
+            <Button
+              variant="outline"
+              onClick={() => auditCurrent.mutate()}
+              disabled={auditCurrent.isPending}
+            >
+              {auditCurrent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+              {auditCurrent.isPending ? "Auditing…" : "Audit plan"}
+            </Button>
+          )}
+          {hasItems && !planApproved && (
+            <Button
+              onClick={() => approvePlan.mutate()}
+              disabled={approvePlan.isPending}
+              title="Lock the voice plan. Pass 2 (apply) will read it."
+            >
+              {approvePlan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Approve voice plan
+            </Button>
+          )}
+          {(generate.error || auditCurrent.error || approvePlan.error) && (
+            <div className="w-full text-xs text-red-300">
+              {((generate.error || auditCurrent.error || approvePlan.error) as Error).message}
+            </div>
+          )}
+        </div>
+
+        {planApproved && (
+          <div className="mt-3 rounded border border-emerald-700/30 bg-emerald-900/10 px-3 py-2 text-[11px] text-emerald-100">
+            <strong>Voice plan approved.</strong> Apply the polish below to
+            generate Draft N+1. Architecture stays locked.
+          </div>
+        )}
+
+        {approachSummary && (
+          <div className="mt-3 rounded border border-indigo-700/30 bg-indigo-900/10 px-3 py-2 text-[12px] text-bone-200">
+            <div className="text-[11px] uppercase tracking-wide text-indigo-300 mb-1">
+              Approach summary
+            </div>
+            {approachSummary}
+          </div>
+        )}
+
+        <div className="mt-2 text-[11px] text-bone-500">
+          Anchored to script <code>{priorScriptId.slice(0, 8) || "?"}…</code>
+        </div>
+      </Panel>
+
+      {lastAudit && (
+        <div className="space-y-1">
+          {auditMeta && (
+            <div className="rounded border border-bone-700/30 bg-white/[0.02] px-3 py-1.5 text-[11px] text-bone-300 flex flex-wrap items-center gap-2">
+              <strong className="text-bone-100">Audit source:</strong>
+              <span>
+                {auditMeta.source === "current_stored"
+                  ? "current stored voice plan"
+                  : "freshly-generated voice plan"}
+              </span>
+              <span className="text-bone-500">·</span>
+              <span>
+                run at <code>{new Date(auditMeta.auditedAt).toLocaleTimeString()}</code>
+              </span>
+              <button
+                type="button"
+                onClick={() => auditCurrent.mutate()}
+                disabled={auditCurrent.isPending}
+                className="ml-auto text-[11px] underline text-bone-300 hover:text-bone-100 disabled:opacity-50"
+              >
+                {auditCurrent.isPending ? "Re-auditing…" : "Force re-audit"}
+              </button>
+            </div>
+          )}
+          <QualityCheckPanel audit={lastAudit} collapsedByDefault={false} />
+        </div>
+      )}
+
+      {!hasItems ? (
+        <div className="rounded-lg border border-dashed border-white/15 bg-white/[0.02] p-6 text-center text-sm text-bone-400">
+          No voice plan yet. Click <strong className="text-bone-100">Generate voice plan</strong> to diagnose voice & scene-life opportunities on the promoted R7 draft.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((it, i) => (
+            <R8VoiceItemCard key={i} item={it} />
+          ))}
+        </div>
+      )}
+
+      <R8Pass2Section
+        projectId={projectId}
+        passId={passId}
+        report={report}
+        onChange={onChange}
+        planApproved={planApproved}
+      />
+    </div>
+  );
+}
+
+function R8VoiceItemCard({ item }: { item: RedevR8VoicePolishItem }) {
+  const tone = R8_VOICE_CATEGORY_TONE[item.category];
+  return (
+    <div className={`rounded-lg border ${tone.border} bg-white/[0.02] p-3`}>
+      <div className="flex items-start gap-3">
+        <span
+          className={`shrink-0 inline-flex items-center justify-center rounded ${tone.bg} ${tone.text} ${tone.border} border px-2 py-0.5 text-[11px] font-medium tracking-wide`}
+        >
+          {R8_VOICE_CATEGORY_LABEL[item.category]}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-bone-100 font-medium truncate">
+            {item.existingSceneOrd != null && (
+              <span className="text-bone-500 mr-2">#{item.existingSceneOrd}</span>
+            )}
+            {item.existingSlugline ?? (item.existingSceneOrd == null ? "(pilot-level)" : "(no slug)")}
+            {item.character && (
+              <span className="ml-2 text-[11px] text-indigo-300">· {item.character}</span>
+            )}
+          </div>
+          <div className="mt-1 text-[12px] text-bone-300 leading-snug">
+            <strong className="text-amber-200">Diagnosis: </strong>
+            {item.diagnosis}
+          </div>
+          <div className="mt-1 text-[12px] text-bone-200 leading-snug">
+            <strong className="text-emerald-300">Fix direction: </strong>
+            {item.fixDirection}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {item.severity && (
+              <span
+                className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${
+                  item.severity === "high"
+                    ? "border-red-700/40 bg-red-900/20 text-red-200"
+                    : item.severity === "medium"
+                      ? "border-amber-700/40 bg-amber-900/20 text-amber-200"
+                      : "border-bone-700/40 bg-bone-900/30 text-bone-300"
+                }`}
+              >
+                {item.severity}
+              </span>
+            )}
+            {item.scope && (
+              <span className="inline-flex rounded bg-sky-900/20 text-sky-200 border border-sky-700/40 px-1.5 py-0.5 text-[10px]">
+                {item.scope}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatR8VoicePlanAsMarkdown(
+  items: RedevR8VoicePolishItem[],
+  approachSummary: string,
+  approvedAt?: string | null
+): string {
+  const lines: string[] = [];
+  lines.push("# R8 — Character Voice & Scene Life Plan");
+  if (approvedAt) {
+    lines.push(`*Approved ${new Date(approvedAt).toLocaleDateString()}*`);
+  }
+  lines.push("");
+  if (approachSummary) {
+    lines.push("## Approach summary");
+    lines.push(approachSummary);
+    lines.push("");
+  }
+  lines.push("## Voice items");
+  for (const it of items) {
+    const head = it.existingSceneOrd != null
+      ? `**[#${it.existingSceneOrd}]** ${it.existingSlugline ?? ""}`
+      : `**[pilot-level]**`;
+    const cat = R8_VOICE_CATEGORY_LABEL[it.category];
+    const charBit = it.character ? ` — _${it.character}_` : "";
+    lines.push(`### ${head} — ${cat}${charBit}`);
+    lines.push(`**Diagnosis.** ${it.diagnosis}`);
+    lines.push(`**Fix direction.** ${it.fixDirection}`);
+    if (it.severity) lines.push(`_Severity: ${it.severity}_`);
+    if (it.scope) lines.push(`_Scope: ${it.scope}_`);
+    lines.push("");
+  }
+  return lines.join("\n").trim() + "\n";
+}
+
+function R8Pass2Section({
+  projectId,
+  passId,
+  report,
+  onChange,
+  planApproved,
+}: {
+  projectId: string;
+  passId: string;
+  report: RedevPassReport;
+  onChange: () => void;
+  planApproved: boolean;
+}) {
+  const polish = (report.pass as { r8VoicePolish?: {
+    polishedDraftText?: string | null;
+    polishedDraftAt?: string | null;
+    approvedAt?: string | null;
+    promotedScriptId?: string | null;
+    promotedDraftNumber?: number | null;
+  } }).r8VoicePolish ?? {};
+
+  const [lastAudit, setLastAudit] = useState<RedevAuditReport | null>(null);
+  const [auditMeta, setAuditMeta] = useState<{
+    auditedAt: string;
+    source: "apply" | "current_stored";
+    fountainLen?: number;
+    bytesDelta?: number;
+  } | null>(null);
+  const [appliedRows, setAppliedRows] = useState<Array<{
+    category: string;
+    location: string;
+    before: string;
+    after: string;
+    replacementKind: "action" | "dialogue" | "continuity_correction" | "removal";
+  }> | null>(null);
+  const [unappliedRows, setUnappliedRows] = useState<
+    Array<{ itemIndex: number; reason: string }> | null
+  >(null);
+  const [showFullDraft, setShowFullDraft] = useState(false);
+  const [acceptWarnings, setAcceptWarnings] = useState(false);
+
+  const auditWarningCount = (lastAudit?.checks ?? []).filter(
+    (c) => c.status === "warning"
+  ).length;
+  const auditIsClean = lastAudit !== null && auditWarningCount === 0;
+  const approveGated = !auditIsClean && !acceptWarnings;
+
+  const applyPolish = useMutation({
+    mutationFn: () => api.applyRedevR8Voice(projectId, passId, {}),
+    onSuccess: (data) => {
+      setLastAudit(data.audit);
+      setAuditMeta({
+        auditedAt: data.auditedAt,
+        source: "apply",
+        fountainLen: data.newLen,
+        bytesDelta: data.bytesDelta,
+      });
+      setAppliedRows(data.applied ?? []);
+      setUnappliedRows(data.unapplied ?? []);
+      onChange();
+    },
+  });
+
+  const auditCurrent = useMutation({
+    mutationFn: () => api.auditRedevR8PolishedDraft(projectId, passId),
+    onSuccess: (data) => {
+      setLastAudit(data.audit);
+      setAuditMeta({
+        auditedAt: data.auditedAt,
+        source: "current_stored",
+      });
+    },
+  });
+
+  const approveDraft = useMutation({
+    mutationFn: () => api.approveRedevR8PolishedDraft(projectId, passId),
+    onSuccess: () => onChange(),
+  });
+
+  if (!planApproved) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+        <div className="flex items-start gap-3">
+          <Lock className="h-5 w-5 text-bone-400 mt-0.5 shrink-0" />
+          <div className="text-sm text-bone-300 leading-relaxed">
+            <strong>R8 Pass 2 locked.</strong> Approve the voice plan above to
+            unlock apply. Pass 2 produces a new polished Fountain draft;
+            approve to promote it as Draft N+1 (the R7 draft stays intact).
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const draft = polish.polishedDraftText ?? "";
+  const draftApproved = !!polish.approvedAt;
+  const promotedDraft = polish.promotedDraftNumber;
+
+  return (
+    <div className="space-y-3">
+      <Panel
+        eyebrow="R8 · Pass 2"
+        title={
+          draftApproved
+            ? `Voice-polished pilot — Promoted as Draft ${promotedDraft ?? "?"}`
+            : "Voice-polished pilot — Apply voice plan"
+        }
+        actions={
+          <div className="flex items-center gap-3">
+            {draft && (
+              <CopyButton
+                variant="outline"
+                label="Copy draft"
+                successLabel="Copied draft"
+                title="Copy the voice-polished pilot as Fountain text."
+                text={draft}
+              />
+            )}
+          </div>
+        }
+      >
+        <p className="text-sm text-bone-300 leading-relaxed">
+          Pass 2 reads your approved voice plan + the promoted R7 draft +
+          locked architecture. It applies ONLY the approved voice items —
+          every replacement is filmable action, short character-specific
+          dialogue, or removal. It does NOT add new backstory, exposition,
+          or showrunner-note prose. Approve to promote as Draft N+1; the
+          R7 draft stays preserved.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => applyPolish.mutate()}
+            disabled={applyPolish.isPending || draftApproved}
+            variant={draft ? "outline" : "primary"}
+            title="Apply the approved voice items — generates the polished Fountain draft and runs the R8 apply audit."
+          >
+            {applyPolish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {draft ? "Regenerate voice polish" : "Apply voice polish (Pass 2)"}
+          </Button>
+          {draft && (
+            <Button
+              variant="outline"
+              onClick={() => auditCurrent.mutate()}
+              disabled={auditCurrent.isPending}
+            >
+              {auditCurrent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+              {auditCurrent.isPending ? "Auditing…" : "Audit polished draft"}
+            </Button>
+          )}
+          {draft && !draftApproved && (
+            <Button
+              onClick={() => approveDraft.mutate()}
+              disabled={approveDraft.isPending || approveGated}
+              title={
+                approveGated
+                  ? lastAudit
+                    ? `${auditWarningCount} audit warning(s) outstanding. Regenerate, or tick "Accept remaining warnings" to override.`
+                    : "Run 'Audit polished draft' first."
+                  : "Promote the voice-polished pilot to a new draft (Draft N+1). Does not touch the R7 draft."
+              }
+            >
+              {approveDraft.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Approve & save as Draft N+1
+            </Button>
+          )}
+          {draft && !draftApproved && lastAudit && auditWarningCount > 0 && (
+            <label
+              className="inline-flex items-center gap-2 text-[11px] text-amber-200 cursor-pointer"
+              title="Override the audit gate. Use only when warnings have been reviewed and accepted by the showrunner."
+            >
+              <input
+                type="checkbox"
+                checked={acceptWarnings}
+                onChange={(e) => setAcceptWarnings(e.target.checked)}
+              />
+              Accept remaining {auditWarningCount} warning{auditWarningCount === 1 ? "" : "s"}
+            </label>
+          )}
+          {(applyPolish.error || auditCurrent.error || approveDraft.error) && (
+            <div className="w-full text-xs text-red-300">
+              {((applyPolish.error || auditCurrent.error || approveDraft.error) as Error).message}
+            </div>
+          )}
+        </div>
+
+        {draftApproved && (
+          <div className="mt-3 rounded border border-emerald-700/30 bg-emerald-900/10 px-3 py-2 text-[11px] text-emerald-100">
+            <strong>Voice-polished pilot promoted.</strong> Saved as Draft{" "}
+            {promotedDraft ?? "?"} on EP01. The R7 draft is preserved.
+          </div>
+        )}
+
+        {unappliedRows && unappliedRows.length > 0 && (
+          <div className="mt-3 rounded border border-amber-700/30 bg-amber-900/10 px-3 py-2 text-[11px] text-amber-100">
+            <strong>Heads up:</strong> {unappliedRows.length} voice item
+            {unappliedRows.length === 1 ? "" : "s"} could not be applied
+            cleanly. Listed below — regenerate or address manually.
+          </div>
+        )}
+      </Panel>
+
+      {lastAudit && (
+        <div className="space-y-1">
+          {auditMeta && (
+            <div className="rounded border border-bone-700/30 bg-white/[0.02] px-3 py-1.5 text-[11px] text-bone-300 flex flex-wrap items-center gap-2">
+              <strong className="text-bone-100">Audit source:</strong>
+              <span>
+                {auditMeta.source === "current_stored"
+                  ? "current stored polished draft"
+                  : "freshly-applied polished draft"}
+              </span>
+              <span className="text-bone-500">·</span>
+              <span>
+                run at <code>{new Date(auditMeta.auditedAt).toLocaleTimeString()}</code>
+              </span>
+              {typeof auditMeta.fountainLen === "number" && (
+                <>
+                  <span className="text-bone-500">·</span>
+                  <span>{auditMeta.fountainLen.toLocaleString()} chars</span>
+                </>
+              )}
+              {typeof auditMeta.bytesDelta === "number" &&
+                auditMeta.bytesDelta !== 0 && (
+                  <>
+                    <span className="text-bone-500">·</span>
+                    <span
+                      className={
+                        auditMeta.bytesDelta > 0
+                          ? "text-emerald-300"
+                          : "text-amber-300"
+                      }
+                    >
+                      Δ {auditMeta.bytesDelta > 0 ? "+" : ""}
+                      {auditMeta.bytesDelta.toLocaleString()}
+                    </span>
+                  </>
+                )}
+              <button
+                type="button"
+                onClick={() => auditCurrent.mutate()}
+                disabled={auditCurrent.isPending}
+                className="ml-auto text-[11px] underline text-bone-300 hover:text-bone-100 disabled:opacity-50"
+                title="Reload the current stored polished draft and re-run the R8 audit."
+              >
+                {auditCurrent.isPending ? "Re-auditing…" : "Force re-audit"}
+              </button>
+            </div>
+          )}
+          <QualityCheckPanel audit={lastAudit} collapsedByDefault={false} />
+        </div>
+      )}
+
+      {appliedRows && appliedRows.length > 0 && (
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+          <div className="text-[11px] uppercase tracking-wide text-bone-400 mb-2">
+            Applied voice items ({appliedRows.length})
+          </div>
+          <div className="space-y-2">
+            {appliedRows.map((row, i) => (
+              <div
+                key={i}
+                className="rounded border border-bone-700/40 bg-bone-900/30 p-2"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${
+                      row.replacementKind === "action"
+                        ? "border-emerald-700/40 bg-emerald-900/20 text-emerald-200"
+                        : row.replacementKind === "dialogue"
+                          ? "border-sky-700/40 bg-sky-900/20 text-sky-200"
+                          : row.replacementKind === "continuity_correction"
+                            ? "border-violet-700/40 bg-violet-900/20 text-violet-200"
+                            : "border-red-700/40 bg-red-900/20 text-red-200"
+                    }`}
+                  >
+                    {row.replacementKind === "continuity_correction"
+                      ? "continuity fix"
+                      : row.replacementKind}
+                  </span>
+                  <span className="text-[11px] text-bone-300">
+                    {row.category}
+                  </span>
+                  <span className="text-[11px] text-bone-500">·</span>
+                  <span className="text-[11px] text-bone-400 truncate">
+                    {row.location}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <div className="text-bone-500 mb-0.5">Before</div>
+                    <div className="text-bone-300 whitespace-pre-wrap leading-snug">
+                      {row.before || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-bone-500 mb-0.5">After</div>
+                    <div className="text-emerald-200 whitespace-pre-wrap leading-snug">
+                      {row.after || "(removed)"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {unappliedRows && unappliedRows.length > 0 && (
+        <div className="rounded-lg border border-amber-700/30 bg-amber-900/10 p-3">
+          <div className="text-[11px] uppercase tracking-wide text-amber-300 mb-2">
+            Unapplied items ({unappliedRows.length})
+          </div>
+          <ul className="space-y-1 text-[11px] text-amber-100">
+            {unappliedRows.map((row, i) => (
+              <li key={i}>
+                <strong>Item #{row.itemIndex + 1}:</strong> {row.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {draft && (
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] uppercase tracking-wide text-bone-400">
+              Voice-polished pilot — Fountain preview
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFullDraft((v) => !v)}
+              className="text-[11px] text-bone-300 hover:text-bone-100 underline"
+            >
+              {showFullDraft ? "collapse" : "expand"}
+            </button>
+          </div>
+          <pre
+            className={`mt-2 overflow-auto rounded border border-bone-700/30 bg-black/30 px-3 py-2 text-[12px] text-bone-200 whitespace-pre-wrap leading-snug font-mono ${
+              showFullDraft ? "max-h-[80vh]" : "max-h-72"
+            }`}
+          >
+            {draft}
+          </pre>
+          <div className="mt-1 text-[11px] text-bone-500">
+            {draft.length.toLocaleString()} characters · Approving inserts as Draft N+1; R7 draft preserved.
           </div>
         </div>
       )}

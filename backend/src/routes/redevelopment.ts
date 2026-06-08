@@ -43,6 +43,10 @@ import {
   approveR7PolishPlan,
   setR7Pass2Draft,
   promoteR7Pass2Draft,
+  setR8VoicePolishPlan,
+  approveR8VoicePolishPlan,
+  setR8Pass2Draft,
+  promoteR8Pass2Draft,
   setSeasonArc,
 } from "../redevelopment/store.js";
 import { generateCharacterBible } from "../redevelopment/characterBibleAgent.js";
@@ -60,6 +64,8 @@ import {
   auditAndRepairR6RewritePlan,
   auditAndRepairR7PolishPlan,
   auditAndRepairR7Pass2Draft,
+  auditAndRepairR8VoicePolishPlan,
+  auditAndRepairR8Pass2Draft,
   auditAndRepairSeasonArc,
 } from "../redevelopment/validators.js";
 import { generateR6Guardrails } from "../redevelopment/r6GuardrailsAgent.js";
@@ -68,7 +74,8 @@ import { generateR6Pass2 } from "../redevelopment/r6Pass2Agent.js";
 import { repairR6Pass2 } from "../redevelopment/r6Pass2RepairAgent.js";
 import { generateR7PolishPlan } from "../redevelopment/r7PolishAgent.js";
 import { applyR7Pass2 } from "../redevelopment/r7Pass2Agent.js";
-import { loadExistingPilotContext } from "../redevelopment/pilotStrategyAgent.js";
+import { generateR8VoicePolishPlan } from "../redevelopment/r8VoicePolishAgent.js";
+import { applyR8Pass2 } from "../redevelopment/r8Pass2Agent.js";
 import { indexScenes } from "../screenplay/sceneIndex.js";
 import { supabase } from "../db/client.js";
 import type {
@@ -1780,6 +1787,375 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       });
       try {
         await indexScenes(scriptId, pass.r7Polish?.polishedDraftText ?? "");
+      } catch (err) {
+        return {
+          report: computePassReport(pass),
+          scriptId,
+          draftNumber,
+          sceneIndexWarning: `Promoted, but scene indexing failed: ${(err as Error).message}.`,
+        };
+      }
+      return {
+        report: computePassReport(pass),
+        scriptId,
+        draftNumber,
+      };
+    }
+  );
+
+  // ====================================================================
+  // R8 — Character Voice & Scene Life Pass
+  // ====================================================================
+
+  // POST /r8-voice/plan/generate — diagnose voice/life items on the
+  // PROMOTED R7 EP01 (Draft 3).
+  app.post(
+    "/projects/:id/redevelopment/:passId/r8-voice/plan/generate",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const body = z
+        .object({ notes: z.string().optional() })
+        .parse(req.body ?? {});
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+
+      const r7 = pass.r7Polish;
+      if (!r7 || !r7.approvedAt || !r7.promotedScriptId) {
+        throw new Error(
+          "R7 must be approved AND promoted before R8 voice polish can plan"
+        );
+      }
+      if (!pass.pilotStrategy) {
+        throw new Error("pilot strategy missing — R8 needs R5 context");
+      }
+
+      // Load the CURRENT promoted R7 EP01 fountain. Prefer scripts table.
+      let baseFountain = "";
+      try {
+        const { data: scriptRow } = await supabase
+          .from("scripts")
+          .select("fountain, draft_number")
+          .eq("id", r7.promotedScriptId)
+          .single();
+        if (scriptRow) baseFountain = (scriptRow.fountain as string) ?? "";
+      } catch {
+        /* fall through */
+      }
+      if (!baseFountain) baseFountain = r7.polishedDraftText ?? "";
+      if (!baseFountain.trim()) {
+        throw new Error(
+          "Promoted R7 draft is empty — cannot plan voice polish on nothing"
+        );
+      }
+
+      const rawGuard = pass.r6Guardrails;
+      const guardrails = (() => {
+        if (!rawGuard) return { perCharacter: [], globalRule: "", globalPlants: [], approvedAt: null };
+        if (Array.isArray(rawGuard)) {
+          return { perCharacter: rawGuard, globalRule: "", globalPlants: [], approvedAt: null };
+        }
+        return {
+          perCharacter: rawGuard.perCharacter ?? [],
+          globalRule: rawGuard.globalRule ?? "",
+          globalPlants: rawGuard.globalPlants ?? [],
+          approvedAt: rawGuard.approvedAt ?? null,
+        };
+      })();
+
+      const result = await generateR8VoicePolishPlan({
+        promotedFountain: baseFountain,
+        promotedScriptId: r7.promotedScriptId,
+        promotedDraftNumber: r7.promotedDraftNumber ?? null,
+        guardrails,
+        characterBibles: pass.characterBibles,
+        pilotStrategy: pass.pilotStrategy,
+        notes: body.notes,
+      });
+
+      const updatedPass = await setR8VoicePolishPlan({
+        projectId: id,
+        passId,
+        items: result.items,
+        approachSummary: result.approachSummary,
+        priorScriptId: result.priorScriptId,
+      });
+
+      return {
+        plan: {
+          approachSummary: result.approachSummary,
+          items: result.items,
+          priorScriptId: result.priorScriptId,
+        },
+        audit: result.audit,
+        auditedAt: new Date().toISOString(),
+        auditSource: "r8_voice_polish_plan_generation" as const,
+        report: computePassReport(updatedPass),
+      };
+    }
+  );
+
+  // PUT /r8-voice/plan — save edits to the plan.
+  app.put(
+    "/projects/:id/redevelopment/:passId/r8-voice/plan",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const body = z
+        .object({
+          approachSummary: z.string(),
+          items: z.array(z.any()),
+          priorScriptId: z.string().min(1),
+        })
+        .parse(req.body ?? {});
+      const updated = await setR8VoicePolishPlan({
+        projectId: id,
+        passId,
+        items: body.items,
+        approachSummary: body.approachSummary,
+        priorScriptId: body.priorScriptId,
+      });
+      return { report: computePassReport(updated) };
+    }
+  );
+
+  // POST /r8-voice/plan/approve — lock the plan; Pass 2 reads it.
+  app.post(
+    "/projects/:id/redevelopment/:passId/r8-voice/plan/approve",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const updated = await approveR8VoicePolishPlan({ projectId: id, passId });
+      return { report: computePassReport(updated) };
+    }
+  );
+
+  // GET /r8-voice/plan/audit — read-only audit of the stored plan.
+  app.get(
+    "/projects/:id/redevelopment/:passId/r8-voice/plan/audit",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+      const plan = pass.r8VoicePolish;
+      if (!plan) {
+        return {
+          audit: {
+            checks: [
+              {
+                id: "r8plan_items_present",
+                label: "Voice items present",
+                status: "warning",
+                message:
+                  "No R8 voice plan yet. Click 'Generate voice plan' first.",
+              },
+            ],
+            repairs: [],
+          },
+          auditedAt: new Date().toISOString(),
+        };
+      }
+      const audit = auditAndRepairR8VoicePolishPlan({
+        items: plan.items ?? [],
+        approachSummary: plan.approachSummary ?? "",
+      });
+      return {
+        audit,
+        auditedAt: new Date().toISOString(),
+        auditSource: "current_stored_r8_plan" as const,
+      };
+    }
+  );
+
+  // POST /r8-voice/apply — runs the voice polish agent on the approved
+  // plan + the promoted R7 EP01 fountain.
+  app.post(
+    "/projects/:id/redevelopment/:passId/r8-voice/apply",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const body = z
+        .object({ notes: z.string().optional() })
+        .parse(req.body ?? {});
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+      const plan = pass.r8VoicePolish;
+      if (!plan || !plan.planApprovedAt) {
+        throw new Error("R8 voice plan must be APPROVED before applying");
+      }
+      if (!plan.items || plan.items.length === 0) {
+        throw new Error("R8 voice plan has zero items — nothing to apply");
+      }
+
+      const r7 = pass.r7Polish;
+      if (!r7 || !r7.approvedAt || !r7.promotedScriptId) {
+        throw new Error(
+          "R7 must be approved AND promoted before R8 apply"
+        );
+      }
+
+      let baseFountain = "";
+      try {
+        const { data: scriptRow } = await supabase
+          .from("scripts")
+          .select("fountain")
+          .eq("id", r7.promotedScriptId)
+          .single();
+        if (scriptRow) baseFountain = (scriptRow.fountain as string) ?? "";
+      } catch {
+        /* fall through */
+      }
+      if (!baseFountain) baseFountain = r7.polishedDraftText ?? "";
+      if (!baseFountain.trim()) {
+        throw new Error(
+          "Promoted R7 draft is empty — cannot apply voice polish to nothing"
+        );
+      }
+
+      const rawGuard = pass.r6Guardrails;
+      const guardrails = (() => {
+        if (!rawGuard) return { perCharacter: [], globalRule: "", globalPlants: [], approvedAt: null };
+        if (Array.isArray(rawGuard)) {
+          return { perCharacter: rawGuard, globalRule: "", globalPlants: [], approvedAt: null };
+        }
+        return {
+          perCharacter: rawGuard.perCharacter ?? [],
+          globalRule: rawGuard.globalRule ?? "",
+          globalPlants: rawGuard.globalPlants ?? [],
+          approvedAt: rawGuard.approvedAt ?? null,
+        };
+      })();
+
+      const result = await applyR8Pass2({
+        baseFountain,
+        items: plan.items,
+        guardrails,
+        characterBibles: pass.characterBibles,
+        notes: body.notes,
+      });
+
+      const updatedPass = await setR8Pass2Draft({
+        projectId: id,
+        passId,
+        polishedFountain: result.fountain,
+      });
+
+      const audit = auditAndRepairR8Pass2Draft({
+        baseFountain,
+        polishedFountain: result.fountain,
+        guardrails,
+        planItems: plan.items,
+      });
+      const auditedAt = new Date().toISOString();
+
+      return {
+        polishedFountain: result.fountain,
+        applied: result.applied,
+        unapplied: result.unapplied,
+        fountainChanged: result.fountainChanged,
+        bytesDelta: result.bytesDelta,
+        baseLen: baseFountain.length,
+        newLen: result.fountain.length,
+        audit,
+        auditedAt,
+        auditSource: "r8_apply_polished_draft" as const,
+        report: computePassReport(updatedPass),
+      };
+    }
+  );
+
+  // GET /r8-voice/draft/audit — read-only audit of the stored polished draft.
+  app.get(
+    "/projects/:id/redevelopment/:passId/r8-voice/draft/audit",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+      const plan = pass.r8VoicePolish;
+      if (!plan || !plan.polishedDraftText) {
+        return {
+          audit: {
+            checks: [
+              {
+                id: "r8apply_draft_changed",
+                label: "Draft changed vs. base",
+                status: "warning",
+                message: "No polished R8 draft yet. Click 'Apply voice polish' first.",
+              },
+            ],
+            repairs: [],
+          },
+          approvedAt: null,
+        };
+      }
+      const r7 = pass.r7Polish;
+      let baseFountain = "";
+      if (r7?.promotedScriptId) {
+        try {
+          const { data: scriptRow } = await supabase
+            .from("scripts")
+            .select("fountain")
+            .eq("id", r7.promotedScriptId)
+            .single();
+          if (scriptRow) baseFountain = (scriptRow.fountain as string) ?? "";
+        } catch {
+          /* fall through */
+        }
+      }
+      if (!baseFountain) baseFountain = r7?.polishedDraftText ?? "";
+
+      const rawGuard = pass.r6Guardrails;
+      const guardrails = (() => {
+        if (!rawGuard) return { perCharacter: [], globalRule: "", globalPlants: [], approvedAt: null };
+        if (Array.isArray(rawGuard)) {
+          return { perCharacter: rawGuard, globalRule: "", globalPlants: [], approvedAt: null };
+        }
+        return {
+          perCharacter: rawGuard.perCharacter ?? [],
+          globalRule: rawGuard.globalRule ?? "",
+          globalPlants: rawGuard.globalPlants ?? [],
+          approvedAt: rawGuard.approvedAt ?? null,
+        };
+      })();
+
+      const audit = auditAndRepairR8Pass2Draft({
+        baseFountain,
+        polishedFountain: plan.polishedDraftText,
+        guardrails,
+        planItems: plan.items ?? [],
+      });
+      return {
+        audit,
+        approvedAt: plan.approvedAt ?? null,
+        auditedAt: new Date().toISOString(),
+        auditSource: "current_stored_r8_polished_draft" as const,
+      };
+    }
+  );
+
+  // POST /r8-voice/draft/approve — promote the polished draft to a new
+  // scripts row (Draft N+1).
+  app.post(
+    "/projects/:id/redevelopment/:passId/r8-voice/draft/approve",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const { pass, scriptId, draftNumber } = await promoteR8Pass2Draft({
+        projectId: id,
+        passId,
+        approvedBy: user.id,
+      });
+      try {
+        await indexScenes(scriptId, pass.r8VoicePolish?.polishedDraftText ?? "");
       } catch (err) {
         return {
           report: computePassReport(pass),

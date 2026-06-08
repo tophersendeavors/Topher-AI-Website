@@ -59,6 +59,7 @@ import {
 import { generateR6Guardrails } from "../redevelopment/r6GuardrailsAgent.js";
 import { generateR6RewritePlan } from "../redevelopment/r6RewriteAgent.js";
 import { generateR6Pass2 } from "../redevelopment/r6Pass2Agent.js";
+import { repairR6Pass2 } from "../redevelopment/r6Pass2RepairAgent.js";
 import { loadExistingPilotContext } from "../redevelopment/pilotStrategyAgent.js";
 import { indexScenes } from "../screenplay/sceneIndex.js";
 import type {
@@ -1237,7 +1238,16 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         compiledFountain: rewrite.proposedDraftText,
         guardrails,
       });
-      return { audit, approvedAt: rewrite.approvedAt };
+      return {
+        audit,
+        approvedAt: rewrite.approvedAt,
+        auditedAt: new Date().toISOString(),
+        // Tells the UI exactly what was audited so the showrunner
+        // never confuses pre/post-repair audits.
+        auditSource: "current_stored_proposed_draft",
+        proposedDraftAt: rewrite.proposedDraftAt ?? null,
+        fountainLen: rewrite.proposedDraftText.length,
+      };
     }
   );
 
@@ -1276,6 +1286,112 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
         report: computePassReport(pass),
         scriptId,
         draftNumber,
+      };
+    }
+  );
+
+  // POST /repair — surgical plant injection on the CURRENT proposedDraftText.
+  //
+  // Takes a list of target IDs (margot_professional_structure /
+  // nadia_searching_behavior / claire_ritualized_grief / dean_usefulness),
+  // runs ONE constrained LLM call that injects only those plants, saves
+  // the revised draft, and returns the updated 15-check audit + the
+  // LLM's per-target summary. Does NOT promote.
+  app.post(
+    "/projects/:id/redevelopment/:passId/r6-rewrite/draft/repair",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const body = z
+        .object({
+          targets: z.array(
+            z.enum([
+              "margot_professional_structure",
+              "nadia_searching_behavior",
+              "claire_ritualized_grief",
+              "dean_usefulness",
+            ])
+          ),
+          notes: z.string().optional(),
+        })
+        .parse(req.body ?? {});
+      if (body.targets.length === 0) {
+        throw new Error("at least one repair target is required");
+      }
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+      const rewrite = pass.pilotRewrite;
+      if (!rewrite || !rewrite.proposedDraftText) {
+        throw new Error(
+          "no Pass 2 draft to repair — generate the draft first"
+        );
+      }
+      const rawGuard = pass.r6Guardrails;
+      const guardrails = (() => {
+        if (!rawGuard) return { perCharacter: [], globalRule: "", globalPlants: [], approvedAt: null };
+        if (Array.isArray(rawGuard)) {
+          return { perCharacter: rawGuard, globalRule: "", globalPlants: [], approvedAt: null };
+        }
+        return {
+          perCharacter: rawGuard.perCharacter ?? [],
+          globalRule: rawGuard.globalRule ?? "",
+          globalPlants: rawGuard.globalPlants ?? [],
+          approvedAt: rawGuard.approvedAt ?? null,
+        };
+      })();
+
+      const baseLen = rewrite.proposedDraftText.length;
+      const result = await repairR6Pass2({
+        baseFountain: rewrite.proposedDraftText,
+        targets: body.targets,
+        guardrails,
+        notes: body.notes,
+      });
+
+      // Persist the repaired draft. Preserve the prior scene-action
+      // summary — the repair touches scene CONTENT, not the plan's
+      // KEEP/REVISE/MOVE/MERGE/CUT/ADD counts.
+      const priorSummary = rewrite.sceneActionSummary ?? {
+        kept: 0,
+        revised: 0,
+        moved: 0,
+        merged: 0,
+        cut: 0,
+        added: 0,
+      };
+      const updatedPass = await setR6Pass2Draft({
+        projectId: id,
+        passId,
+        compiledFountain: result.fountain,
+        sceneActionSummary: priorSummary,
+      });
+
+      // Re-read the stored draft from the just-saved pass to GUARANTEE
+      // the audit runs against what's actually persisted (not against
+      // an in-memory copy that could diverge from disk).
+      const persistedFountain =
+        updatedPass.pilotRewrite?.proposedDraftText ?? result.fountain;
+      const audit = auditAndRepairR6Pass2Draft({
+        compiledFountain: persistedFountain,
+        guardrails,
+      });
+      const auditedAt = new Date().toISOString();
+
+      return {
+        compiledFountain: persistedFountain,
+        repairs: result.repairs,
+        unrepaired: result.unrepaired,
+        fullyRepaired: result.fullyRepaired,
+        fountainChanged: result.fountainChanged,
+        bytesDelta: result.bytesDelta,
+        verification: result.verification,
+        audit,
+        auditedAt,
+        auditSource: "repaired_proposed_draft",
+        baseLen,
+        newLen: persistedFountain.length,
+        report: computePassReport(updatedPass),
       };
     }
   );

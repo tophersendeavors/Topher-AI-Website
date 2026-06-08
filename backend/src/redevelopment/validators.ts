@@ -33,6 +33,34 @@ import type {
 } from "./types.js";
 import { R6_REWRITE_TARGET_LABEL } from "./types.js";
 
+/** Shared per-character plant-detection patterns.
+ *
+ *  Single source of truth used by BOTH:
+ *    • the R6 Pass 2 final audit (`auditAndRepairR6Pass2Draft`)
+ *    • the R6 Pass 2 repair verifier (in `r6Pass2RepairAgent.ts`)
+ *
+ *  Previously the two had divergent keyword sets — the repair verifier
+ *  was broader (it accepted "folded", "refills", "staff board",
+ *  "orients toward distress", etc.) while the final audit was narrower.
+ *  Result: the LLM would satisfy the verifier on a repair pass but the
+ *  final audit would still flag the same warning, leaving the
+ *  showrunner stuck. Both detectors must accept the EXACT vocabulary
+ *  the repair prompt instructs the LLM to use.
+ *
+ *  Each pattern requires the character's first name + at least one
+ *  markers from the union of both prior sets, within a short proximity
+ *  window. Case-insensitive. */
+export const PLANT_DETECTION_PATTERNS = {
+  margot:
+    /\bmargot\b[^.]{0,200}\b(analy|diagnos|profess|read(s|ing)?\s+the\s+room|clinic|forensic|recorder|notebook|notes\b|chart|field\s*note)/i,
+  nadia:
+    /\bnadia\b[^.]{0,300}\b(archive|records|elena|photograph|staff\s+board|search|scan|notice|attentive|tracking|tracks|investigat|looking)/i,
+  claire:
+    /\bclaire\b[^.]{0,300}\b(ritual|gestur|memorializ|small\s+thing|practic|fold|folded|placed|grief|caretaking|paul|usefulness|past[-\s]?tense)/i,
+  dean:
+    /\bdean\b[^.]{0,300}\b(charm|charism|empire|performance|orient|refill|admir|use(ful)?|usef|moves\s+toward|distress)/i,
+} as const;
+
 // ============================================================================
 // R3 — Protocol Module audit
 // ============================================================================
@@ -1648,9 +1676,13 @@ export function auditAndRepairR6Pass2Draft(args: {
       : "Surrender is not mentioned in the rewritten pilot. The pilot's Protocol driver must be Surrender.",
   });
 
-  // 5–8. Per-principal plant presence — at minimum the character's
-  // first name must appear with their plant signal. These are softer
-  // heuristics (warning) since rewrites may legitimately compress.
+  // 5–8. Per-principal plant presence. Patterns extracted to
+  // PLANT_DETECTION_PATTERNS below so the surgical-repair verifier
+  // and the final audit cannot drift. Previously these had narrower
+  // keyword sets than the repair verifier accepted, so the LLM could
+  // satisfy the verifier (using "folded hoodie", "refills", "staff
+  // board", "orients toward distress") and the final audit would
+  // still warn. Single source of truth now.
   const plantChecks: Array<{
     id: AuditCheckId;
     label: string;
@@ -1661,28 +1693,28 @@ export function auditAndRepairR6Pass2Draft(args: {
     {
       id: "r6draft_margot_planted",
       label: "Margot professional structure planted",
-      pattern: /\bmargot\b[^.]{0,200}\b(analy|diagnos|profess|read(s|ing)?\s+the\s+room|clinic|forensic)/i,
+      pattern: PLANT_DETECTION_PATTERNS.margot,
       miss: "No clear Margot professional/analytical plant in the pilot. Add a beat showing her diagnostic identity.",
       pass: "Margot's professional / analytical identity is planted.",
     },
     {
       id: "r6draft_nadia_planted",
       label: "Nadia / Elena planted behaviorally",
-      pattern: /\bnadia\b[^.]{0,300}\b(archive|records|elena|photograph|search|notice|attentive|looking)/i,
+      pattern: PLANT_DETECTION_PATTERNS.nadia,
       miss: "No clear Nadia plant in the pilot. Plant her searching/attentive behavior (without naming the sister relationship).",
       pass: "Nadia's searching behavior is planted (relationship still protected).",
     },
     {
       id: "r6draft_claire_planted",
       label: "Claire ritualized grief planted",
-      pattern: /\bclaire\b[^.]{0,300}\b(ritual|gestur|memorializ|small\s+thing|practic|grief|caretaking|paul)/i,
+      pattern: PLANT_DETECTION_PATTERNS.claire,
       miss: "No clear Claire ritualized-grief plant in the pilot. Plant her private ritual / caretaking gesture.",
       pass: "Claire's practiced/ritualized grief is planted.",
     },
     {
       id: "r6draft_dean_planted",
       label: "Dean usefulness planted",
-      pattern: /\bdean\b[^.]{0,300}\b(charm|charism|empire|performance|admir|use(ful)?|usef)/i,
+      pattern: PLANT_DETECTION_PATTERNS.dean,
       miss: "No clear Dean usefulness/performance plant in the pilot. Plant his performed-success body.",
       pass: "Dean's usefulness/performance is planted.",
     },

@@ -3262,9 +3262,14 @@ export const api = {
       { method: "POST", body: JSON.stringify(body ?? {}) }
     ),
   auditRedevR6Pass2Draft: (projectId: string, passId: string) =>
-    request<{ audit: RedevAuditReport; approvedAt: string | null }>(
-      `/projects/${projectId}/redevelopment/${passId}/r6-rewrite/draft/audit`
-    ),
+    request<{
+      audit: RedevAuditReport;
+      approvedAt: string | null;
+      auditedAt: string;
+      auditSource: "current_stored_proposed_draft";
+      proposedDraftAt: string | null;
+      fountainLen: number;
+    }>(`/projects/${projectId}/redevelopment/${passId}/r6-rewrite/draft/audit`),
   approveRedevR6Pass2Draft: (projectId: string, passId: string) =>
     request<{
       report: RedevPassReport;
@@ -3274,6 +3279,49 @@ export const api = {
     }>(
       `/projects/${projectId}/redevelopment/${passId}/r6-rewrite/draft/approve`,
       { method: "POST", body: "{}" }
+    ),
+  /** Surgical plant-repair on the CURRENT Pass 2 proposedDraftText.
+   *  Does NOT promote the draft — caller must still call approveRedevR6Pass2Draft. */
+  repairRedevR6Pass2Draft: (
+    projectId: string,
+    passId: string,
+    body: {
+      targets: Array<
+        | "margot_professional_structure"
+        | "nadia_searching_behavior"
+        | "claire_ritualized_grief"
+        | "dean_usefulness"
+      >;
+      notes?: string;
+    }
+  ) =>
+    request<{
+      compiledFountain: string;
+      repairs: Array<{
+        target: string;
+        location: string;
+        summary: string;
+        verified: boolean;
+      }>;
+      unrepaired: string[];
+      fullyRepaired: boolean;
+      fountainChanged: boolean;
+      bytesDelta: number;
+      verification: Array<{
+        target: string;
+        claimed: boolean;
+        verified: boolean;
+        reason?: string;
+      }>;
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource: "repaired_proposed_draft";
+      baseLen: number;
+      newLen: number;
+      report: RedevPassReport;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r6-rewrite/draft/repair`,
+      { method: "POST", body: JSON.stringify(body) }
     ),
 };
 

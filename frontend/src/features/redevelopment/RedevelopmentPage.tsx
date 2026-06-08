@@ -4493,11 +4493,33 @@ function R6Pass2Section({
     null
   );
   const [showFullDraft, setShowFullDraft] = useState(false);
+  // Audit provenance — tells the showrunner exactly what the rendered
+  // audit was generated FROM, so they can never confuse pre/post-repair
+  // audits. Set every time `lastAudit` changes.
+  const [auditMeta, setAuditMeta] = useState<{
+    auditedAt: string;
+    source: "generation" | "current_stored" | "repair";
+    fountainLen?: number;
+    bytesDelta?: number;
+  } | null>(null);
+  // Approve is gated by the audit. The user can explicitly override the
+  // gate by toggling "I accept the remaining warnings" — that's the
+  // explicit-approval-of-warnings path the showrunner spec requires.
+  const [acceptWarnings, setAcceptWarnings] = useState(false);
+  const auditWarningCount = (lastAudit?.checks ?? []).filter(
+    (c) => c.status === "warning"
+  ).length;
+  const auditIsClean = lastAudit !== null && auditWarningCount === 0;
+  const approveGated = !auditIsClean && !acceptWarnings;
 
   const generate = useMutation({
     mutationFn: () => api.generateRedevR6Pass2Draft(projectId, passId, {}),
     onSuccess: (data) => {
       setLastAudit(data.audit);
+      setAuditMeta({
+        auditedAt: new Date().toISOString(),
+        source: "generation",
+      });
       setMissingPlanIndices(data.missingPlanIndices);
       onChange();
     },
@@ -4505,7 +4527,14 @@ function R6Pass2Section({
 
   const auditCurrent = useMutation({
     mutationFn: () => api.auditRedevR6Pass2Draft(projectId, passId),
-    onSuccess: (data) => setLastAudit(data.audit),
+    onSuccess: (data) => {
+      setLastAudit(data.audit);
+      setAuditMeta({
+        auditedAt: data.auditedAt,
+        source: "current_stored",
+        fountainLen: data.fountainLen,
+      });
+    },
   });
 
   const approveDraft = useMutation({
@@ -4594,12 +4623,31 @@ function R6Pass2Section({
           {draft && !draftApproved && (
             <Button
               onClick={() => approveDraft.mutate()}
-              disabled={approveDraft.isPending}
-              title="Promote the rewritten pilot to a new draft (Draft N+1). Does not touch the existing EP01."
+              disabled={approveDraft.isPending || approveGated}
+              title={
+                approveGated
+                  ? lastAudit
+                    ? `${auditWarningCount} audit warning(s) outstanding. Run repair, or tick "Accept remaining warnings" to override.`
+                    : "Run 'Audit rewritten pilot' first."
+                  : "Promote the rewritten pilot to a new draft (Draft N+1). Does not touch the existing EP01."
+              }
             >
               {approveDraft.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               Approve & save as new draft
             </Button>
+          )}
+          {draft && !draftApproved && lastAudit && auditWarningCount > 0 && (
+            <label
+              className="inline-flex items-center gap-2 text-[11px] text-amber-200 cursor-pointer"
+              title="Override the audit gate. Use this when warnings have been reviewed and accepted by the showrunner."
+            >
+              <input
+                type="checkbox"
+                checked={acceptWarnings}
+                onChange={(e) => setAcceptWarnings(e.target.checked)}
+              />
+              Accept remaining {auditWarningCount} warning{auditWarningCount === 1 ? "" : "s"}
+            </label>
           )}
           {(generate.error || auditCurrent.error || approveDraft.error) && (
             <div className="w-full text-xs text-red-300">
@@ -4655,7 +4703,86 @@ function R6Pass2Section({
       </Panel>
 
       {lastAudit && (
-        <QualityCheckPanel audit={lastAudit} collapsedByDefault={false} />
+        <div className="space-y-1">
+          {/* Audit source label — the showrunner asked for this so it's
+              always obvious WHAT the audit was generated from. */}
+          {auditMeta && (
+            <div className="rounded border border-bone-700/30 bg-white/[0.02] px-3 py-1.5 text-[11px] text-bone-300 flex flex-wrap items-center gap-2">
+              <strong className="text-bone-100">
+                Audit source:
+              </strong>
+              <span>
+                {auditMeta.source === "repair"
+                  ? "current repaired proposed draft"
+                  : auditMeta.source === "current_stored"
+                    ? "current stored proposed draft"
+                    : "freshly-generated draft"}
+              </span>
+              <span className="text-bone-500">·</span>
+              <span>
+                run at <code>{new Date(auditMeta.auditedAt).toLocaleTimeString()}</code>
+              </span>
+              {typeof auditMeta.fountainLen === "number" && (
+                <>
+                  <span className="text-bone-500">·</span>
+                  <span>
+                    {auditMeta.fountainLen.toLocaleString()} chars
+                  </span>
+                </>
+              )}
+              {typeof auditMeta.bytesDelta === "number" &&
+                auditMeta.bytesDelta !== 0 && (
+                  <>
+                    <span className="text-bone-500">·</span>
+                    <span
+                      className={
+                        auditMeta.bytesDelta > 0
+                          ? "text-emerald-300"
+                          : "text-amber-300"
+                      }
+                    >
+                      Δ {auditMeta.bytesDelta > 0 ? "+" : ""}
+                      {auditMeta.bytesDelta.toLocaleString()}
+                    </span>
+                  </>
+                )}
+              <button
+                type="button"
+                onClick={() => auditCurrent.mutate()}
+                disabled={auditCurrent.isPending}
+                className="ml-auto text-[11px] underline text-bone-300 hover:text-bone-100 disabled:opacity-50"
+                title="Reload the current stored proposed draft from the server and re-run the 15-check audit fresh."
+              >
+                {auditCurrent.isPending ? "Re-auditing…" : "Force re-audit current draft"}
+              </button>
+            </div>
+          )}
+          <QualityCheckPanel audit={lastAudit} collapsedByDefault={false} />
+        </div>
+      )}
+
+      {/* Repair workflow — surgical injection of missing character
+          plants. Lives between the audit panel and the draft preview so
+          the user sees the failing checks above and the repair controls
+          immediately below them. The approve button is intentionally
+          gated by the audit state, so this panel is the natural next
+          step when the audit reports missing plants. */}
+      {draft && (
+        <R6Pass2RepairPanel
+          projectId={projectId}
+          passId={passId}
+          audit={lastAudit}
+          onRepairComplete={(newAudit, meta) => {
+            setLastAudit(newAudit);
+            setAuditMeta({
+              auditedAt: meta.auditedAt,
+              source: "repair",
+              fountainLen: meta.newLen,
+              bytesDelta: meta.bytesDelta,
+            });
+          }}
+          onChange={onChange}
+        />
       )}
 
       {draft && (
@@ -4682,6 +4809,334 @@ function R6Pass2Section({
           <div className="mt-1 text-[11px] text-bone-500">
             {draft.length.toLocaleString()} characters · Approving inserts as Draft N+1; existing EP01 preserved.
             {priorScriptId ? ` Anchored to prior script ${priorScriptId.slice(0, 8)}…` : ""}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// R6 Pass 2 Repair panel — surgical character-plant injection
+// ---------------------------------------------------------------------------
+//
+// Maps the four warning audit checks onto the four locked repair target
+// IDs and lets the showrunner pick which to repair. Calls the surgical
+// repair endpoint; persists the result; re-runs the audit. Does NOT
+// promote — promotion stays gated behind the Approve button in the
+// parent section.
+
+type R6Pass2RepairTargetId =
+  | "margot_professional_structure"
+  | "nadia_searching_behavior"
+  | "claire_ritualized_grief"
+  | "dean_usefulness";
+
+const REPAIR_TARGET_BY_AUDIT_CHECK: Record<string, R6Pass2RepairTargetId> = {
+  r6draft_margot_planted: "margot_professional_structure",
+  r6draft_nadia_planted: "nadia_searching_behavior",
+  r6draft_claire_planted: "claire_ritualized_grief",
+  r6draft_dean_planted: "dean_usefulness",
+};
+
+const REPAIR_TARGET_LABEL: Record<R6Pass2RepairTargetId, string> = {
+  margot_professional_structure: "Margot — professional / analytical structure",
+  nadia_searching_behavior: "Nadia — searching behavior (no Elena reveal)",
+  claire_ritualized_grief: "Claire — ritualized grief (no Marcus)",
+  dean_usefulness: "Dean — usefulness / performed success",
+};
+
+const REPAIR_TARGET_SHORT: Record<R6Pass2RepairTargetId, string> = {
+  margot_professional_structure:
+    "Recorder, notebook, files, diagnostic observation. Analyze before feeling.",
+  nadia_searching_behavior:
+    "Scans rooms, studies staff boards, notices photograph wall, tracks Solano. No exposition.",
+  claire_ritualized_grief:
+    "Private ritual: folded object, careful handling, past-tense correction. No speech.",
+  dean_usefulness:
+    "Orients toward distress before it shows. Refills, manages the room with charm. Likable, not suspicious.",
+};
+
+function R6Pass2RepairPanel({
+  projectId,
+  passId,
+  audit,
+  onRepairComplete,
+  onChange,
+}: {
+  projectId: string;
+  passId: string;
+  audit: RedevAuditReport | null;
+  onRepairComplete: (
+    newAudit: RedevAuditReport,
+    meta: {
+      auditedAt: string;
+      newLen: number;
+      bytesDelta: number;
+    }
+  ) => void;
+  onChange: () => void;
+}) {
+  // Map audit warnings onto the 4 known repair targets. Only show
+  // targets whose corresponding audit check is currently a warning.
+  const warningTargetIds: R6Pass2RepairTargetId[] = useMemo(() => {
+    if (!audit) return [];
+    const set = new Set<R6Pass2RepairTargetId>();
+    for (const c of audit.checks) {
+      if (c.status === "warning" && REPAIR_TARGET_BY_AUDIT_CHECK[c.id]) {
+        set.add(REPAIR_TARGET_BY_AUDIT_CHECK[c.id]);
+      }
+    }
+    return Array.from(set);
+  }, [audit]);
+
+  // Selected repair targets — default to every warning target.
+  const [selected, setSelected] = useState<Set<R6Pass2RepairTargetId>>(
+    () => new Set(warningTargetIds)
+  );
+  // Keep the selection in sync if audit warnings change (e.g. after a
+  // repair pass eliminates some warnings).
+  useEffect(() => {
+    setSelected(new Set(warningTargetIds));
+  }, [warningTargetIds.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [lastRepairResult, setLastRepairResult] = useState<{
+    repairs: Array<{
+      target: string;
+      location: string;
+      summary: string;
+      verified: boolean;
+    }>;
+    unrepaired: string[];
+    fullyRepaired: boolean;
+    fountainChanged: boolean;
+    bytesDelta: number;
+    verification: Array<{
+      target: string;
+      claimed: boolean;
+      verified: boolean;
+      reason?: string;
+    }>;
+    auditedAt: string;
+  } | null>(null);
+
+  const repair = useMutation({
+    mutationFn: () =>
+      api.repairRedevR6Pass2Draft(projectId, passId, {
+        targets: Array.from(selected),
+      }),
+    onSuccess: (data) => {
+      // Defensive defaults — if the backend running is older than the
+      // verification/transparency build, these fields will be missing.
+      // Coalesce so the UI still renders instead of crashing on
+      // undefined.toLocaleString().
+      const safeBytesDelta =
+        typeof data.bytesDelta === "number" ? data.bytesDelta : 0;
+      const safeAuditedAt = data.auditedAt ?? new Date().toISOString();
+      const safeNewLen =
+        typeof data.newLen === "number"
+          ? data.newLen
+          : (data.compiledFountain?.length ?? 0);
+      setLastRepairResult({
+        repairs: data.repairs ?? [],
+        unrepaired: data.unrepaired ?? [],
+        fullyRepaired: !!data.fullyRepaired,
+        fountainChanged: data.fountainChanged ?? safeBytesDelta !== 0,
+        bytesDelta: safeBytesDelta,
+        verification: data.verification ?? [],
+        auditedAt: safeAuditedAt,
+      });
+      onRepairComplete(data.audit, {
+        auditedAt: safeAuditedAt,
+        newLen: safeNewLen,
+        bytesDelta: safeBytesDelta,
+      });
+      onChange();
+    },
+  });
+
+  // Nothing to render when there are no warnings AND no recent repair.
+  if (warningTargetIds.length === 0 && !lastRepairResult) return null;
+
+  return (
+    <div className="rounded-lg border border-amber-700/40 bg-amber-900/10 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-amber-300" />
+        <div className="text-[11px] uppercase tracking-wide text-amber-200 font-medium">
+          Surgical Plant Repair
+        </div>
+      </div>
+      <div className="text-[12px] text-bone-300 leading-snug">
+        Hard protections passed. These character plants are missing. Repair
+        is <strong>surgical</strong>: only the selected plants get added — every
+        passing protection (Paul, Elena, Solano, Surrender, final hook, no
+        flashbacks / confession / therapy) stays locked. The audit re-runs
+        automatically. The draft is NOT promoted — Approve stays gated.
+      </div>
+
+      {warningTargetIds.length > 0 ? (
+        <div className="space-y-2">
+          {warningTargetIds.map((t) => (
+            <label
+              key={t}
+              className="flex items-start gap-2 rounded border border-amber-700/30 bg-black/20 px-3 py-2 cursor-pointer hover:bg-black/30"
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(t)}
+                onChange={(e) => {
+                  const next = new Set(selected);
+                  if (e.target.checked) next.add(t);
+                  else next.delete(t);
+                  setSelected(next);
+                }}
+                className="mt-0.5"
+              />
+              <div className="flex-1">
+                <div className="text-[12px] text-amber-100 font-medium">
+                  {REPAIR_TARGET_LABEL[t]}
+                </div>
+                <div className="text-[11px] text-bone-400 mt-0.5">
+                  {REPAIR_TARGET_SHORT[t]}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded border border-emerald-700/30 bg-emerald-900/10 px-3 py-2 text-[12px] text-emerald-100">
+          No outstanding plant warnings. All four character plants are
+          satisfied.
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          onClick={() => repair.mutate()}
+          disabled={
+            repair.isPending || selected.size === 0 || warningTargetIds.length === 0
+          }
+          variant="primary"
+          title="Run the surgical repair LLM call on the CURRENT proposed draft. Adds only the selected plants. Does not promote the draft."
+        >
+          {repair.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {repair.isPending
+            ? "Repairing…"
+            : `Repair ${selected.size} selected plant${selected.size === 1 ? "" : "s"}`}
+        </Button>
+        {repair.error && (
+          <div className="w-full text-xs text-red-300">
+            {(repair.error as Error).message}
+          </div>
+        )}
+      </div>
+
+      {lastRepairResult && (
+        <div className="space-y-2 border-t border-amber-700/30 pt-3">
+          <div className="text-[11px] uppercase tracking-wide text-amber-200">
+            Repair result
+          </div>
+
+          {/* Top-line draft-change signal — fountainChanged + bytesDelta.
+              If the LLM returned the original document, the backend now
+              throws and this won't render at all (handled by repair.error). */}
+          <div className="rounded border border-bone-700/30 bg-black/20 px-3 py-2 text-[12px] text-bone-200">
+            <strong className="text-bone-100">Proposed draft updated.</strong>{" "}
+            {lastRepairResult.fountainChanged ? "Yes" : "No"} ·{" "}
+            <span
+              className={
+                lastRepairResult.bytesDelta >= 0
+                  ? "text-emerald-300"
+                  : "text-amber-300"
+              }
+            >
+              {lastRepairResult.bytesDelta >= 0 ? "+" : ""}
+              {lastRepairResult.bytesDelta.toLocaleString()} chars
+            </span>{" "}
+            · audit re-run at{" "}
+            <code>{new Date(lastRepairResult.auditedAt).toLocaleTimeString()}</code>
+          </div>
+
+          {/* Verification rows — one per requested target. Tells the
+              showrunner which LLM claims passed deterministic verification
+              and which didn't, so they're never told a repair succeeded
+              when the document doesn't reflect it. */}
+          {lastRepairResult.verification.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] uppercase tracking-wide text-amber-200">
+                Per-target verification
+              </div>
+              {lastRepairResult.verification.map((v) => {
+                const claim = lastRepairResult.repairs.find((r) => r.target === v.target);
+                return (
+                  <div
+                    key={v.target}
+                    className={`rounded border px-3 py-2 text-[12px] ${
+                      v.verified
+                        ? "border-emerald-700/30 bg-emerald-900/10 text-emerald-100"
+                        : "border-red-700/30 bg-red-900/10 text-red-100"
+                    }`}
+                  >
+                    <div className="font-medium flex items-center gap-2">
+                      {v.verified ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-300" />
+                      ) : (
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-300" />
+                      )}
+                      {REPAIR_TARGET_LABEL[v.target as R6Pass2RepairTargetId] ?? v.target}
+                    </div>
+                    <div className="text-[11px] mt-0.5">
+                      LLM claim: {v.claimed ? "applied" : "not reported"} ·
+                      {" "}Audit verification: {v.verified ? "passed" : "FAILED"}
+                    </div>
+                    {claim?.location && v.verified && (
+                      <div className="text-[11px] text-bone-400 mt-0.5">
+                        Location: <code>{claim.location}</code>
+                      </div>
+                    )}
+                    {claim?.summary && v.verified && (
+                      <div className="text-[11px] text-bone-300 mt-1 leading-snug">
+                        {claim.summary}
+                      </div>
+                    )}
+                    {!v.verified && v.reason && (
+                      <div className="text-[11px] mt-1 leading-snug">
+                        {v.reason}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {lastRepairResult.unrepaired.length > 0 && (
+            <div className="rounded border border-red-700/30 bg-red-900/10 px-3 py-2 text-[12px] text-red-100">
+              <div className="font-medium">
+                {lastRepairResult.unrepaired.length} target(s) still unrepaired
+                after this pass:
+              </div>
+              <ul className="mt-1 list-disc list-inside text-[11px]">
+                {lastRepairResult.unrepaired.map((u) => (
+                  <li key={u}>
+                    {REPAIR_TARGET_LABEL[u as R6Pass2RepairTargetId] ?? u}
+                  </li>
+                ))}
+              </ul>
+              <div className="text-[11px] mt-1">
+                Re-run the repair with a steering note naming a specific scene
+                to host the plant, or edit the Fountain preview manually.
+              </div>
+            </div>
+          )}
+          <div className="text-[11px] text-bone-500">
+            The audit panel above has been refreshed against the repaired draft.
+            Approve stays disabled until the audit is clean — or until you
+            explicitly accept the remaining warnings.
           </div>
         </div>
       )}

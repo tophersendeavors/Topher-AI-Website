@@ -11,16 +11,26 @@
 
 import { supabase } from "../db/client.js";
 import { parseFountain } from "./fountain.js";
+import { assertScriptUnlockedForMutation } from "../draft/lockGuard.js";
 
 export async function indexScenes(
   scriptId: string,
-  fountain: string
+  fountain: string,
+  opts: { allowLocked?: boolean; lockResultRows?: boolean } = {}
 ): Promise<{ count: number }> {
+  // Guard: refuse to re-index a locked draft unless the caller has opted in
+  // (e.g. an ops restore script writing the R9 source-of-truth back into the
+  // draft).
+  if (!opts.allowLocked) {
+    await assertScriptUnlockedForMutation(scriptId, "indexScenes");
+  }
+
   const parsed = parseFountain(fountain);
 
   await supabase.from("script_scenes").delete().eq("script_id", scriptId);
   if (parsed.scenes.length === 0) return { count: 0 };
 
+  const nowIso = new Date().toISOString();
   const rows = parsed.scenes.map((s) => ({
     script_id: scriptId,
     ord: s.order,
@@ -31,6 +41,12 @@ export async function indexScenes(
     summary: null,
     fountain: s.fountain,
     tags: [],
+    // When re-indexing a locked source-of-truth, mark every row as
+    // generated + locked so the gated drafter never picks them up as
+    // "pending" and the reassembler always includes them.
+    ...(opts.lockResultRows
+      ? { status: "locked", locked_at: nowIso, generated_at: nowIso, last_pass: "indexed_from_locked_source" }
+      : {}),
   }));
   const { error } = await supabase.from("script_scenes").insert(rows);
   if (error) throw error;

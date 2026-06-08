@@ -1,5 +1,6 @@
 import { supabase } from "../db/client.js";
 import { firstSlugline } from "../screenplay/fountain.js";
+import { assertScriptUnlockedForMutation } from "./lockGuard.js";
 
 /** Normalize a slugline for comparison (case/space/dash-insensitive). */
 function normSlug(s: string): string {
@@ -48,7 +49,17 @@ export async function syncStoredSluglines(
  * nothing, so the blob view always matches what's live in the grid. Also
  * re-syncs each scene's stored slugline from its body so metadata never drifts.
  */
-export async function reassembleLiveFountain(scriptId: string): Promise<void> {
+export async function reassembleLiveFountain(
+  scriptId: string,
+  opts: { allowLocked?: boolean } = {}
+): Promise<void> {
+  // Guard: refuse to rewrite the fountain of a locked draft unless the
+  // caller has opted in (e.g. ops restore). This is the bottom-of-the-stack
+  // gate that protects against every path that calls reassemble.
+  if (!opts.allowLocked) {
+    await assertScriptUnlockedForMutation(scriptId, "reassembleLiveFountain");
+  }
+
   // Keep stored sluglines aligned with the bodies before assembling.
   await syncStoredSluglines(scriptId);
 

@@ -664,9 +664,11 @@ export function DraftWorkspacePage() {
   // workspace silently because the prestige sub-components expect
   // artifacts the micro-drama path never produces. Redirect such scripts
   // back to the Episodes page where their real tools live.
-  const isMicroDrama =
-    ((script.data?.metadata as { source?: string } | undefined)?.source ?? "") ===
-    "micro_drama_chain";
+  const scriptMeta = (script.data?.metadata as
+    | { source?: string; lockedWritingDraft?: boolean; restoredFromR9SourceAt?: string }
+    | undefined);
+  const isMicroDrama = (scriptMeta?.source ?? "") === "micro_drama_chain";
+  const isLockedDraft = scriptMeta?.lockedWritingDraft === true;
   useEffect(() => {
     if (isMicroDrama) {
       navigate(`/projects/${projectId}/episodes`, { replace: true });
@@ -746,6 +748,25 @@ export function DraftWorkspacePage() {
       <ActivityBar scriptId={scriptId} scenesGenerating={rows.filter((r) => r.status === "generating").map((r) => r.ord)} />
 
       <div className="px-8 space-y-6">
+        {isLockedDraft && (
+          <div className="rounded-xl border border-ember-700/70 bg-ember-950/40 p-4 text-sm text-ember-100">
+            <div className="font-serif text-base text-bone-50">This draft is locked.</div>
+            <div className="mt-1 text-ember-200/90">
+              Scene writing cannot modify this draft. It was promoted as a creative
+              source-of-truth ({scriptMeta?.source ?? "locked"}) and is protected
+              against scene regeneration, fountain rewrite, and auto-demotion.
+              To continue, use <strong>Start new draft</strong> above to create a
+              new draft from this source.
+            </div>
+            {scriptMeta?.restoredFromR9SourceAt && (
+              <div className="mt-2 text-xs text-ember-300/70">
+                Restored from R9 source-of-truth on{" "}
+                {new Date(scriptMeta.restoredFromR9SourceAt).toLocaleString()}.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Step 4: Write Draft 1 — the primary creative action */}
         <GatedDraftPanel scriptId={scriptId} projectId={projectId} total={total} />
 

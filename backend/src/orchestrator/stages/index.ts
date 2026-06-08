@@ -25,6 +25,7 @@ import { subtextAgent } from "../../agents/subtext.js";
 import { runAgent } from "../../agents/runner.js";
 import { hydrateContext } from "../hydrate.js";
 import { postRoomMessage } from "../room.js";
+import { assertCanDemoteLockedCurrent, type NewDraftProvenance } from "../../draft/lockGuard.js";
 import type { Stage, StageContext, StageResult } from "../types.js";
 
 /**
@@ -999,6 +1000,27 @@ async function syncDraftToScripts(
   const { data: existing } = await existingQ;
   const nextNum = (existing?.[0]?.draft_number ?? 0) + 1;
 
+  // Guard: refuse to demote a locked current draft. If the user wants to
+  // replace a locked draft, they must do it via an explicit "Start new
+  // draft from this source" UI flow (which passes allowLockedDemotion).
+  // The autonomous workflow draft_v1 path is NOT one of those flows.
+  await assertCanDemoteLockedCurrent({ projectId, episodeId });
+
+  // Capture the prior current's id BEFORE demote so the new draft's
+  // metadata records its provenance.
+  let priorCurrentScriptId: string | null = null;
+  {
+    let pq = supabase
+      .from("scripts")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("current", true)
+      .limit(1);
+    pq = episodeId ? pq.eq("episode_id", episodeId) : pq.is("episode_id", null);
+    const { data: prior } = await pq;
+    priorCurrentScriptId = prior?.[0]?.id ?? null;
+  }
+
   // Demote prior drafts in the SAME scope only — every episode keeps its
   // own current script (season-level scoring reads one per episode).
   const demote = supabase
@@ -1022,6 +1044,13 @@ async function syncDraftToScripts(
     ? `${proj?.title ?? "Untitled"} — ${epLabel} — Draft ${nextNum}`
     : `${proj?.title ?? "Untitled"} — Draft ${nextNum}`;
 
+  const provenance: NewDraftProvenance = {
+    sourceScriptId: priorCurrentScriptId ?? "",
+    sourceDraftNumber: 0,
+    generatedBy: "workflow_draft_v1",
+    createdFromLockedDraft: false,
+    priorCurrentScriptId,
+  };
   const { data: script, error } = await supabase
     .from("scripts")
     .insert({
@@ -1031,7 +1060,7 @@ async function syncDraftToScripts(
       draft_number: nextNum,
       fountain,
       current: true,
-      metadata: { source: "workflow_draft_v1" },
+      metadata: { source: "workflow_draft_v1", ...provenance },
     })
     .select("id")
     .single();

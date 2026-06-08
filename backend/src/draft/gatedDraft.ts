@@ -3,6 +3,7 @@ import { draftOneScene } from "./scenePass.js";
 import { getCanonicalContext, commitSceneCanonical } from "./canonical.js";
 import { checkScene, type SceneCheckResult } from "./sceneChecker.js";
 import { reassembleLiveFountain } from "./reassemble.js";
+import { assertScriptUnlockedForMutation } from "./lockGuard.js";
 
 export type GatedDraftResult = {
   ord: number;
@@ -30,6 +31,11 @@ export async function draftSceneGated(args: {
 }): Promise<GatedDraftResult> {
   const { scriptId, ord, user } = args;
   const maxFix = args.maxFix ?? 1;
+
+  // Hard guard: locked drafts (e.g. R9 polished promotion) are creative
+  // source-of-truth and must never be modified by the scene drafter.
+  // This throws BEFORE any DB write, so a locked script stays untouched.
+  await assertScriptUnlockedForMutation(scriptId, "draftSceneGated");
 
   const { data: script } = await supabase
     .from("scripts")

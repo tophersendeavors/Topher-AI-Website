@@ -18,7 +18,8 @@ export type RedevStageKey =
   | "r5_pilot_strategy"
   | "r6_pilot_rewrite"
   | "r7_pilot_polish"
-  | "r8_voice_polish";
+  | "r8_voice_polish"
+  | "r9_final_polish";
 
 export const REDEV_STAGE_ORDER: RedevStageKey[] = [
   "r1_brief",
@@ -29,6 +30,7 @@ export const REDEV_STAGE_ORDER: RedevStageKey[] = [
   "r6_pilot_rewrite",
   "r7_pilot_polish",
   "r8_voice_polish",
+  "r9_final_polish",
 ];
 
 export const REDEV_STAGE_LABEL: Record<RedevStageKey, string> = {
@@ -40,13 +42,15 @@ export const REDEV_STAGE_LABEL: Record<RedevStageKey, string> = {
   r6_pilot_rewrite: "Pilot Rewrite",
   r7_pilot_polish: "Pilot Polish Pass",
   r8_voice_polish: "Character Voice & Scene Life Pass",
+  r9_final_polish: "Final Hook & Emotional Anchor Pass",
 };
 
 /** Gate dependencies. Each stage may only be approved after its
  *  prerequisites are approved. The Pilot Rewrite (R6) is locked until
  *  R2 + R3 + R4 are ALL approved — the user's explicit requirement.
  *  R8 (voice/life polish) only opens once R7 has been approved AND
- *  promoted — voice work targets the R7-polished draft. */
+ *  promoted — voice work targets the R7-polished draft. R9 is the
+ *  final automated rewrite pass and targets the R8-promoted Draft 4. */
 export const REDEV_STAGE_DEPS: Record<RedevStageKey, RedevStageKey[]> = {
   r1_brief: [],
   r2_character_bibles: ["r1_brief"],
@@ -56,6 +60,7 @@ export const REDEV_STAGE_DEPS: Record<RedevStageKey, RedevStageKey[]> = {
   r6_pilot_rewrite: ["r2_character_bibles", "r3_protocol_modules", "r4_season_arc", "r5_pilot_strategy"],
   r7_pilot_polish: ["r6_pilot_rewrite"],
   r8_voice_polish: ["r7_pilot_polish"],
+  r9_final_polish: ["r8_voice_polish"],
 };
 
 // =============================================================================
@@ -485,6 +490,88 @@ export interface RedevR8VoicePolishPlan {
   approvedAt?: string | null;
 }
 
+// =============================================================================
+// R9 — Final Hook & Emotional Anchor Pass
+// =============================================================================
+//
+// R9 is the final automated screenplay rewrite pass for Episode 1. It
+// reads the R8-promoted Draft 4 and applies five tightly-scoped lenses
+// without touching architecture, structure, or core character beats:
+//
+//   1. margot_emotional_anchor — one private, controlled emotional crack
+//      tied to the unlabeled file. Behavior, not exposition. No Cass
+//      reveal. No grief speech.
+//   2. archive_visual_mystery — one stronger visual plant when Solano
+//      enters the archive room: photo wall, labeled files, removed
+//      frame, covered section. No Elena/sister reveal. No "younger
+//      version of someone" clue.
+//   3. sound_design — strengthen recurring motifs: recorder click/hum,
+//      rain, jungle, howler monkeys, transparent case lock, silence,
+//      notification chime.
+//   4. pacing_economy — trim or tighten 1-2 pages by reducing repeated
+//      behavioral beats (especially canopy / thermal pools / repeated
+//      observing gestures). All core plants preserved.
+//   5. final_hook_polish — keep the transparent case / Paul phone /
+//      chime ending; add one restrained extra beat (e.g. the chime
+//      repeating softly, Paul's fingers moving once then stopping).
+//      No reveal of texting / accident / timestamp / guilt.
+//
+// R9 must NEVER violate the locked R7/R8 protections. Draft 5 (the R9
+// output) is the locked Episode 1 writing draft.
+
+/** Five locked final-polish categories. The agent must use only these tokens. */
+export type RedevR9FinalPolishCategory =
+  | "margot_emotional_anchor"
+  | "archive_visual_mystery"
+  | "sound_design"
+  | "pacing_economy"
+  | "final_hook_polish";
+
+export const R9_FINAL_CATEGORY_LABEL: Record<RedevR9FinalPolishCategory, string> = {
+  margot_emotional_anchor: "Margot emotional anchor",
+  archive_visual_mystery: "Archive-room visual mystery",
+  sound_design: "Sound design motifs",
+  pacing_economy: "Pacing economy",
+  final_hook_polish: "Final hook polish",
+};
+
+export type RedevR9FinalPolishSeverity = "high" | "medium" | "low";
+
+/** One final-polish item — same shape as R7/R8 items so the apply pass
+ *  + audit pipeline can share patterns. Plan-level prose only, no
+ *  screenplay text. */
+export interface RedevR9FinalPolishItem {
+  /** Existing scene ord in the promoted Draft 4. null = pilot-level
+   *  (e.g. a sound-motif note that spans multiple scenes, or the
+   *  closing-block hook polish). */
+  existingSceneOrd: number | null;
+  existingSlugline?: string;
+  /** Optional character this item targets (informational). */
+  character?: string;
+  category: RedevR9FinalPolishCategory;
+  diagnosis: string;
+  fixDirection: string;
+  severity?: RedevR9FinalPolishSeverity;
+  scope?: "line" | "beat" | "scene" | "ending" | "motif";
+}
+
+export interface RedevR9FinalPolishPlan {
+  /** The promoted R8 script id this final polish targets. */
+  priorScriptId: string;
+  /** Plan-level approach (1-3 sentences). */
+  approachSummary: string;
+  items: RedevR9FinalPolishItem[];
+  /** Plan-stage approval. */
+  planApprovedAt: string | null;
+  // ----- Pass 2 (apply) outputs:
+  polishedDraftText?: string | null;
+  polishedDraftAt?: string | null;
+  changeNotes?: string[];
+  promotedScriptId?: string | null;
+  promotedDraftNumber?: number | null;
+  approvedAt?: string | null;
+}
+
 /** Per-character contract for R6 — what the rewrite is allowed to plant,
  *  what it must NOT reveal, what executional moves are forbidden, and
  *  the overall tone the rewrite should land. R6's system prompt MUST
@@ -564,6 +651,10 @@ export interface RedevelopmentPass {
   /** R8 Character Voice & Scene Life Pass — voice/life polish on the
    *  promoted R7 draft. Same two-pass shape as R7 (plan → apply). */
   r8VoicePolish?: RedevR8VoicePolishPlan | null;
+  /** R9 Final Hook & Emotional Anchor Pass — final automated rewrite
+   *  on the promoted R8 Draft 4. Produces Draft 5, the locked Episode 1
+   *  writing draft. Same two-pass shape as R7/R8. */
+  r9FinalPolish?: RedevR9FinalPolishPlan | null;
 }
 
 // =============================================================================

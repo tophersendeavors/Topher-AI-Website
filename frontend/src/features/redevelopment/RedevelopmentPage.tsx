@@ -29,10 +29,12 @@ import type {
   RedevR7PolishItem,
   RedevR8VoicePolishCategory,
   RedevR8VoicePolishItem,
+  RedevR9FinalPolishCategory,
+  RedevR9FinalPolishItem,
   RedevSeasonArcEpisode,
   RedevStageKey,
 } from "@/lib/api";
-import { R6_REWRITE_TARGET_LABEL, R7_POLISH_CATEGORY_LABEL, R8_VOICE_CATEGORY_LABEL, normalizeR6Guardrails } from "@/lib/api";
+import { R6_REWRITE_TARGET_LABEL, R7_POLISH_CATEGORY_LABEL, R8_VOICE_CATEGORY_LABEL, R9_FINAL_CATEGORY_LABEL, normalizeR6Guardrails } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -49,6 +51,7 @@ const STAGE_ORDER: RedevStageKey[] = [
   "r6_pilot_rewrite",
   "r7_pilot_polish",
   "r8_voice_polish",
+  "r9_final_polish",
 ];
 
 const STAGE_LABEL: Record<RedevStageKey, string> = {
@@ -60,6 +63,7 @@ const STAGE_LABEL: Record<RedevStageKey, string> = {
   r6_pilot_rewrite: "R6 · Guardrails Setup",
   r7_pilot_polish: "R7 · Pilot Polish Pass",
   r8_voice_polish: "R8 · Voice & Scene Life Pass",
+  r9_final_polish: "R9 · Final Hook & Emotional Anchor",
 };
 
 const STAGE_SUB: Record<RedevStageKey, string> = {
@@ -71,6 +75,7 @@ const STAGE_SUB: Record<RedevStageKey, string> = {
   r6_pilot_rewrite: "Lock per-character protection contracts the rewrite must honor. Rewrite generation coming next.",
   r7_pilot_polish: "Polish the promoted R6 pilot — continuity, dialogue, hook strength. Architecture stays locked.",
   r8_voice_polish: "Voice & scene-life pass on the promoted R7 pilot — make it less engineered, more alive. No architecture changes.",
+  r9_final_polish: "Final automated rewrite pass on Draft 4 — Margot anchor, archive plant, sound, pacing, closing hook. Produces the locked Draft 5.",
 };
 
 const SELVAJE_DEFAULTS = {
@@ -480,6 +485,9 @@ function StageDetail({
   }
   if (stage === "r8_voice_polish") {
     return <R8VoicePolishStage projectId={projectId} passId={passId} report={report} onChange={onChange} />;
+  }
+  if (stage === "r9_final_polish") {
+    return <R9FinalPolishStage projectId={projectId} passId={passId} report={report} onChange={onChange} />;
   }
   return <PhasePlaceholder stage={stage} />;
 }
@@ -6479,3 +6487,669 @@ function R8Pass2Section({
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// R9 — Final Hook & Emotional Anchor Pass
+// ---------------------------------------------------------------------------
+
+const R9_FINAL_CATEGORY_TONE: Record<
+  RedevR9FinalPolishCategory,
+  { bg: string; text: string; border: string }
+> = {
+  margot_emotional_anchor:    { bg: "bg-rose-900/20",    text: "text-rose-200",    border: "border-rose-700/40"   },
+  archive_visual_mystery:     { bg: "bg-violet-900/20",  text: "text-violet-200",  border: "border-violet-700/40" },
+  sound_design:               { bg: "bg-sky-900/20",     text: "text-sky-200",     border: "border-sky-700/40"    },
+  pacing_economy:             { bg: "bg-amber-900/20",   text: "text-amber-200",   border: "border-amber-700/40"  },
+  final_hook_polish:          { bg: "bg-emerald-900/20", text: "text-emerald-200", border: "border-emerald-700/40" },
+};
+
+function R9FinalPolishStage({
+  projectId,
+  passId,
+  report,
+  onChange,
+}: {
+  projectId: string;
+  passId: string;
+  report: RedevPassReport;
+  onChange: () => void;
+}) {
+  const r8 = (report.pass as { r8VoicePolish?: import("@/lib/api").RedevR8VoicePolishPlan | null }).r8VoicePolish ?? null;
+  const r8Promoted = !!r8?.approvedAt && !!r8?.promotedScriptId;
+
+  const stored = (report.pass as { r9FinalPolish?: import("@/lib/api").RedevR9FinalPolishPlan | null }).r9FinalPolish ?? null;
+  const [approachSummary, setApproachSummary] = useState<string>(
+    stored?.approachSummary ?? ""
+  );
+  const [items, setItems] = useState<RedevR9FinalPolishItem[]>(stored?.items ?? []);
+  const [priorScriptId, setPriorScriptId] = useState<string>(
+    stored?.priorScriptId ?? r8?.promotedScriptId ?? ""
+  );
+  const [lastAudit, setLastAudit] = useState<RedevAuditReport | null>(null);
+  const [auditMeta, setAuditMeta] = useState<{ auditedAt: string; source: "generation" | "current_stored" } | null>(null);
+  const planApproved = !!stored?.planApprovedAt;
+  const hasItems = items.length > 0;
+
+  const generate = useMutation({
+    mutationFn: () => api.generateRedevR9FinalPlan(projectId, passId, {}),
+    onSuccess: async (data) => {
+      setApproachSummary(data.plan.approachSummary);
+      setItems(data.plan.items);
+      setPriorScriptId(data.plan.priorScriptId);
+      setLastAudit(data.audit);
+      setAuditMeta({ auditedAt: data.auditedAt, source: "generation" });
+      await api.saveRedevR9FinalPlan(projectId, passId, {
+        approachSummary: data.plan.approachSummary,
+        items: data.plan.items,
+        priorScriptId: data.plan.priorScriptId,
+      });
+      onChange();
+    },
+  });
+
+  const auditCurrent = useMutation({
+    mutationFn: () => api.auditRedevR9FinalPlan(projectId, passId),
+    onSuccess: (data) => {
+      setLastAudit(data.audit);
+      setAuditMeta({ auditedAt: data.auditedAt, source: "current_stored" });
+    },
+  });
+
+  const approvePlan = useMutation({
+    mutationFn: () => api.approveRedevR9FinalPlan(projectId, passId),
+    onSuccess: onChange,
+  });
+
+  if (!r8Promoted) {
+    return (
+      <Panel eyebrow={STAGE_LABEL["r9_final_polish"]} title="R9 — Locked">
+        <div className="os-banner os-banner-locked">
+          <div className="os-banner-icon">
+            <Lock className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="os-banner-title">Awaiting R8 promotion</div>
+            <div className="os-banner-sub">
+              R9 unlocks after R8 is approved AND promoted as Draft 4.
+              Promote the R8 voice polish first; then return here for the
+              final hook &amp; emotional anchor pass.
+            </div>
+          </div>
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <Panel
+        eyebrow={STAGE_LABEL["r9_final_polish"]}
+        title={planApproved ? "Final plan — Approved" : "Final Hook & Emotional Anchor"}
+        actions={
+          <div className="flex items-center gap-3">
+            {hasItems && (
+              <CopyButton
+                variant="outline"
+                label="Copy plan"
+                successLabel="Copied plan"
+                title="Copy the final plan as Markdown."
+                text={formatR9FinalPlanAsMarkdown(items, approachSummary, stored?.planApprovedAt ?? null)}
+              />
+            )}
+            <span className="text-[11px] text-bone-500">
+              {hasItems
+                ? `${items.length} final item${items.length === 1 ? "" : "s"}`
+                : "no plan yet"}
+            </span>
+          </div>
+        }
+      >
+        <p className="text-sm text-bone-300 leading-relaxed">
+          R9 is the final automated rewrite pass. It does <strong>not</strong>{" "}
+          redevelop the series, change episode structure, or rewrite the
+          pilot from scratch. It applies five tightly-scoped lenses to
+          Draft 4: one private Margot emotional crack tied to the
+          unlabeled file (behavior only — no Cass reveal, no grief
+          speech); one stronger visual plant in Solano's archive room
+          (no Elena reveal, no "younger version" clue); strengthened
+          sound motifs (recorder, rain, jungle, lock, chime); 1–2 pages
+          of pacing tightening; and one restrained extra beat on the
+          closing transparent-case / Paul chime hook. Architecture stays
+          locked. Pass 1 is plan-only; Pass 2 produces Draft 5 — the
+          locked Episode 1 writing draft.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => generate.mutate()}
+            disabled={generate.isPending || planApproved}
+            variant={hasItems ? "outline" : "primary"}
+            title="Run the R9 plan agent on Draft 4. Plan-level only — no screenplay text."
+          >
+            {generate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {hasItems ? "Regenerate final plan" : "Generate final plan"}
+          </Button>
+          {hasItems && (
+            <Button
+              variant="outline"
+              onClick={() => auditCurrent.mutate()}
+              disabled={auditCurrent.isPending}
+            >
+              {auditCurrent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+              {auditCurrent.isPending ? "Auditing…" : "Audit plan"}
+            </Button>
+          )}
+          {hasItems && !planApproved && (
+            <Button
+              onClick={() => approvePlan.mutate()}
+              disabled={approvePlan.isPending}
+              title="Lock the final plan. Pass 2 (apply) will read it."
+            >
+              {approvePlan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Approve final plan
+            </Button>
+          )}
+          {(generate.error || auditCurrent.error || approvePlan.error) && (
+            <div className="w-full text-xs text-red-300">
+              {((generate.error || auditCurrent.error || approvePlan.error) as Error).message}
+            </div>
+          )}
+        </div>
+
+        {planApproved && (
+          <div className="mt-3 rounded border border-emerald-700/30 bg-emerald-900/10 px-3 py-2 text-[11px] text-emerald-100">
+            <strong>Final plan approved.</strong> Apply the polish below to
+            generate Draft 5. Architecture stays locked.
+          </div>
+        )}
+
+        {approachSummary && (
+          <div className="mt-3 rounded border border-emerald-700/30 bg-emerald-900/10 px-3 py-2 text-[12px] text-bone-200">
+            <div className="text-[11px] uppercase tracking-wide text-emerald-300 mb-1">
+              Approach summary
+            </div>
+            {approachSummary}
+          </div>
+        )}
+
+        <div className="mt-2 text-[11px] text-bone-500">
+          Anchored to Draft 4 <code>{priorScriptId.slice(0, 8) || "?"}…</code>
+        </div>
+      </Panel>
+
+      {lastAudit && (
+        <div className="space-y-1">
+          {auditMeta && (
+            <div className="rounded border border-bone-700/30 bg-white/[0.02] px-3 py-1.5 text-[11px] text-bone-300 flex flex-wrap items-center gap-2">
+              <strong className="text-bone-100">Audit source:</strong>
+              <span>
+                {auditMeta.source === "current_stored"
+                  ? "current stored final plan"
+                  : "freshly-generated final plan"}
+              </span>
+              <span className="text-bone-500">·</span>
+              <span>
+                run at <code>{new Date(auditMeta.auditedAt).toLocaleTimeString()}</code>
+              </span>
+              <button
+                type="button"
+                onClick={() => auditCurrent.mutate()}
+                disabled={auditCurrent.isPending}
+                className="ml-auto text-[11px] underline text-bone-300 hover:text-bone-100 disabled:opacity-50"
+              >
+                {auditCurrent.isPending ? "Re-auditing…" : "Force re-audit"}
+              </button>
+            </div>
+          )}
+          <QualityCheckPanel audit={lastAudit} collapsedByDefault={false} />
+        </div>
+      )}
+
+      {!hasItems ? (
+        <div className="rounded-lg border border-dashed border-white/15 bg-white/[0.02] p-6 text-center text-sm text-bone-400">
+          No final plan yet. Click <strong className="text-bone-100">Generate final plan</strong> to diagnose the five R9 lenses on Draft 4.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((it, i) => (
+            <R9FinalItemCard key={i} item={it} />
+          ))}
+        </div>
+      )}
+
+      <R9Pass2Section
+        projectId={projectId}
+        passId={passId}
+        report={report}
+        onChange={onChange}
+        planApproved={planApproved}
+      />
+    </div>
+  );
+}
+
+function R9FinalItemCard({ item }: { item: RedevR9FinalPolishItem }) {
+  const tone = R9_FINAL_CATEGORY_TONE[item.category];
+  return (
+    <div className={`rounded-lg border ${tone.border} bg-white/[0.02] p-3`}>
+      <div className="flex items-start gap-3">
+        <span
+          className={`shrink-0 inline-flex items-center justify-center rounded ${tone.bg} ${tone.text} ${tone.border} border px-2 py-0.5 text-[11px] font-medium tracking-wide`}
+        >
+          {R9_FINAL_CATEGORY_LABEL[item.category]}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm text-bone-100 font-medium truncate">
+            {item.existingSceneOrd != null && (
+              <span className="text-bone-500 mr-2">#{item.existingSceneOrd}</span>
+            )}
+            {item.existingSlugline ?? (item.existingSceneOrd == null ? "(pilot-level)" : "(no slug)")}
+            {item.character && (
+              <span className="ml-2 text-[11px] text-emerald-300">· {item.character}</span>
+            )}
+          </div>
+          <div className="mt-1 text-[12px] text-bone-300 leading-snug">
+            <strong className="text-amber-200">Diagnosis: </strong>
+            {item.diagnosis}
+          </div>
+          <div className="mt-1 text-[12px] text-bone-200 leading-snug">
+            <strong className="text-emerald-300">Fix direction: </strong>
+            {item.fixDirection}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {item.severity && (
+              <span
+                className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${
+                  item.severity === "high"
+                    ? "border-red-700/40 bg-red-900/20 text-red-200"
+                    : item.severity === "medium"
+                      ? "border-amber-700/40 bg-amber-900/20 text-amber-200"
+                      : "border-bone-700/40 bg-bone-900/30 text-bone-300"
+                }`}
+              >
+                {item.severity}
+              </span>
+            )}
+            {item.scope && (
+              <span className="inline-flex rounded bg-sky-900/20 text-sky-200 border border-sky-700/40 px-1.5 py-0.5 text-[10px]">
+                {item.scope}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatR9FinalPlanAsMarkdown(
+  items: RedevR9FinalPolishItem[],
+  approachSummary: string,
+  approvedAt?: string | null
+): string {
+  const lines: string[] = [];
+  lines.push("# R9 — Final Hook & Emotional Anchor Plan");
+  if (approvedAt) {
+    lines.push(`*Approved ${new Date(approvedAt).toLocaleDateString()}*`);
+  }
+  lines.push("");
+  if (approachSummary) {
+    lines.push("## Approach summary");
+    lines.push(approachSummary);
+    lines.push("");
+  }
+  lines.push("## Final polish items");
+  for (const it of items) {
+    const head = it.existingSceneOrd != null
+      ? `**[#${it.existingSceneOrd}]** ${it.existingSlugline ?? ""}`
+      : `**[pilot-level]**`;
+    const cat = R9_FINAL_CATEGORY_LABEL[it.category];
+    const charBit = it.character ? ` — _${it.character}_` : "";
+    lines.push(`### ${head} — ${cat}${charBit}`);
+    lines.push(`**Diagnosis.** ${it.diagnosis}`);
+    lines.push(`**Fix direction.** ${it.fixDirection}`);
+    if (it.severity) lines.push(`_Severity: ${it.severity}_`);
+    if (it.scope) lines.push(`_Scope: ${it.scope}_`);
+    lines.push("");
+  }
+  return lines.join("\n").trim() + "\n";
+}
+
+function R9Pass2Section({
+  projectId,
+  passId,
+  report,
+  onChange,
+  planApproved,
+}: {
+  projectId: string;
+  passId: string;
+  report: RedevPassReport;
+  onChange: () => void;
+  planApproved: boolean;
+}) {
+  const polish = (report.pass as { r9FinalPolish?: {
+    polishedDraftText?: string | null;
+    polishedDraftAt?: string | null;
+    approvedAt?: string | null;
+    promotedScriptId?: string | null;
+    promotedDraftNumber?: number | null;
+  } }).r9FinalPolish ?? {};
+
+  const [lastAudit, setLastAudit] = useState<RedevAuditReport | null>(null);
+  const [auditMeta, setAuditMeta] = useState<{
+    auditedAt: string;
+    source: "apply" | "current_stored";
+    fountainLen?: number;
+    bytesDelta?: number;
+  } | null>(null);
+  const [appliedRows, setAppliedRows] = useState<Array<{
+    category: string;
+    location: string;
+    before: string;
+    after: string;
+    replacementKind: "action" | "dialogue" | "continuity_correction" | "removal" | "sound" | "insertion";
+  }> | null>(null);
+  const [unappliedRows, setUnappliedRows] = useState<
+    Array<{ itemIndex: number; reason: string }> | null
+  >(null);
+  const [acceptWarnings, setAcceptWarnings] = useState(false);
+
+  const auditWarningCount = (lastAudit?.checks ?? []).filter(
+    (c) => c.status === "warning"
+  ).length;
+  const auditIsClean = lastAudit !== null && auditWarningCount === 0;
+  const approveGated = !auditIsClean && !acceptWarnings;
+
+  const applyPolish = useMutation({
+    mutationFn: () => api.applyRedevR9Final(projectId, passId, {}),
+    onSuccess: (data) => {
+      setLastAudit(data.audit);
+      setAuditMeta({
+        auditedAt: data.auditedAt,
+        source: "apply",
+        fountainLen: data.newLen,
+        bytesDelta: data.bytesDelta,
+      });
+      setAppliedRows(data.applied ?? []);
+      setUnappliedRows(data.unapplied ?? []);
+      onChange();
+    },
+  });
+
+  const auditCurrent = useMutation({
+    mutationFn: () => api.auditRedevR9PolishedDraft(projectId, passId),
+    onSuccess: (data) => {
+      setLastAudit(data.audit);
+      setAuditMeta({ auditedAt: data.auditedAt, source: "current_stored" });
+    },
+  });
+
+  const approveDraft = useMutation({
+    mutationFn: () => api.approveRedevR9PolishedDraft(projectId, passId),
+    onSuccess: () => onChange(),
+  });
+
+  if (!planApproved) {
+    return (
+      <div className="os-banner os-banner-locked">
+        <div className="os-banner-icon">
+          <Lock className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <div className="os-banner-title">R9 Pass 2 locked</div>
+          <div className="os-banner-sub">
+            Approve the final plan above to unlock apply. Pass 2 produces
+            Draft 5 — the locked Episode 1 writing draft.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const draft = polish.polishedDraftText ?? "";
+  const draftApproved = !!polish.approvedAt;
+  const promotedDraft = polish.promotedDraftNumber;
+
+  return (
+    <div className="space-y-3">
+      <Panel
+        eyebrow="R9 · Pass 2"
+        title={
+          draftApproved
+            ? `Locked writing draft — Promoted as Draft ${promotedDraft ?? "?"}`
+            : "Final-polished pilot — Apply final plan"
+        }
+        actions={
+          <div className="flex items-center gap-3">
+            {draft && (
+              <CopyButton
+                variant="outline"
+                label="Copy draft"
+                successLabel="Copied draft"
+                title="Copy Draft 5 as Fountain text."
+                text={draft}
+              />
+            )}
+          </div>
+        }
+      >
+        <p className="text-sm text-bone-300 leading-relaxed">
+          Pass 2 reads your approved final plan + Draft 4 + locked
+          architecture. It applies ONLY the approved items. No new
+          backstory, no exposition, no meta-narration, no Cass reveal,
+          no "younger version" archive clue, no shown phone message.
+          Approve to promote Draft 5 as the locked Episode 1 writing
+          draft; Draft 4 stays preserved.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => applyPolish.mutate()}
+            disabled={applyPolish.isPending || draftApproved}
+            variant={draft ? "outline" : "primary"}
+            title="Apply the approved final items — generates Draft 5 and runs the R9 apply audit."
+          >
+            {applyPolish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {draft ? "Regenerate final polish" : "Apply final polish (Pass 2)"}
+          </Button>
+          {draft && (
+            <Button
+              variant="outline"
+              onClick={() => auditCurrent.mutate()}
+              disabled={auditCurrent.isPending}
+            >
+              {auditCurrent.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+              {auditCurrent.isPending ? "Auditing…" : "Audit polished draft"}
+            </Button>
+          )}
+          {draft && !draftApproved && (
+            <Button
+              onClick={() => approveDraft.mutate()}
+              disabled={approveDraft.isPending || approveGated}
+              title={
+                approveGated
+                  ? lastAudit
+                    ? `${auditWarningCount} audit warning(s) outstanding. Regenerate, or tick "Accept remaining warnings" to override.`
+                    : "Run 'Audit polished draft' first."
+                  : "Promote Draft 5 as the locked Episode 1 writing draft. Draft 4 stays preserved."
+              }
+            >
+              {approveDraft.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Approve & lock as Draft 5
+            </Button>
+          )}
+          {draft && !draftApproved && lastAudit && auditWarningCount > 0 && (
+            <label
+              className="inline-flex items-center gap-2 text-[11px] text-amber-200 cursor-pointer"
+              title="Override the audit gate. Use only when warnings have been reviewed and accepted by the showrunner."
+            >
+              <input
+                type="checkbox"
+                checked={acceptWarnings}
+                onChange={(e) => setAcceptWarnings(e.target.checked)}
+              />
+              Accept remaining {auditWarningCount} warning{auditWarningCount === 1 ? "" : "s"}
+            </label>
+          )}
+          {(applyPolish.error || auditCurrent.error || approveDraft.error) && (
+            <div className="w-full text-xs text-red-300">
+              {((applyPolish.error || auditCurrent.error || approveDraft.error) as Error).message}
+            </div>
+          )}
+        </div>
+
+        {draftApproved && (
+          <div className="mt-3 rounded border border-emerald-700/30 bg-emerald-900/10 px-3 py-2 text-[11px] text-emerald-100">
+            <strong>Draft 5 locked.</strong> Saved as the locked Episode 1
+            writing draft. Draft 4 is preserved (not deleted — just marked
+            non-current). Open Drafts to compare.
+          </div>
+        )}
+
+        {unappliedRows && unappliedRows.length > 0 && (
+          <div className="mt-3 rounded border border-amber-700/30 bg-amber-900/10 px-3 py-2 text-[11px] text-amber-100">
+            <strong>Heads up:</strong> {unappliedRows.length} final item
+            {unappliedRows.length === 1 ? "" : "s"} could not be applied
+            cleanly. Listed below — regenerate or address manually.
+          </div>
+        )}
+      </Panel>
+
+      {lastAudit && (
+        <div className="space-y-1">
+          {auditMeta && (
+            <div className="rounded border border-bone-700/30 bg-white/[0.02] px-3 py-1.5 text-[11px] text-bone-300 flex flex-wrap items-center gap-2">
+              <strong className="text-bone-100">Audit source:</strong>
+              <span>
+                {auditMeta.source === "current_stored"
+                  ? "current stored Draft 5"
+                  : "freshly-applied Draft 5"}
+              </span>
+              <span className="text-bone-500">·</span>
+              <span>
+                run at <code>{new Date(auditMeta.auditedAt).toLocaleTimeString()}</code>
+              </span>
+              {typeof auditMeta.fountainLen === "number" && (
+                <>
+                  <span className="text-bone-500">·</span>
+                  <span>{auditMeta.fountainLen.toLocaleString()} chars</span>
+                </>
+              )}
+              {typeof auditMeta.bytesDelta === "number" &&
+                auditMeta.bytesDelta !== 0 && (
+                  <>
+                    <span className="text-bone-500">·</span>
+                    <span
+                      className={
+                        auditMeta.bytesDelta > 0
+                          ? "text-emerald-300"
+                          : "text-amber-300"
+                      }
+                    >
+                      Δ {auditMeta.bytesDelta > 0 ? "+" : ""}
+                      {auditMeta.bytesDelta.toLocaleString()}
+                    </span>
+                  </>
+                )}
+              <button
+                type="button"
+                onClick={() => auditCurrent.mutate()}
+                disabled={auditCurrent.isPending}
+                className="ml-auto text-[11px] underline text-bone-300 hover:text-bone-100 disabled:opacity-50"
+                title="Reload the current stored Draft 5 and re-run the R9 audit."
+              >
+                {auditCurrent.isPending ? "Re-auditing…" : "Force re-audit"}
+              </button>
+            </div>
+          )}
+          <QualityCheckPanel audit={lastAudit} collapsedByDefault={false} />
+        </div>
+      )}
+
+      {appliedRows && appliedRows.length > 0 && (
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+          <div className="text-[11px] uppercase tracking-wide text-bone-400 mb-2">
+            Applied final items ({appliedRows.length})
+          </div>
+          <div className="space-y-2">
+            {appliedRows.map((row, i) => (
+              <div
+                key={i}
+                className="rounded border border-bone-700/40 bg-bone-900/30 p-2"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] ${
+                      row.replacementKind === "action"
+                        ? "border-emerald-700/40 bg-emerald-900/20 text-emerald-200"
+                        : row.replacementKind === "dialogue"
+                          ? "border-sky-700/40 bg-sky-900/20 text-sky-200"
+                          : row.replacementKind === "continuity_correction"
+                            ? "border-violet-700/40 bg-violet-900/20 text-violet-200"
+                            : row.replacementKind === "sound"
+                              ? "border-indigo-700/40 bg-indigo-900/20 text-indigo-200"
+                              : row.replacementKind === "insertion"
+                                ? "border-amber-700/40 bg-amber-900/20 text-amber-200"
+                                : "border-red-700/40 bg-red-900/20 text-red-200"
+                    }`}
+                  >
+                    {row.replacementKind === "continuity_correction"
+                      ? "continuity fix"
+                      : row.replacementKind}
+                  </span>
+                  <span className="text-[11px] text-bone-300">
+                    {row.category}
+                  </span>
+                  <span className="text-[11px] text-bone-500">·</span>
+                  <span className="text-[11px] text-bone-400 truncate">
+                    {row.location}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <div className="text-bone-500 mb-0.5">Before</div>
+                    <div className="text-bone-300 whitespace-pre-wrap leading-snug">
+                      {row.before || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-bone-500 mb-0.5">After</div>
+                    <div className="text-emerald-200 whitespace-pre-wrap leading-snug">
+                      {row.after || "(removed)"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {unappliedRows && unappliedRows.length > 0 && (
+        <div className="rounded-lg border border-amber-700/30 bg-amber-900/10 p-3">
+          <div className="text-[11px] uppercase tracking-wide text-amber-300 mb-2">
+            Unapplied items ({unappliedRows.length})
+          </div>
+          <ul className="space-y-1 text-[11px] text-amber-100">
+            {unappliedRows.map((row, i) => (
+              <li key={i}>
+                <strong>Item #{row.itemIndex + 1}:</strong> {row.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {draft && (
+        <DraftPreviewPanel
+          title="Draft 5 — locked Episode 1 writing draft"
+          text={draft}
+          state={draftApproved ? "promoted" : "proposed"}
+          draftNumber={promotedDraft ?? null}
+          footerHint="Approving locks Draft 5 as the Episode 1 writing draft; Draft 4 stays preserved."
+        />
+      )}
+    </div>
+  );
+}

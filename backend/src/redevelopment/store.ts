@@ -22,6 +22,8 @@ import {
   type RedevR7PolishPlan,
   type RedevR8VoicePolishItem,
   type RedevR8VoicePolishPlan,
+  type RedevR9FinalPolishItem,
+  type RedevR9FinalPolishPlan,
 } from "./types.js";
 import { normalizeR6Guardrails } from "./types.js";
 
@@ -1031,6 +1033,190 @@ export async function promoteR8Pass2Draft(args: {
   };
 }
 
+// ============================================================================
+// R9 Final Hook & Emotional Anchor Pass
+// ============================================================================
+
+export async function setR9FinalPolishPlan(args: {
+  projectId: string;
+  passId: string;
+  items: RedevR9FinalPolishItem[];
+  approachSummary: string;
+  priorScriptId: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const prior = passes[ix].r9FinalPolish;
+  const sameStructure =
+    !!prior &&
+    canonicalize({ items: prior.items, approachSummary: prior.approachSummary }) ===
+      canonicalize({ items: args.items, approachSummary: args.approachSummary });
+  const next: RedevR9FinalPolishPlan = {
+    priorScriptId: args.priorScriptId,
+    approachSummary: args.approachSummary,
+    items: args.items,
+    planApprovedAt: sameStructure ? prior?.planApprovedAt ?? null : null,
+    polishedDraftText: prior?.polishedDraftText ?? null,
+    polishedDraftAt: prior?.polishedDraftAt ?? null,
+    changeNotes: prior?.changeNotes ?? [],
+    promotedScriptId: prior?.promotedScriptId ?? null,
+    promotedDraftNumber: prior?.promotedDraftNumber ?? null,
+    approvedAt: prior?.approvedAt ?? null,
+  };
+  passes[ix].r9FinalPolish = next;
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+export async function approveR9FinalPolishPlan(args: {
+  projectId: string;
+  passId: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const plan = passes[ix].r9FinalPolish;
+  if (!plan || !plan.items || plan.items.length === 0) {
+    throw new Error("no R9 final polish plan to approve — generate one first");
+  }
+  passes[ix].r9FinalPolish = {
+    ...plan,
+    planApprovedAt: new Date().toISOString(),
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+// ----- R9 Pass 2 (apply) ----------------------------------------------
+
+export async function setR9Pass2Draft(args: {
+  projectId: string;
+  passId: string;
+  polishedFountain: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const prior = passes[ix].r9FinalPolish;
+  if (!prior) {
+    throw new Error("cannot set R9 Pass 2 draft — no R9 plan in pass");
+  }
+  if (!prior.planApprovedAt) {
+    throw new Error("R9 plan must be APPROVED before applying Pass 2");
+  }
+  passes[ix].r9FinalPolish = {
+    ...prior,
+    polishedDraftText: args.polishedFountain,
+    polishedDraftAt: new Date().toISOString(),
+    approvedAt: null,
+    promotedScriptId: prior.promotedScriptId ?? null,
+    promotedDraftNumber: prior.promotedDraftNumber ?? null,
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+/** Promote the R9-polished draft to a NEW `scripts` row (Draft 5).
+ *  Mirrors `promoteR8Pass2Draft`. */
+export async function promoteR9Pass2Draft(args: {
+  projectId: string;
+  passId: string;
+  approvedBy: string;
+}): Promise<{
+  pass: RedevelopmentPass;
+  scriptId: string;
+  draftNumber: number;
+}> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const plan = passes[ix].r9FinalPolish;
+  if (!plan || !plan.polishedDraftText) {
+    throw new Error(
+      "no R9 polished draft to approve — apply the final polish first"
+    );
+  }
+  if (!plan.planApprovedAt) {
+    throw new Error(
+      "R9 plan must be approved before promoting the polished draft"
+    );
+  }
+
+  const { data: eps, error: epErr } = await supabase
+    .from("episodes")
+    .select("id, number, title, project_id")
+    .eq("project_id", args.projectId)
+    .order("number", { ascending: true })
+    .limit(1);
+  if (epErr) throw new Error(`load episode failed: ${epErr.message}`);
+  const ep = eps?.[0];
+  if (!ep) throw new Error("no EP01 episode found for this project");
+
+  await supabase
+    .from("scripts")
+    .update({ current: false })
+    .eq("project_id", args.projectId)
+    .eq("episode_id", ep.id)
+    .eq("current", true);
+
+  const { data: priorScripts } = await supabase
+    .from("scripts")
+    .select("draft_number")
+    .eq("project_id", args.projectId)
+    .eq("episode_id", ep.id)
+    .order("draft_number", { ascending: false })
+    .limit(1);
+  const nextDraft =
+    priorScripts && priorScripts.length > 0
+      ? ((priorScripts[0].draft_number as number) ?? 0) + 1
+      : 1;
+
+  const title = `Episode ${ep.number} — ${ep.title ?? "Untitled"} (R9 final polish)`;
+
+  const { data: newScript, error: insertErr } = await supabase
+    .from("scripts")
+    .insert({
+      project_id: args.projectId,
+      episode_id: ep.id,
+      title,
+      draft_number: nextDraft,
+      current: true,
+      fountain: plan.polishedDraftText,
+      metadata: {
+        source: "r9_pass2_final_polish",
+        priorScriptId: plan.priorScriptId,
+        redevelopmentPassId: args.passId,
+        promotedAt: new Date().toISOString(),
+        promotedBy: args.approvedBy,
+        finalItemCount: plan.items.length,
+        lockedWritingDraft: true,
+      },
+    })
+    .select("*")
+    .single();
+  if (insertErr) throw new Error(`promote failed: ${insertErr.message}`);
+  if (!newScript) throw new Error("promote failed: no script returned");
+
+  passes[ix].r9FinalPolish = {
+    ...plan,
+    approvedAt: new Date().toISOString(),
+    promotedScriptId: newScript.id as string,
+    promotedDraftNumber: nextDraft,
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+
+  return {
+    pass: passes[ix],
+    scriptId: newScript.id as string,
+    draftNumber: nextDraft,
+  };
+}
+
 /** Key-order-independent canonical form (matches the routes helper).
  *  Used here so set-seasonArc can detect "structurally same payload"
  *  even when Postgres jsonb and zod produce different key orders. */
@@ -1085,6 +1271,12 @@ function isStageApproved(pass: RedevelopmentPass, stage: RedevStageKey): boolean
         !!pass.r8VoicePolish?.approvedAt ||
         !!pass.r8VoicePolish?.planApprovedAt
       );
+    case "r9_final_polish":
+      // R9 mirrors R7/R8 gate semantics.
+      return (
+        !!pass.r9FinalPolish?.approvedAt ||
+        !!pass.r9FinalPolish?.planApprovedAt
+      );
   }
 }
 
@@ -1106,6 +1298,8 @@ function isStageStarted(pass: RedevelopmentPass, stage: RedevStageKey): boolean 
       return !!pass.r7Polish;
     case "r8_voice_polish":
       return !!pass.r8VoicePolish;
+    case "r9_final_polish":
+      return !!pass.r9FinalPolish;
   }
 }
 

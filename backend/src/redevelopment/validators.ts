@@ -33,6 +33,8 @@ import type {
   RedevR7PolishItem,
   RedevR8VoicePolishCategory,
   RedevR8VoicePolishItem,
+  RedevR9FinalPolishCategory,
+  RedevR9FinalPolishItem,
   RedevSeasonArcEpisode,
 } from "./types.js";
 import { R6_REWRITE_TARGET_LABEL } from "./types.js";
@@ -2788,5 +2790,507 @@ export function auditAndRepairR8Pass2Draft(args: {
   });
 
   void args.planItems;
+  return { checks, repairs };
+}
+
+// ============================================================================
+// R9 — Final Hook & Emotional Anchor Plan audit (warning-only)
+// ============================================================================
+//
+// Plan-level checks for the R9 final pass. Warns when the plan drifts
+// outside the five locked categories, when it surfaces protected reveals,
+// when it adds exposition, or when its filmable directives slip into
+// meta-narration.
+
+const R9_VALID_CATEGORIES: RedevR9FinalPolishCategory[] = [
+  "margot_emotional_anchor",
+  "archive_visual_mystery",
+  "sound_design",
+  "pacing_economy",
+  "final_hook_polish",
+];
+
+const R9_CATEGORY_LABEL: Record<RedevR9FinalPolishCategory, string> = {
+  margot_emotional_anchor: "Margot emotional anchor",
+  archive_visual_mystery: "Archive-room visual mystery",
+  sound_design: "Sound design motifs",
+  pacing_economy: "Pacing economy",
+  final_hook_polish: "Final hook polish",
+};
+
+// Meta-narration patterns — same shape as R7/R8 + the extra phrases
+// the showrunner called out for R9.
+const R9_META_PHRASES: RegExp[] = [
+  /\bthe\s+audience\s+(feels?|knows?|sees?|understands?|reads?)/i,
+  /\bthe\s+room\s+(knows?|understands?)/i,
+  /\bthe\s+body\s+(knows?|understands?)/i,
+  /\bthe\s+wound\s+(is|sits|lives|remains|stays)/i,
+  /\bthe\s+avoidance\s+strategies?\b/i,
+  /\bthe\s+system\s+(is|was|remains|stays)\s+\w+ing\b/i,
+  /\bwhat\s+this\s+means\s+is\b/i,
+  /\bwe\s+realize\b/i,
+  /\bwe\s+(feel|know|see|understand)\b/i,
+];
+
+// Cass reveal / grief speech patterns — R9-specific protection. The
+// Margot emotional anchor must NEVER name Cass, the loss, or surface
+// it in dialogue.
+const CASS_LEAK_PATTERNS: RegExp[] = [
+  /\bcass\b/i,
+  /\bmargot'?s?\s+(son|daughter|child|kid|baby)\b/i,
+  /\bthe\s+(son|daughter|child)\s+she\s+lost\b/i,
+  /\bgrief\s+speech\b/i,
+  /\bmonologue\s+about\s+(her\s+)?loss\b/i,
+];
+
+// "Younger version of someone" — the R9 archive-room rule's specific
+// forbidden clue type.
+const YOUNGER_VERSION_PATTERNS: RegExp[] = [
+  /\byounger\s+version\s+of\b/i,
+  /\blooks?\s+like\s+a\s+younger\b/i,
+  /\bresemblance\s+to\s+\w+\b/i,
+  /\b(could\s+be|might\s+be)\s+her\s+(sister|mother|daughter)\b/i,
+];
+
+export function auditAndRepairR9FinalPolishPlan(args: {
+  items: RedevR9FinalPolishItem[];
+  approachSummary: string;
+}): AuditReport {
+  const checks: AuditCheck[] = [];
+  const repairs: AuditRepair[] = [];
+  const { items, approachSummary } = args;
+
+  // 1. At least one item present.
+  checks.push({
+    id: "r9plan_items_present" as AuditCheckId,
+    label: "Final polish items present",
+    status: items.length > 0 ? "passed" : "warning",
+    message:
+      items.length > 0
+        ? `${items.length} final polish item${items.length === 1 ? "" : "s"} proposed.`
+        : "No items generated. Regenerate the plan or accept that Draft 4 needs no final polish.",
+  });
+
+  // 2. Category coverage — aim for all 5 covered.
+  const seenCategories = new Set<RedevR9FinalPolishCategory>();
+  for (const it of items) seenCategories.add(it.category);
+  const missingCategories = R9_VALID_CATEGORIES.filter(
+    (c) => !seenCategories.has(c)
+  );
+  const coverageOk = seenCategories.size >= 4;
+  checks.push({
+    id: "r9plan_categories_covered" as AuditCheckId,
+    label: "All five lenses covered",
+    status: coverageOk ? "passed" : "warning",
+    message: coverageOk
+      ? `${seenCategories.size} of 5 categories addressed.`
+      : `Only ${seenCategories.size} of 5 categories addressed — missing: ${missingCategories
+          .map((c) => R9_CATEGORY_LABEL[c])
+          .join(", ")}.`,
+  });
+
+  // 3. final_hook_polish has at least one item (explicit requirement).
+  const finalHookItems = items.filter((it) => it.category === "final_hook_polish");
+  checks.push({
+    id: "r9plan_final_hook_present" as AuditCheckId,
+    label: "Final hook polish item present",
+    status: finalHookItems.length > 0 ? "passed" : "warning",
+    message:
+      finalHookItems.length > 0
+        ? `${finalHookItems.length} final_hook_polish item(s) proposed.`
+        : "No items in the final_hook_polish category. R9 must strengthen the closing chime/case beat by at least one restrained addition.",
+  });
+
+  // 4. No screenplay text in diagnosis / fixDirection.
+  const SCREENPLAY = [
+    /\bFADE\s+(IN|OUT)\b/,
+    /\b(INT|EXT)\.\s+[A-Z]+/,
+    /\([A-Z][a-z]+\s+[a-z]+,?\s+(then|now|softly|quietly)\)/,
+    /\bCUT\s+TO:/,
+    /\bV\.O\.\b/,
+    /\bO\.S\.\b/,
+  ];
+  const flatText = items
+    .map((i) => `${i.diagnosis}\n${i.fixDirection}`)
+    .join("\n");
+  const screenplayHit = SCREENPLAY.some((re) => re.test(flatText));
+  checks.push({
+    id: "r9plan_no_screenplay_text" as AuditCheckId,
+    label: "Plan stayed at plan level",
+    status: screenplayHit ? "warning" : "passed",
+    message: screenplayHit
+      ? "Plan contains screenplay formatting. R9 Pass 1 is plan-level only."
+      : "Plan stayed at plan level — no screenplay text leaked in.",
+  });
+
+  // 5. Paul reveal protected.
+  const PAUL_LATE = [
+    /\b(reveal|expose|show|surface)\b[^.]{0,80}\bpaul'?s?\s+(texting|accident|guilt|timestamp|crash)\b/i,
+    /\bpaul\b[^.]{0,40}\b(killed|caused|responsible)\b/i,
+    /\btimestamp\s+evidence\b/i,
+    /\bshow\s+the\s+message\b/i,
+  ];
+  const paulLeak = unnegatedHit(flatText, PAUL_LATE);
+  checks.push({
+    id: "r9plan_paul_reveal_protected" as AuditCheckId,
+    label: "Paul reveal protected",
+    status: paulLeak ? "warning" : "passed",
+    message: paulLeak
+      ? "Plan proposes surfacing Paul's late-season reveal. R9 cannot reveal texting/accident/timestamp/guilt or show the message."
+      : "Plan keeps Paul's late-season reveal protected.",
+  });
+
+  // 6. Elena / sister protected — especially around archive_visual_mystery.
+  const ELENA = [
+    /\belena\b[^.]{0,60}\b(is|was)\b[^.]{0,40}\bsister\b/i,
+    /\bnadia'?s?\s+sister\b/i,
+    /\b(reveal|name|expose)\b[^.]{0,40}\bsister\b[^.]{0,30}\belena\b/i,
+    /\bphoto\s+of\s+elena\b/i,
+  ];
+  const elenaLeak = unnegatedHit(flatText, ELENA);
+  checks.push({
+    id: "r9plan_elena_protected" as AuditCheckId,
+    label: "Elena sister relationship protected",
+    status: elenaLeak ? "warning" : "passed",
+    message: elenaLeak
+      ? "Plan proposes revealing the Elena / sister relationship. R9 cannot surface this."
+      : "Plan keeps the Elena / sister relationship protected.",
+  });
+
+  // 7. No "younger version of someone" archive clue.
+  const archiveItems = items.filter((it) => it.category === "archive_visual_mystery");
+  const archiveFlat = archiveItems
+    .map((it) => `${it.diagnosis}\n${it.fixDirection}`)
+    .join("\n");
+  const youngerHit = unnegatedHit(archiveFlat, YOUNGER_VERSION_PATTERNS);
+  checks.push({
+    id: "r9plan_no_younger_version_clue" as AuditCheckId,
+    label: "Archive plant avoids 'younger version' clue",
+    status: youngerHit ? "warning" : "passed",
+    message: youngerHit
+      ? "An archive_visual_mystery item proposes a 'younger version of someone' clue. Use a wall of photos, labeled files, removed frame, or covered section — never resemblance."
+      : "Archive items use safe visual plants (photo wall / files / removed frame / covered section).",
+  });
+
+  // 8. No Cass reveal / grief speech in Margot anchor.
+  const margotItems = items.filter((it) => it.category === "margot_emotional_anchor");
+  const margotFlat = margotItems
+    .map((it) => `${it.diagnosis}\n${it.fixDirection}`)
+    .join("\n");
+  const cassHit = CASS_LEAK_PATTERNS.some((re) => re.test(margotFlat));
+  checks.push({
+    id: "r9plan_no_cass_reveal" as AuditCheckId,
+    label: "Margot anchor avoids Cass reveal / grief speech",
+    status: cassHit ? "warning" : "passed",
+    message: cassHit
+      ? "A margot_emotional_anchor item names Cass / the loss directly, or proposes a grief speech. The crack must be filmable behavior with no name, no relation, no dialogue about loss."
+      : "Margot anchor items stay behavioral — no Cass / grief speech leaks.",
+  });
+
+  // 9. Solano framing protected.
+  const SOLANO_FRAUD = [
+    /\bsolano\b[^.]{0,80}\b(fraud|liar|con\b|cult|manipulat|deceiv)/i,
+    /\bframe\s+solano\b/i,
+  ];
+  const solanoLeak = unnegatedHit(flatText, SOLANO_FRAUD);
+  checks.push({
+    id: "r9plan_solano_framing_protected" as AuditCheckId,
+    label: "Solano framing protected",
+    status: solanoLeak ? "warning" : "passed",
+    message: solanoLeak
+      ? "Plan drifts into framing Solano as fraud/cult/con/manipulator."
+      : "Plan keeps the Solano Rule intact.",
+  });
+
+  // 10. Surrender + final hook preservation.
+  const REMOVE_CORE = [
+    /\bremove\b[^.]{0,40}\bsurrender\b/i,
+    /\breplace\b[^.]{0,40}\bsurrender\b/i,
+    /\bcut\b[^.]{0,60}\b(transparent\s+case|chime|hook|paul\s+phone)\b/i,
+    /\bremove\b[^.]{0,60}\b(transparent\s+case|chime|hook)\b/i,
+    /\breplace\b[^.]{0,60}\b(transparent\s+case|chime|final\s+hook)\b/i,
+  ];
+  const removeCoreHit = REMOVE_CORE.some((re) => re.test(flatText));
+  checks.push({
+    id: "r9plan_engine_and_hook_preserved" as AuditCheckId,
+    label: "Surrender + transparent-case hook preserved",
+    status: removeCoreHit ? "warning" : "passed",
+    message: removeCoreHit
+      ? "Plan proposes removing/replacing Surrender or the closing hook. R9 may only ADD a restrained beat to the hook; it cannot remove or replace any existing closing beat."
+      : "Plan preserves Surrender as the engine and the transparent-case / chime hook.",
+  });
+
+  // 11. No architecture drift / no new exposition.
+  const ARCH_DRIFT = [
+    /\brewrite\s+(the\s+)?(series|architecture|engine|arc|season|bible|principle|module)\b/i,
+    /\b(redefine|redevelop|reframe)\s+(the\s+)?(series|engine|arc|module|principle)\b/i,
+    /\badd\s+(a\s+|some\s+)?(new\s+)?(backstory|exposition|history|background)\b/i,
+    /\bexplain\s+(why|how|what)\s+\w+\s+(feels?|wants?|needs?|did|happened)\b/i,
+    /\breveal\s+(more|new)\b/i,
+  ];
+  const archDrift = ARCH_DRIFT.some((re) => re.test(flatText));
+  checks.push({
+    id: "r9plan_no_architecture_drift" as AuditCheckId,
+    label: "No architecture drift / no new exposition",
+    status: archDrift ? "warning" : "passed",
+    message: archDrift
+      ? "Plan proposes architecture-level changes or new exposition. R9 is final polish only — no new information added."
+      : "Plan stays within R9 scope — no architecture drift, no new exposition.",
+  });
+
+  // 12. No meta-narration in any item's fixDirection.
+  const metaHit = R9_META_PHRASES.some((re) => re.test(flatText));
+  checks.push({
+    id: "r9plan_no_meta_narration" as AuditCheckId,
+    label: "Plan directions stay filmable (no meta-narration)",
+    status: metaHit ? "warning" : "passed",
+    message: metaHit
+      ? "An item's diagnosis or fixDirection contains meta-narration ('the audience…', 'we realize', 'what this means is', etc.). Use only filmable directives: physical action, eye line, silence, timing, object behavior, sound."
+      : "All plan directions stay filmable — no meta-narration proposed.",
+  });
+
+  void approachSummary;
+  return { checks, repairs };
+}
+
+// ============================================================================
+// R9 Pass 2 (apply) — full-document audit (warning-only)
+// ============================================================================
+//
+// Runs on the Fountain R9 Pass 2 produced (Draft 5). Verifies:
+//   1. Draft actually changed.
+//   2. All R6/R7/R8 protections still intact (Paul / Elena / Solano /
+//      Surrender / final hook / no flashbacks / no confession /
+//      no therapy / no meta-narration).
+//   3. R9-specific protections — no Cass name, no "younger version"
+//      clue in archive room, no shown message.
+//   4. Hook is at least as strong as before (chime + case + Paul
+//      anchors still present in tail).
+//   5. Pacing change stays within the 1-2 page tightening band.
+//   6. Screenplay structure sanity.
+
+const R9_APPLY_META_PHRASES: RegExp[] = [
+  /\bthe\s+audience\s+(feels?|knows?|sees?|understands?|reads?)/i,
+  /\bthe\s+room\s+(knows?|understands?)/i,
+  /\bthe\s+body\s+(knows?|understands?)/i,
+  /\bthe\s+wound\s+(is|sits|lives|remains|stays)/i,
+  /\bthe\s+avoidance\s+strategies?\b/i,
+  /\bthe\s+system\s+(is|was|remains|stays)\s+\w+ing\b/i,
+  /\bthe\s+system\s+is\s+running\b/i,
+  /\bwhat\s+this\s+means\s+is\b/i,
+  /\bwe\s+realize\b/i,
+];
+
+export function auditAndRepairR9Pass2Draft(args: {
+  baseFountain: string;
+  polishedFountain: string;
+  guardrails: RedevR6GuardrailsBundle;
+  planItems: RedevR9FinalPolishItem[];
+}): AuditReport {
+  const checks: AuditCheck[] = [];
+  const repairs: AuditRepair[] = [];
+  const text = args.polishedFountain ?? "";
+  const base = args.baseFountain ?? "";
+
+  // 1. Draft actually changed.
+  const changed = text !== base && text.trim().length > 0;
+  checks.push({
+    id: "r9apply_draft_changed" as AuditCheckId,
+    label: "Draft changed vs. base",
+    status: changed ? "passed" : "warning",
+    message: changed
+      ? `Polished draft differs from base (${text.length.toLocaleString()} chars vs ${base.length.toLocaleString()}).`
+      : "Polished draft is identical to the base. No final polish applied.",
+  });
+
+  // 2. Paul reveal protected.
+  const PAUL_LATE = [
+    /\bpaul\b[^.]{0,80}\b(texting|texts|texted)\b/i,
+    /\b(reveal|expose|admit|confess)\b[^.]{0,40}\b(accident|timestamp|guilt)/i,
+    /\bpaul'?s?\s+guilt\b/i,
+    /\btimestamp\s+evidence\b/i,
+  ];
+  const paulLeak = unnegatedHit(text, PAUL_LATE);
+  checks.push({
+    id: "r9apply_paul_reveal_protected" as AuditCheckId,
+    label: "Paul reveal still protected after R9",
+    status: paulLeak ? "warning" : "passed",
+    message: paulLeak
+      ? "Draft 5 exposes Paul's late-season reveal."
+      : "Paul's late-season reveal remains protected.",
+  });
+
+  // 3. Elena sister protected.
+  const ELENA = [
+    /\belena\b[^.]{0,60}\b(is|was)\b[^.]{0,40}\bsister\b/i,
+    /\bnadia'?s?\s+sister\b/i,
+    /\bmy\s+sister\b[^.]{0,30}\belena\b/i,
+  ];
+  const elenaLeak = unnegatedHit(text, ELENA);
+  checks.push({
+    id: "r9apply_elena_protected" as AuditCheckId,
+    label: "Elena sister relationship still protected",
+    status: elenaLeak ? "warning" : "passed",
+    message: elenaLeak
+      ? "Draft 5 reveals the sister relationship."
+      : "Sister relationship stays protected.",
+  });
+
+  // 4. Cass name does not appear in the draft.
+  const cassNamed = /\bcass\b/i.test(text);
+  checks.push({
+    id: "r9apply_no_cass_named" as AuditCheckId,
+    label: "Cass name not introduced",
+    status: cassNamed ? "warning" : "passed",
+    message: cassNamed
+      ? "The name 'Cass' appears in Draft 5. The Margot anchor must remain wordless — no name, no relation."
+      : "Cass remains unnamed in the draft.",
+  });
+
+  // 5. Solano framing protected.
+  const SOLANO_FRAUD = [
+    /\bsolano\b[^.]{0,80}\b(lying|liar|fraud|fake|con\b|cult|deceiv|manipulat)/i,
+  ];
+  const solanoLeak = unnegatedHit(text, SOLANO_FRAUD);
+  checks.push({
+    id: "r9apply_solano_protected" as AuditCheckId,
+    label: "Solano rule still protected",
+    status: solanoLeak ? "warning" : "passed",
+    message: solanoLeak
+      ? "Draft 5 drifts into Solano-as-fraud framing."
+      : "Solano framing honors the Solano Rule.",
+  });
+
+  // 6. Surrender still present.
+  const surrenderPresent = /\bsurrender\b/i.test(text);
+  checks.push({
+    id: "r9apply_surrender_present" as AuditCheckId,
+    label: "Surrender preserved as pilot engine",
+    status: surrenderPresent ? "passed" : "warning",
+    message: surrenderPresent
+      ? "Surrender remains present in Draft 5."
+      : "Surrender is missing. R9 stripped the engine.",
+  });
+
+  // 7. Final hook anchors still present in the tail.
+  const tail = text.slice(Math.max(0, text.length - 3500));
+  const hookAnchors = {
+    case: /\btransparent\s+case\b/i.test(tail),
+    chime: /\b(chime|notification|phone)\b/i.test(tail) && /\bpaul\b/i.test(tail),
+    bodies: /\bbodies\b/i.test(tail) || /\bafter\s+surrender\b/i.test(tail),
+  };
+  const anchorCount = [hookAnchors.bodies, hookAnchors.case, hookAnchors.chime].filter(Boolean).length;
+  checks.push({
+    id: "r9apply_final_hook_present" as AuditCheckId,
+    label: "Final hook anchors still present",
+    status: anchorCount >= 2 ? "passed" : "warning",
+    message:
+      anchorCount >= 2
+        ? `Final hook anchors detected in the tail: ${[
+            hookAnchors.bodies && "bodies",
+            hookAnchors.case && "transparent case",
+            hookAnchors.chime && "Paul + chime",
+          ]
+            .filter(Boolean)
+            .join(", ")}.`
+        : "Final hook anchors not detected in the closing. R9 must preserve the chime/case/Paul ending.",
+  });
+
+  // 8. No "younger version of" / sister resemblance language in
+  //    archive scenes.
+  const youngerHit = YOUNGER_VERSION_PATTERNS.some((re) => re.test(text));
+  checks.push({
+    id: "r9apply_no_younger_version_clue" as AuditCheckId,
+    label: "Archive room avoids 'younger version' clue",
+    status: youngerHit ? "warning" : "passed",
+    message: youngerHit
+      ? "Draft 5 includes 'younger version of' / resemblance language. The archive plant must rely on photos, files, removed frames, or covered shelving."
+      : "Archive plant stays visual — no resemblance clue.",
+  });
+
+  // 9. No flashbacks / confession circles / therapy exposition.
+  const FLASHBACK = [/\bFLASHBACK\b/, /\b\(FLASHBACK\)/];
+  const flashback = FLASHBACK.some((re) => re.test(text));
+  checks.push({
+    id: "r9apply_no_flashbacks" as AuditCheckId,
+    label: "No flashbacks introduced",
+    status: flashback ? "warning" : "passed",
+    message: flashback ? "R9 introduced FLASHBACK markers." : "No flashbacks introduced.",
+  });
+
+  const confession = /\bconfession\s+circle\b/i.test(text);
+  const THERAPY = [
+    /\btell\s+me\s+about\s+your\s+(childhood|mother|father|family)\b/i,
+    /\bhow\s+does\s+that\s+make\s+you\s+feel\b/i,
+  ];
+  const therapy = THERAPY.some((re) => re.test(text));
+  checks.push({
+    id: "r9apply_no_confession_or_therapy" as AuditCheckId,
+    label: "No confession circles / therapy exposition",
+    status: confession || therapy ? "warning" : "passed",
+    message:
+      confession || therapy
+        ? "R9 introduced confession-circle or therapy-style exposition."
+        : "No confession circles or therapy exposition introduced.",
+  });
+
+  // 10. No new meta-narration introduced.
+  const countExplanatory = (s: string): number => {
+    let n = 0;
+    for (const re of R9_APPLY_META_PHRASES) {
+      const gre = new RegExp(
+        re.source,
+        re.flags.includes("g") ? re.flags : re.flags + "g"
+      );
+      const matches = s.match(gre);
+      if (matches) n += matches.length;
+    }
+    return n;
+  };
+  const baseCount = countExplanatory(base);
+  const newCount = countExplanatory(text);
+  const introducedMeta = newCount > baseCount;
+  checks.push({
+    id: "r9apply_no_meta_narration" as AuditCheckId,
+    label: "No new meta-narration introduced",
+    status: introducedMeta ? "warning" : "passed",
+    message: introducedMeta
+      ? `Draft 5 added ${newCount - baseCount} new line(s) of meta-narration. Use filmable directives only.`
+      : `No new meta-narration introduced (base: ${baseCount}, polished: ${newCount}).`,
+  });
+
+  // 11. Pacing change stayed within tolerance — R9 is supposed to
+  //     tighten by 1-2 pages (roughly 2-6 KB) and may add small sound /
+  //     anchor / hook beats. We accept a delta of -8% to +5%.
+  const bytesDelta = text.length - base.length;
+  const pctDelta = base.length > 0 ? bytesDelta / base.length : 0;
+  const tooBig = pctDelta > 0.05;
+  const tooSmall = pctDelta < -0.08;
+  checks.push({
+    id: "r9apply_pacing_in_band" as AuditCheckId,
+    label: "Pacing change within tolerance",
+    status: tooBig || tooSmall ? "warning" : "passed",
+    message:
+      tooBig
+        ? `Draft 5 is ${(pctDelta * 100).toFixed(1)}% larger than base — R9 should typically TIGHTEN, not expand. Review for added prose.`
+        : tooSmall
+          ? `Draft 5 is ${(pctDelta * 100).toFixed(1)}% smaller than base — more than 2 pages cut. Verify core plants survived.`
+          : `Pacing delta: ${bytesDelta > 0 ? "+" : ""}${bytesDelta.toLocaleString()} chars (${(pctDelta * 100).toFixed(1)}%). Within R9 band.`,
+  });
+
+  // 12. Screenplay structure sanity.
+  const sluglineCount = (text.match(/^(INT\.|EXT\.)\s+[A-Z]/gm) ?? []).length;
+  const validStructure = sluglineCount >= 3 && text.length >= 1000;
+  checks.push({
+    id: "r9apply_no_screenplay_drift" as AuditCheckId,
+    label: "Draft 5 is still a valid screenplay",
+    status: validStructure ? "passed" : "warning",
+    message: validStructure
+      ? `Draft 5 has ${sluglineCount} scene headings — structure intact.`
+      : `Draft 5 looks malformed (slugs: ${sluglineCount}, length: ${text.length}).`,
+  });
+
+  void args.planItems;
+  void args.guardrails;
   return { checks, repairs };
 }

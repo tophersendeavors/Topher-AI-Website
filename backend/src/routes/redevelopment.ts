@@ -47,6 +47,10 @@ import {
   approveR8VoicePolishPlan,
   setR8Pass2Draft,
   promoteR8Pass2Draft,
+  setR9FinalPolishPlan,
+  approveR9FinalPolishPlan,
+  setR9Pass2Draft,
+  promoteR9Pass2Draft,
   setSeasonArc,
 } from "../redevelopment/store.js";
 import { generateCharacterBible } from "../redevelopment/characterBibleAgent.js";
@@ -66,6 +70,8 @@ import {
   auditAndRepairR7Pass2Draft,
   auditAndRepairR8VoicePolishPlan,
   auditAndRepairR8Pass2Draft,
+  auditAndRepairR9FinalPolishPlan,
+  auditAndRepairR9Pass2Draft,
   auditAndRepairSeasonArc,
 } from "../redevelopment/validators.js";
 import { generateR6Guardrails } from "../redevelopment/r6GuardrailsAgent.js";
@@ -76,6 +82,8 @@ import { generateR7PolishPlan } from "../redevelopment/r7PolishAgent.js";
 import { applyR7Pass2 } from "../redevelopment/r7Pass2Agent.js";
 import { generateR8VoicePolishPlan } from "../redevelopment/r8VoicePolishAgent.js";
 import { applyR8Pass2 } from "../redevelopment/r8Pass2Agent.js";
+import { generateR9FinalPolishPlan } from "../redevelopment/r9FinalPolishAgent.js";
+import { applyR9Pass2 } from "../redevelopment/r9Pass2Agent.js";
 import { indexScenes } from "../screenplay/sceneIndex.js";
 import { supabase } from "../db/client.js";
 import type {
@@ -2156,6 +2164,375 @@ export function registerR6Pass2Routes(app: FastifyInstance) {
       });
       try {
         await indexScenes(scriptId, pass.r8VoicePolish?.polishedDraftText ?? "");
+      } catch (err) {
+        return {
+          report: computePassReport(pass),
+          scriptId,
+          draftNumber,
+          sceneIndexWarning: `Promoted, but scene indexing failed: ${(err as Error).message}.`,
+        };
+      }
+      return {
+        report: computePassReport(pass),
+        scriptId,
+        draftNumber,
+      };
+    }
+  );
+
+  // ====================================================================
+  // R9 — Final Hook & Emotional Anchor Pass
+  // ====================================================================
+
+  // POST /r9-final/plan/generate — diagnose final polish items on the
+  // R8-PROMOTED Draft 4.
+  app.post(
+    "/projects/:id/redevelopment/:passId/r9-final/plan/generate",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const body = z
+        .object({ notes: z.string().optional() })
+        .parse(req.body ?? {});
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+
+      const r8 = pass.r8VoicePolish;
+      if (!r8 || !r8.approvedAt || !r8.promotedScriptId) {
+        throw new Error(
+          "R8 must be approved AND promoted before R9 final polish can plan"
+        );
+      }
+      if (!pass.pilotStrategy) {
+        throw new Error("pilot strategy missing — R9 needs R5 context");
+      }
+
+      // Load the CURRENT promoted Draft 4 fountain.
+      let baseFountain = "";
+      try {
+        const { data: scriptRow } = await supabase
+          .from("scripts")
+          .select("fountain, draft_number")
+          .eq("id", r8.promotedScriptId)
+          .single();
+        if (scriptRow) baseFountain = (scriptRow.fountain as string) ?? "";
+      } catch {
+        /* fall through */
+      }
+      if (!baseFountain) baseFountain = r8.polishedDraftText ?? "";
+      if (!baseFountain.trim()) {
+        throw new Error(
+          "Promoted R8 Draft 4 is empty — cannot plan final polish on nothing"
+        );
+      }
+
+      const rawGuard = pass.r6Guardrails;
+      const guardrails = (() => {
+        if (!rawGuard) return { perCharacter: [], globalRule: "", globalPlants: [], approvedAt: null };
+        if (Array.isArray(rawGuard)) {
+          return { perCharacter: rawGuard, globalRule: "", globalPlants: [], approvedAt: null };
+        }
+        return {
+          perCharacter: rawGuard.perCharacter ?? [],
+          globalRule: rawGuard.globalRule ?? "",
+          globalPlants: rawGuard.globalPlants ?? [],
+          approvedAt: rawGuard.approvedAt ?? null,
+        };
+      })();
+
+      const result = await generateR9FinalPolishPlan({
+        promotedFountain: baseFountain,
+        promotedScriptId: r8.promotedScriptId,
+        promotedDraftNumber: r8.promotedDraftNumber ?? null,
+        guardrails,
+        characterBibles: pass.characterBibles,
+        pilotStrategy: pass.pilotStrategy,
+        notes: body.notes,
+      });
+
+      const updatedPass = await setR9FinalPolishPlan({
+        projectId: id,
+        passId,
+        items: result.items,
+        approachSummary: result.approachSummary,
+        priorScriptId: result.priorScriptId,
+      });
+
+      return {
+        plan: {
+          approachSummary: result.approachSummary,
+          items: result.items,
+          priorScriptId: result.priorScriptId,
+        },
+        audit: result.audit,
+        auditedAt: new Date().toISOString(),
+        auditSource: "r9_final_polish_plan_generation" as const,
+        report: computePassReport(updatedPass),
+      };
+    }
+  );
+
+  // PUT /r9-final/plan — save edits to the plan.
+  app.put(
+    "/projects/:id/redevelopment/:passId/r9-final/plan",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const body = z
+        .object({
+          approachSummary: z.string(),
+          items: z.array(z.any()),
+          priorScriptId: z.string().min(1),
+        })
+        .parse(req.body ?? {});
+      const updated = await setR9FinalPolishPlan({
+        projectId: id,
+        passId,
+        items: body.items,
+        approachSummary: body.approachSummary,
+        priorScriptId: body.priorScriptId,
+      });
+      return { report: computePassReport(updated) };
+    }
+  );
+
+  // POST /r9-final/plan/approve — lock the plan; Pass 2 reads it.
+  app.post(
+    "/projects/:id/redevelopment/:passId/r9-final/plan/approve",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const updated = await approveR9FinalPolishPlan({ projectId: id, passId });
+      return { report: computePassReport(updated) };
+    }
+  );
+
+  // GET /r9-final/plan/audit — read-only audit of the stored plan.
+  app.get(
+    "/projects/:id/redevelopment/:passId/r9-final/plan/audit",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+      const plan = pass.r9FinalPolish;
+      if (!plan) {
+        return {
+          audit: {
+            checks: [
+              {
+                id: "r9plan_items_present",
+                label: "Final polish items present",
+                status: "warning",
+                message:
+                  "No R9 plan yet. Click 'Generate final plan' first.",
+              },
+            ],
+            repairs: [],
+          },
+          auditedAt: new Date().toISOString(),
+        };
+      }
+      const audit = auditAndRepairR9FinalPolishPlan({
+        items: plan.items ?? [],
+        approachSummary: plan.approachSummary ?? "",
+      });
+      return {
+        audit,
+        auditedAt: new Date().toISOString(),
+        auditSource: "current_stored_r9_plan" as const,
+      };
+    }
+  );
+
+  // POST /r9-final/apply — runs the apply agent on the approved plan +
+  // the R8-promoted Draft 4 fountain. Produces Draft 5.
+  app.post(
+    "/projects/:id/redevelopment/:passId/r9-final/apply",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const body = z
+        .object({ notes: z.string().optional() })
+        .parse(req.body ?? {});
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+      const plan = pass.r9FinalPolish;
+      if (!plan || !plan.planApprovedAt) {
+        throw new Error("R9 plan must be APPROVED before applying");
+      }
+      if (!plan.items || plan.items.length === 0) {
+        throw new Error("R9 plan has zero items — nothing to apply");
+      }
+
+      const r8 = pass.r8VoicePolish;
+      if (!r8 || !r8.approvedAt || !r8.promotedScriptId) {
+        throw new Error(
+          "R8 must be approved AND promoted before R9 apply"
+        );
+      }
+
+      let baseFountain = "";
+      try {
+        const { data: scriptRow } = await supabase
+          .from("scripts")
+          .select("fountain")
+          .eq("id", r8.promotedScriptId)
+          .single();
+        if (scriptRow) baseFountain = (scriptRow.fountain as string) ?? "";
+      } catch {
+        /* fall through */
+      }
+      if (!baseFountain) baseFountain = r8.polishedDraftText ?? "";
+      if (!baseFountain.trim()) {
+        throw new Error(
+          "Promoted R8 Draft 4 is empty — cannot apply final polish to nothing"
+        );
+      }
+
+      const rawGuard = pass.r6Guardrails;
+      const guardrails = (() => {
+        if (!rawGuard) return { perCharacter: [], globalRule: "", globalPlants: [], approvedAt: null };
+        if (Array.isArray(rawGuard)) {
+          return { perCharacter: rawGuard, globalRule: "", globalPlants: [], approvedAt: null };
+        }
+        return {
+          perCharacter: rawGuard.perCharacter ?? [],
+          globalRule: rawGuard.globalRule ?? "",
+          globalPlants: rawGuard.globalPlants ?? [],
+          approvedAt: rawGuard.approvedAt ?? null,
+        };
+      })();
+
+      const result = await applyR9Pass2({
+        baseFountain,
+        items: plan.items,
+        guardrails,
+        characterBibles: pass.characterBibles,
+        notes: body.notes,
+      });
+
+      const updatedPass = await setR9Pass2Draft({
+        projectId: id,
+        passId,
+        polishedFountain: result.fountain,
+      });
+
+      const audit = auditAndRepairR9Pass2Draft({
+        baseFountain,
+        polishedFountain: result.fountain,
+        guardrails,
+        planItems: plan.items,
+      });
+      const auditedAt = new Date().toISOString();
+
+      return {
+        polishedFountain: result.fountain,
+        applied: result.applied,
+        unapplied: result.unapplied,
+        fountainChanged: result.fountainChanged,
+        bytesDelta: result.bytesDelta,
+        baseLen: baseFountain.length,
+        newLen: result.fountain.length,
+        audit,
+        auditedAt,
+        auditSource: "r9_apply_polished_draft" as const,
+        report: computePassReport(updatedPass),
+      };
+    }
+  );
+
+  // GET /r9-final/draft/audit — read-only audit of the stored Draft 5.
+  app.get(
+    "/projects/:id/redevelopment/:passId/r9-final/draft/audit",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const pass = await getPass(id, passId);
+      if (!pass) throw new Error("pass not found");
+      const plan = pass.r9FinalPolish;
+      if (!plan || !plan.polishedDraftText) {
+        return {
+          audit: {
+            checks: [
+              {
+                id: "r9apply_draft_changed",
+                label: "Draft changed vs. base",
+                status: "warning",
+                message:
+                  "No polished R9 draft yet. Click 'Apply final polish' first.",
+              },
+            ],
+            repairs: [],
+          },
+          approvedAt: null,
+        };
+      }
+      const r8 = pass.r8VoicePolish;
+      let baseFountain = "";
+      if (r8?.promotedScriptId) {
+        try {
+          const { data: scriptRow } = await supabase
+            .from("scripts")
+            .select("fountain")
+            .eq("id", r8.promotedScriptId)
+            .single();
+          if (scriptRow) baseFountain = (scriptRow.fountain as string) ?? "";
+        } catch {
+          /* fall through */
+        }
+      }
+      if (!baseFountain) baseFountain = r8?.polishedDraftText ?? "";
+
+      const rawGuard = pass.r6Guardrails;
+      const guardrails = (() => {
+        if (!rawGuard) return { perCharacter: [], globalRule: "", globalPlants: [], approvedAt: null };
+        if (Array.isArray(rawGuard)) {
+          return { perCharacter: rawGuard, globalRule: "", globalPlants: [], approvedAt: null };
+        }
+        return {
+          perCharacter: rawGuard.perCharacter ?? [],
+          globalRule: rawGuard.globalRule ?? "",
+          globalPlants: rawGuard.globalPlants ?? [],
+          approvedAt: rawGuard.approvedAt ?? null,
+        };
+      })();
+
+      const audit = auditAndRepairR9Pass2Draft({
+        baseFountain,
+        polishedFountain: plan.polishedDraftText,
+        guardrails,
+        planItems: plan.items ?? [],
+      });
+      return {
+        audit,
+        approvedAt: plan.approvedAt ?? null,
+        auditedAt: new Date().toISOString(),
+        auditSource: "current_stored_r9_polished_draft" as const,
+      };
+    }
+  );
+
+  // POST /r9-final/draft/approve — promote Draft 5 to a new scripts row.
+  app.post(
+    "/projects/:id/redevelopment/:passId/r9-final/draft/approve",
+    async (req) => {
+      const user = await requireUser(req);
+      const { id, passId } = req.params as { id: string; passId: string };
+      await assertProjectMember(user.id, id);
+      const { pass, scriptId, draftNumber } = await promoteR9Pass2Draft({
+        projectId: id,
+        passId,
+        approvedBy: user.id,
+      });
+      try {
+        await indexScenes(scriptId, pass.r9FinalPolish?.polishedDraftText ?? "");
       } catch (err) {
         return {
           report: computePassReport(pass),

@@ -3465,6 +3465,105 @@ export const api = {
       { method: "POST", body: "{}" }
     ),
 
+  // R9 Final Hook & Emotional Anchor Pass
+  generateRedevR9FinalPlan: (
+    projectId: string,
+    passId: string,
+    body?: { notes?: string }
+  ) =>
+    request<{
+      plan: {
+        approachSummary: string;
+        items: RedevR9FinalPolishItem[];
+        priorScriptId: string;
+      };
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource: "r9_final_polish_plan_generation";
+      report: RedevPassReport;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r9-final/plan/generate`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  saveRedevR9FinalPlan: (
+    projectId: string,
+    passId: string,
+    body: {
+      approachSummary: string;
+      items: RedevR9FinalPolishItem[];
+      priorScriptId: string;
+    }
+  ) =>
+    request<{ report: RedevPassReport }>(
+      `/projects/${projectId}/redevelopment/${passId}/r9-final/plan`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+  approveRedevR9FinalPlan: (projectId: string, passId: string) =>
+    request<{ report: RedevPassReport }>(
+      `/projects/${projectId}/redevelopment/${passId}/r9-final/plan/approve`,
+      { method: "POST", body: "{}" }
+    ),
+  auditRedevR9FinalPlan: (projectId: string, passId: string) =>
+    request<{
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource?: "current_stored_r9_plan";
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r9-final/plan/audit`
+    ),
+  applyRedevR9Final: (
+    projectId: string,
+    passId: string,
+    body?: { notes?: string }
+  ) =>
+    request<{
+      polishedFountain: string;
+      applied: Array<{
+        category: string;
+        location: string;
+        before: string;
+        after: string;
+        replacementKind:
+          | "action"
+          | "dialogue"
+          | "continuity_correction"
+          | "removal"
+          | "sound"
+          | "insertion";
+      }>;
+      unapplied: Array<{ itemIndex: number; reason: string }>;
+      fountainChanged: boolean;
+      bytesDelta: number;
+      baseLen: number;
+      newLen: number;
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource: "r9_apply_polished_draft";
+      report: RedevPassReport;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r9-final/apply`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  auditRedevR9PolishedDraft: (projectId: string, passId: string) =>
+    request<{
+      audit: RedevAuditReport;
+      approvedAt: string | null;
+      auditedAt: string;
+      auditSource: "current_stored_r9_polished_draft";
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r9-final/draft/audit`
+    ),
+  approveRedevR9PolishedDraft: (projectId: string, passId: string) =>
+    request<{
+      report: RedevPassReport;
+      scriptId: string;
+      draftNumber: number;
+      sceneIndexWarning?: string;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r9-final/draft/approve`,
+      { method: "POST", body: "{}" }
+    ),
+
   repairRedevR6Pass2Draft: (
     projectId: string,
     passId: string,
@@ -3518,7 +3617,8 @@ export type RedevStageKey =
   | "r5_pilot_strategy"
   | "r6_pilot_rewrite"
   | "r7_pilot_polish"
-  | "r8_voice_polish";
+  | "r8_voice_polish"
+  | "r9_final_polish";
 
 export type RedevR7PolishCategory =
   | "surrender_continuity"
@@ -3591,6 +3691,45 @@ export interface RedevR8VoicePolishPlan {
   priorScriptId: string;
   approachSummary: string;
   items: RedevR8VoicePolishItem[];
+  planApprovedAt: string | null;
+  polishedDraftText?: string | null;
+  polishedDraftAt?: string | null;
+  approvedAt?: string | null;
+  promotedScriptId?: string | null;
+  promotedDraftNumber?: number | null;
+}
+
+// R9 Final Hook & Emotional Anchor Pass
+export type RedevR9FinalPolishCategory =
+  | "margot_emotional_anchor"
+  | "archive_visual_mystery"
+  | "sound_design"
+  | "pacing_economy"
+  | "final_hook_polish";
+
+export const R9_FINAL_CATEGORY_LABEL: Record<RedevR9FinalPolishCategory, string> = {
+  margot_emotional_anchor: "Margot emotional anchor",
+  archive_visual_mystery: "Archive-room visual mystery",
+  sound_design: "Sound design motifs",
+  pacing_economy: "Pacing economy",
+  final_hook_polish: "Final hook polish",
+};
+
+export interface RedevR9FinalPolishItem {
+  existingSceneOrd: number | null;
+  existingSlugline?: string;
+  character?: string;
+  category: RedevR9FinalPolishCategory;
+  diagnosis: string;
+  fixDirection: string;
+  severity?: "high" | "medium" | "low";
+  scope?: "line" | "beat" | "scene" | "ending" | "motif";
+}
+
+export interface RedevR9FinalPolishPlan {
+  priorScriptId: string;
+  approachSummary: string;
+  items: RedevR9FinalPolishItem[];
   planApprovedAt: string | null;
   polishedDraftText?: string | null;
   polishedDraftAt?: string | null;
@@ -3718,6 +3857,9 @@ export interface RedevelopmentPass {
   r7Polish?: RedevR7PolishPlan | null;
   /** R8 Character Voice & Scene Life Pass. Same two-pass shape as R7. */
   r8VoicePolish?: RedevR8VoicePolishPlan | null;
+  /** R9 Final Hook & Emotional Anchor Pass. Produces Draft 5, the
+   *  locked Episode 1 writing draft. Same two-pass shape as R7/R8. */
+  r9FinalPolish?: RedevR9FinalPolishPlan | null;
 }
 
 /** Per-character protection contract honored by R6 (pilot rewrite). */

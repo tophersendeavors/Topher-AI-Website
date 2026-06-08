@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { UIModeProvider } from "@/lib/uiMode";
 import { AppShell } from "./AppShell";
 import { SignInPage } from "@/features/auth/SignInPage";
 import { ProjectsPage } from "@/features/dashboard/ProjectsPage";
@@ -10,15 +11,31 @@ import { StoryBiblePage } from "@/features/story-bible/StoryBiblePage";
 import { EpisodesPage } from "@/features/episodes/EpisodesPage";
 import { DraftsPage } from "@/features/drafts/DraftsPage";
 import { ScriptEditorPage } from "@/features/editor/ScriptEditorPage";
+import { DraftWorkspacePage } from "@/features/drafts/DraftWorkspacePage";
 import { RewritesPage } from "@/features/rewrites/RewritesPage";
 import { ContinuityPage } from "@/features/continuity/ContinuityPage";
 import { ProductionPage } from "@/features/production/ProductionPage";
 import { ExportCenterPage } from "@/features/exports/ExportCenterPage";
 import { EmotionalIntelligencePage } from "@/features/emotional/EmotionalIntelligencePage";
+import { PitchMaterialsPage } from "@/features/pitch/PitchMaterialsPage";
+import { DepartmentsHubPage } from "@/features/departments/DepartmentsHubPage";
+import { DepartmentWorkspacePage } from "@/features/departments/DepartmentWorkspacePage";
+import { WorkflowPage } from "@/features/workflow/WorkflowPage";
+import { RedevelopmentPage } from "@/features/redevelopment/RedevelopmentPage";
 
 export function App() {
   return (
     <AuthProvider>
+      <UIModeProvider>
+        <AppRoutes />
+      </UIModeProvider>
+    </AuthProvider>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <>
       <Routes>
         <Route path="/sign-in" element={<SignInPage />} />
         <Route element={<RequireAuth />}>
@@ -30,18 +47,38 @@ export function App() {
             <Route path="projects/:projectId/character-bible" element={<CharacterBiblePage />} />
             <Route path="projects/:projectId/story-bible" element={<StoryBiblePage />} />
             <Route path="projects/:projectId/episodes" element={<EpisodesPage />} />
+            {/* Pitch Materials — buyer-facing, separate from the 95% Script Quality Protocol. */}
+            <Route path="projects/:projectId/pitch" element={<PitchMaterialsPage />} />
             <Route path="projects/:projectId/drafts" element={<DraftsPage />} />
-            <Route path="projects/:projectId/drafts/:scriptId" element={<ScriptEditorPage />} />
+            <Route path="projects/:projectId/drafts/:scriptId" element={<DraftWorkspacePage />} />
+            <Route path="projects/:projectId/drafts/:scriptId/editor" element={<ScriptEditorPage />} />
             <Route path="projects/:projectId/rewrites" element={<RewritesPage />} />
             <Route path="projects/:projectId/continuity" element={<ContinuityPage />} />
             <Route path="projects/:projectId/emotional" element={<EmotionalIntelligencePage />} />
             <Route path="projects/:projectId/production" element={<ProductionPage />} />
             <Route path="projects/:projectId/exports" element={<ExportCenterPage />} />
+            <Route path="projects/:projectId/departments" element={<DepartmentsHubPage />} />
+            <Route
+              path="projects/:projectId/departments/:deptKey"
+              element={<DepartmentWorkspacePage />}
+            />
+            <Route
+              path="projects/:projectId/episodes/:episodeId/workflow"
+              element={<WorkflowPage />}
+            />
+            <Route
+              path="projects/:projectId/redevelopment"
+              element={<RedevelopmentPage />}
+            />
+            <Route
+              path="projects/:projectId/redevelopment/:passId"
+              element={<RedevelopmentPage />}
+            />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </AuthProvider>
+    </>
   );
 }
 

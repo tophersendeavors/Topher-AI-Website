@@ -150,7 +150,7 @@ export const BehaviorBeat = z.object({
 export type BehaviorBeat = z.infer<typeof BehaviorBeat>;
 
 export const BehaviorTranslation = z.object({
-  fountain: z.string(),
+  fountain: z.string().default(""),
   beats: z.array(BehaviorBeat).default([]),
 });
 export type BehaviorTranslation = z.infer<typeof BehaviorTranslation>;

@@ -84,20 +84,53 @@ export function DraftsPage() {
             />
           ) : (
             <ul className="space-y-2">
-              {list.data!.map((s) => (
+              {[...list.data!].sort((a, b) => {
+                if (a.current === b.current) return b.draft_number - a.draft_number;
+                return a.current ? -1 : 1;
+              }).map((s) => (
                 <li key={s.id}>
-                  <Link
-                    to={`/projects/${projectId}/drafts/${s.id}`}
-                    className="flex items-center justify-between rounded-md border border-white/8 bg-white/[0.02] p-4 transition-colors hover:bg-white/[0.04]"
-                  >
-                    <div>
-                      <div className="text-bone-50">{s.title}</div>
-                      <div className="text-xs text-bone-400">
-                        Draft {s.draft_number} • updated {new Date(s.updated_at).toLocaleString()}
-                      </div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-bone-400" />
-                  </Link>
+                  {(() => {
+                    // Tier-aware routing — micro-drama scripts use the
+                    // Episodes-page Screenplay block (approval / regen /
+                    // patch / draft history / Copy / Production all live
+                    // there). The prestige DraftWorkspacePage crashes on
+                    // them. Route them home instead of into a broken page.
+                    const meta = (s.metadata ?? {}) as { source?: string };
+                    const isMicroDrama = meta.source === "micro_drama_chain";
+                    const href = isMicroDrama
+                      ? `/projects/${projectId}/episodes`
+                      : `/projects/${projectId}/drafts/${s.id}`;
+                    return (
+                      <Link
+                        to={href}
+                        className={`flex items-center justify-between rounded-md border p-4 transition-colors ${
+                          s.current
+                            ? "border-ember-700/60 bg-ember-900/15 hover:bg-ember-900/25"
+                            : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2 text-bone-50">
+                            {s.title}
+                            {s.current && (
+                              <span className="chip border-ember-700/60 bg-ember-900/40 text-ember-100">
+                                current
+                              </span>
+                            )}
+                            {isMicroDrama && (
+                              <span className="chip border-amber-700/40 bg-amber-900/20 text-amber-200">
+                                micro-drama · edit on Episodes
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-bone-400">
+                            Draft {s.draft_number} • updated {new Date(s.updated_at).toLocaleString()}
+                          </div>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-bone-400" />
+                      </Link>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>

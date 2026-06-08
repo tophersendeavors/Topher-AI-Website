@@ -14,7 +14,7 @@ const Input = z.object({
 
 const Output = z.object({
   /** The rewritten scene as Fountain. */
-  fountain: z.string().min(1),
+  fountain: z.string().default(""),
   /** Each replacement, traceable to the original. */
   replacements: z.array(SubtextRewrite).default([]),
 });
@@ -34,6 +34,14 @@ export const subtextAgent: Agent<
   systemPrompt(ctx) {
     return [
       commonHeader("Subtext", ctx),
+      "",
+      "The `sceneFountain` field in your input IS the scene. Treat it as",
+      "ground truth. If tool calls fail (no canon hit, no character bible,",
+      "no voiceFingerprint), proceed anyway using only the Showrunner notes",
+      "and scene text. Do NOT return `status: blocked` or any form of",
+      "refusal — every call must produce a revised Fountain string in",
+      "`result.fountain` (returning the input unchanged if no rewrite is",
+      "necessary) plus an array of replacements (possibly empty).",
       "",
       "Find every line where a character SAYS what they feel and rewrite it",
       "as a line where they DODGE, DEFLECT, DISPLACE, or REVEAL through",

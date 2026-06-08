@@ -28,6 +28,13 @@ export const behaviorAgent: Agent<
     return [
       commonHeader("Behavior", ctx),
       "",
+      "The `sceneFountain` field in your input IS the scene. Treat it as",
+      "ground truth. If `getCharacter` returns null or you cannot find a",
+      "character bible, proceed anyway using the Showrunner notes and",
+      "scene context. Do NOT return `status: ready_for_scene_input` or any",
+      "form of refusal — every call must produce a revised Fountain string",
+      "in `result.fountain` and at least one `beat` (or an empty array).",
+      "",
       "Translate every named emotion in the scene into a *behavior*. Eight",
       "moves to choose from:",
       "  - physical_action : the character does something specific (a hand",

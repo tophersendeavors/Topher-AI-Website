@@ -42,6 +42,41 @@ export interface ParsedScreenplay {
   authors?: string[];
   scenes: ParsedScene[];
   elements: ScreenplayElement[];
+  /** Full title-page metadata for exports (Fountain title block, PDF, FDX). */
+  titlePage?: TitlePageMeta;
+}
+
+/**
+ * Title page block for a TV script. Drives the Fountain `Title:` / `Credit:`
+ * / `Author:` / `Source:` / `Draft date:` / `Contact:` metadata at the top
+ * of exports, the centered title page on PDF, and the Final Draft xml.
+ *
+ * The fields are deliberately separate from `ParsedScreenplay.title` so the
+ * UI's Title Page Settings panel can edit them without forcing a re-parse.
+ */
+export interface TitlePageMeta {
+  /** Series / project title, e.g. "SELVAJE". */
+  seriesTitle: string;
+  /** "Episode 1: \"Arrival\"" — empty for non-episodic scripts. */
+  episodeCredit?: string;
+  /** Writer credit lines. AI never fills this. */
+  writers?: string[];
+  /** "Created by …" — separate from writers. */
+  creators?: string[];
+  /** "Based on …" attribution. */
+  basedOn?: string;
+  /** "Draft 1", "Draft 2", … */
+  draftLabel?: string;
+  /** Human date, e.g. "May 30, 2026". */
+  draftDate?: string;
+  /** Optional contact block (e.g. "Toburt Studios — contact@…"). */
+  contact?: string;
+  /** Studio / company line, rendered above contact. */
+  studio?: string;
+  /** Copyright string, rendered at the bottom of the title page. */
+  copyright?: string;
+  /** If false, the contact block is suppressed on export. */
+  includeContact?: boolean;
 }
 
 export interface ExportFormatInfo {

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Wand2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { formatDraftLabel } from "@/lib/draftLabel";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -43,9 +44,16 @@ export function RewritesPage() {
               <label className="label-eyebrow mb-1 block">Draft</label>
               <select className="input" value={scriptId} onChange={(e) => setScriptId(e.target.value)}>
                 <option value="">Select a draft…</option>
-                {(scripts.data ?? []).map((s) => (
-                  <option key={s.id} value={s.id}>{s.title}</option>
-                ))}
+                {(scripts.data ?? [])
+                  .slice()
+                  .sort((a, b) => {
+                    if (a.current !== b.current) return a.current ? -1 : 1;
+                    if (a.draft_number !== b.draft_number) return b.draft_number - a.draft_number;
+                    return Date.parse(b.updated_at) - Date.parse(a.updated_at);
+                  })
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>{formatDraftLabel(s)}</option>
+                  ))}
               </select>
             </div>
             <div>

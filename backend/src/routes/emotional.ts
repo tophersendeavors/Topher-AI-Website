@@ -7,7 +7,13 @@ import {
   runScriptEmotionalPass,
   runSceneEmotionalPass,
 } from "../emotional/index.js";
-import { scoreScript } from "../emotional/score.js";
+import { scoreScript, scoreScriptRange } from "../emotional/score.js";
+import {
+  mapCharacterArcs,
+  getCharacterArcs,
+  getSeasonCharacterArcs,
+} from "../emotional/arcs.js";
+import { scoreSeason } from "../emotional/season.js";
 import { parseFountain } from "../screenplay/fountain.js";
 import { scoreScene } from "../emotional/score.js";
 import {
@@ -98,7 +104,7 @@ export default async function emotionalRoutes(app: FastifyInstance) {
     await assertProjectMember(user.id, script.project_id);
 
     const body = z
-      .object({ useLLM: z.boolean().optional() })
+      .object({ useLLM: z.boolean().optional(), notes: z.string().optional() })
       .parse(req.body ?? {});
 
     return scoreScript({
@@ -107,7 +113,98 @@ export default async function emotionalRoutes(app: FastifyInstance) {
       fountain: script.fountain ?? "",
       useLLM: body.useLLM,
       userId: user.id,
+      notes: body.notes?.trim() || undefined,
     });
+  });
+
+  // Batched scoring so the client can show real progress + run a Quick pass
+  // (heuristic) or Deep pass (LLM only on weak scenes via deepThreshold).
+  app.post("/scripts/:scriptId/emotional/score-batch", async (req) => {
+    const user = await requireUser(req);
+    const { scriptId } = req.params as { scriptId: string };
+    const { data: script, error } = await supabase
+      .from("scripts")
+      .select("project_id, fountain")
+      .eq("id", scriptId)
+      .single();
+    if (error) throw error;
+    await assertProjectMember(user.id, script.project_id);
+    const body = z
+      .object({
+        from: z.number().int().min(0),
+        to: z.number().int().min(1),
+        orders: z.array(z.number().int().positive()).optional(),
+        useLLM: z.boolean().optional(),
+        deepThreshold: z.number().min(0).max(1).optional(),
+        budget: z.number().min(0).optional(),
+        notes: z.string().optional(),
+      })
+      .parse(req.body ?? {});
+    return scoreScriptRange({
+      projectId: script.project_id,
+      scriptId,
+      fountain: script.fountain ?? "",
+      fromIndex: body.from,
+      toIndex: body.to,
+      orders: body.orders,
+      useLLM: body.useLLM,
+      deepThreshold: body.deepThreshold,
+      budget: body.budget,
+      userId: user.id,
+    });
+  });
+
+  // --- Character arcs (named starting/current states) ---------------------
+  // GET reads cached arcs (free). POST runs ONE LLM pass to (re)label them —
+  // explicit, writer-triggered, and never rewrites the script.
+  app.get("/scripts/:scriptId/emotional/arcs", async (req) => {
+    const user = await requireUser(req);
+    const { scriptId } = req.params as { scriptId: string };
+    const { data: script, error } = await supabase
+      .from("scripts")
+      .select("project_id")
+      .eq("id", scriptId)
+      .single();
+    if (error) throw error;
+    await assertProjectMember(user.id, script.project_id);
+    return getCharacterArcs(script.project_id, scriptId);
+  });
+
+  app.post("/scripts/:scriptId/emotional/arcs", async (req) => {
+    const user = await requireUser(req);
+    const { scriptId } = req.params as { scriptId: string };
+    const { data: script, error } = await supabase
+      .from("scripts")
+      .select("project_id")
+      .eq("id", scriptId)
+      .single();
+    if (error) throw error;
+    await assertProjectMember(user.id, script.project_id);
+    return mapCharacterArcs({
+      projectId: script.project_id,
+      scriptId,
+      userId: user.id,
+    });
+  });
+
+  // Season-level character arcs (rolled up across all episodes; script_id null).
+  app.get("/projects/:projectId/emotional/season-arcs", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return getSeasonCharacterArcs(projectId);
+  });
+
+  // Season-level EI: aggregate every episode's current script (FREE heuristic
+  // by default) into one episode-tagged scene list for season-wide analysis.
+  app.post("/projects/:projectId/emotional/season-score", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const body = z
+      .object({ useLLM: z.boolean().optional() })
+      .parse(req.body ?? {});
+    return scoreSeason({ projectId, useLLM: body.useLLM });
   });
 
   app.post("/scenes/:sceneId/emotional/score", async (req) => {

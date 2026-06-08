@@ -1,5 +1,6 @@
 import { supabase } from "../db/client.js";
 import { searchMemory } from "../memory/index.js";
+import { buildPriorEpisodeContext } from "./episodes.js";
 import type { AgentContext } from "../agents/types.js";
 import type { AgentRole, WorkflowStageId } from "@toburt/shared";
 
@@ -10,8 +11,11 @@ export async function hydrateContext(args: {
   collaborators: AgentRole[];
   query: string;
   user?: { id: string; name?: string };
+  /** When set (episode-scoped work), earlier episodes are summarized into the
+   *  agent context so later episodes can reference what already happened. */
+  episodeNumber?: number;
 }): Promise<AgentContext> {
-  const { projectId, workflowId, stage, collaborators, query } = args;
+  const { projectId, workflowId, stage, collaborators, query, episodeNumber } = args;
 
   const [{ data: project }, { data: transcript }] = await Promise.all([
     supabase
@@ -27,9 +31,12 @@ export async function hydrateContext(args: {
       .limit(20),
   ]);
 
-  const [canon, drafts] = await Promise.all([
+  const [canon, drafts, priorEpisodes] = await Promise.all([
     searchMemory({ projectId, query, approvedOnly: true, k: 8 }),
     searchMemory({ projectId, query, approvedOnly: false, k: 8 }),
+    episodeNumber != null && episodeNumber > 1
+      ? buildPriorEpisodeContext(projectId, episodeNumber)
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -41,6 +48,7 @@ export async function hydrateContext(args: {
     retrievedDrafts: drafts,
     collaborators,
     transcriptWindow: (transcript ?? []).reverse(),
+    priorEpisodes,
     user: args.user,
   };
 }

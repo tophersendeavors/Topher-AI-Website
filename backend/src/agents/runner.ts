@@ -22,7 +22,7 @@ export async function runAgent<TIn, TOut>(
   agent: Agent<TIn, TOut>,
   input: TIn,
   ctx: AgentContext,
-  opts: { maxToolRounds?: number; temperature?: number } = {}
+  opts: { maxToolRounds?: number; temperature?: number; maxTokens?: number } = {}
 ): Promise<AgentRunResult<TOut>> {
   const inputParse = agent.inputSchema.safeParse(input);
   if (!inputParse.success) {
@@ -63,8 +63,25 @@ export async function runAgent<TIn, TOut>(
   const maxRounds = opts.maxToolRounds ?? 4;
   const toolCalls: Array<{ name: string; input: unknown; output: unknown }> = [];
 
-  let userTurn =
-    "Input:\n```json\n" + JSON.stringify(inputParse.data, null, 2) + "\n```";
+  // The original input — kept verbatim and re-included on every retry/tool
+  // re-prompt so the agent never loses sight of the brief. zod `.object()`
+  // strips unknown keys, so a `critique` field (the user's revision notes)
+  // would be lost; re-attach it so the agent's revision protocol can act on it.
+  const dataForPrompt: Record<string, unknown> = {
+    ...(inputParse.data as Record<string, unknown>),
+  };
+  const rawCritique = (input as { critique?: unknown } | null)?.critique;
+  if (typeof rawCritique === "string" && rawCritique.trim()) {
+    dataForPrompt.critique = rawCritique.trim();
+  }
+  // Same for `userNotes` — the user's priority guidance for a quality check.
+  const rawUserNotes = (input as { userNotes?: unknown } | null)?.userNotes;
+  if (typeof rawUserNotes === "string" && rawUserNotes.trim()) {
+    dataForPrompt.userNotes = rawUserNotes.trim();
+  }
+  const originalInputBlock =
+    "Input:\n```json\n" + JSON.stringify(dataForPrompt, null, 2) + "\n```";
+  let userTurn = originalInputBlock;
 
   let lastResponse: { text: string; raw: unknown; usage?: { input?: number; output?: number } } | null = null;
 
@@ -76,17 +93,65 @@ export async function runAgent<TIn, TOut>(
         { role: "user", content: userTurn },
       ],
       temperature: opts.temperature ?? 0.7,
-      maxTokens: 4096,
+      maxTokens: opts.maxTokens ?? 4096,
     });
     lastResponse = res;
 
+    // Diagnostic: dump the raw LLM text so we can see exactly what the model
+    // said, BEFORE any parsing or coercion. The console line is short; the
+    // full body lands in /tmp/toburt-llm-dumps/<role>-<ts>.json for review
+    // without re-running the LLM.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[agents:${agent.role}] round=${round} model=${agent.model} ` +
+        `usage_in=${res.usage?.input ?? "?"} usage_out=${res.usage?.output ?? "?"} ` +
+        `text_len=${res.text.length}`
+    );
+    try {
+      const fs = await import("node:fs/promises");
+      const dir = "/tmp/toburt-llm-dumps";
+      await fs.mkdir(dir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      await fs.writeFile(
+        `${dir}/${agent.role}-r${round}-${ts}.txt`,
+        res.text,
+        "utf8"
+      );
+    } catch {
+      /* dumping is best-effort */
+    }
+
     let parsed: { tool_calls?: Array<{ name: string; input: unknown }>; result?: unknown };
+    let parseFailed = false;
     try {
       parsed = extractJSON(res.text);
     } catch {
-      // If the model returned plain prose, wrap it as a result so we don't
-      // crash — the agent's outputSchema will reject if it's invalid.
-      parsed = { result: { _raw: res.text } };
+      parseFailed = true;
+      parsed = {};
+    }
+
+    // If the model returned prose with no JSON and we still have retries,
+    // force a retry with an explicit instruction. Don't silently mask it as
+    // a valid empty result — that strips the model's intended content and
+    // leaves downstream stages with nothing to work with.
+    if (parseFailed && round < maxRounds) {
+      userTurn =
+        originalInputBlock +
+        "\n\n" +
+        "Your previous response was not JSON. Reply with ONLY a single JSON " +
+        "object of the shape { \"result\": { ... } } — no prose, no markdown " +
+        "fences, no leading commentary. The `result` object must match the " +
+        "agent's output schema described in the system prompt and brief above.";
+      continue;
+    }
+
+    // Final round and the model still won't produce JSON: fail loudly instead
+    // of returning a silently-empty validated object.
+    if (parseFailed) {
+      throw new Error(
+        `Agent ${agent.role} did not return JSON after ${maxRounds + 1} attempts. ` +
+          `Last response (truncated): ${truncate(res.text, 200)}`
+      );
     }
 
     const requested = parsed.tool_calls ?? [];
@@ -114,11 +179,16 @@ export async function runAgent<TIn, TOut>(
           });
         }
       }
-      userTurn = `Tool results:\n\`\`\`json\n${JSON.stringify(
-        toolResults,
-        null,
-        2
-      )}\n\`\`\`\n\nNow produce your final \`result\` JSON.`;
+      // CRITICAL: re-include the original input on every tool round-trip.
+      // Otherwise the model only sees "tool results" and forgets the brief
+      // (slugline, characters, etc.), which causes it to default to whatever
+      // it remembers from retrieved canon. Keeping the input present each
+      // round is the only reliable way to make the brief binding.
+      userTurn =
+        originalInputBlock +
+        "\n\n" +
+        `Tool results:\n\`\`\`json\n${JSON.stringify(toolResults, null, 2)}\n\`\`\`\n\n` +
+        "Now produce your final `result` JSON using the input above as the binding brief.";
       continue;
     }
 
@@ -134,8 +204,10 @@ export async function runAgent<TIn, TOut>(
         .map((i) => `- ${i.path.join(".") || "(root)"}: ${i.message}`)
         .join("\n");
       userTurn =
+        originalInputBlock +
+        "\n\n" +
         `Your previous \`result\` failed schema validation:\n${issues}\n\n` +
-        `Return a corrected \`result\` JSON only. Do not include tool_calls.`;
+        "Return a corrected `result` JSON only, matching the input above. Do not include tool_calls.";
       continue;
     }
 
@@ -143,7 +215,23 @@ export async function runAgent<TIn, TOut>(
     let validationWarnings: string[] = [];
 
     if (strict.success) {
-      output = strict.data;
+      // Zod's default strips unknown fields. Merge them back in so stages
+      // can recover when the model emitted a slightly different shape than
+      // the schema expects (e.g. flattened fields, alternate field names).
+      if (
+        parsed.result &&
+        typeof parsed.result === "object" &&
+        !Array.isArray(parsed.result) &&
+        strict.data &&
+        typeof strict.data === "object"
+      ) {
+        output = {
+          ...(parsed.result as Record<string, unknown>),
+          ...(strict.data as Record<string, unknown>),
+        } as TOut;
+      } else {
+        output = strict.data;
+      }
     } else {
       // Best-effort: coerce. Fills `.default()`s, leaves extras intact,
       // and replaces unparseable nested values with the closest legal

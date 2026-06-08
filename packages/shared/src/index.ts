@@ -3,3 +3,7 @@ export * from "./workflow";
 export * from "./db";
 export * from "./screenplay";
 export * from "./emotional";
+export * from "./emotionalAnalysis";
+export * from "./turnDetection";
+export * from "./naming";
+export * from "./projectTypeConfig";

@@ -11,6 +11,19 @@ const SCENE_HEADING_RE = /^(?:\.|INT\.?|EXT\.?|EST\.?|INT\.?\/EXT\.?|I\/E\.?)\b.
 const TRANSITION_RE = /^(?:[A-Z' ]+ TO:|FADE OUT\.?|CUT TO BLACK\.?)$/;
 const CHARACTER_RE = /^[A-Z][A-Z0-9 .'_-]+(\s*\(.+\))?$/;
 
+/**
+ * The first scene heading (slugline) in a chunk of Fountain — used to keep a
+ * scene's stored slugline metadata in sync with the heading actually written
+ * in its body. Returns null if no heading is present.
+ */
+export function firstSlugline(text: string): string | null {
+  for (const raw of (text ?? "").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line && SCENE_HEADING_RE.test(line)) return line.replace(/^\./, "").trim();
+  }
+  return null;
+}
+
 export function parseFountain(text: string): ParsedScreenplay {
   const lines = text.split(/\r?\n/);
   const elements: ScreenplayElement[] = [];

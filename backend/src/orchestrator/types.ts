@@ -10,6 +10,15 @@ export interface StageContext {
   previousArtifacts: Record<WorkflowStageId, unknown>;
   /** Fresh user prompt for this stage (optional). */
   prompt?: string;
+  /**
+   * Revision notes from a rejected approval. When set, the stage should pass
+   * these to its agent as a `critique` so the regeneration addresses them.
+   */
+  revisionNote?: string;
+  /** Set when this workflow is episode-scoped (developing one episode). */
+  episodeId?: string;
+  /** The episode's number within the season (for stage targeting). */
+  episodeNumber?: number;
 }
 
 export interface StageResult<T = unknown> {

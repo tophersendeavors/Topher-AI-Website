@@ -20,6 +20,14 @@ export function commonHeader(role: string, ctx: AgentContext): string {
     "If the user input includes a `critique` field, the Showrunner asked you",
     "to revise. Treat the critique as binding. Do not defend your prior",
     "output — change it. Keep what was working, fix what was named.",
+    "",
+    "## User notes protocol",
+    "If the user input includes a `userNotes` field, the user gave PRIORITY",
+    "guidance for this pass. Treat it as the most important thing to look at.",
+    "Address it first, weight it heavily, and — when your output has room for",
+    "it — state briefly what you checked and how you applied their notes.",
+    "Never ignore userNotes; never auto-rewrite the script because of them —",
+    "report findings and suggestions only unless explicitly asked to rewrite.",
   ];
   if (ctx.showrunnerNotes) {
     lines.push(``, `# Showrunner notes (sticky vision):`, ctx.showrunnerNotes);
@@ -53,10 +61,29 @@ function truncate(s: string, n: number): string {
   return s.slice(0, n - 1) + "…";
 }
 
+export function renderPriorEpisodes(ctx: AgentContext): string {
+  const eps = ctx.priorEpisodes ?? [];
+  if (!eps.length) return "";
+  return [
+    "## Previously, this season (earlier episodes — honor this continuity)",
+    ...eps.map((e) =>
+      [
+        `Episode ${e.number} — "${e.title}": ${e.logline}`,
+        e.recap ? `  Recap: ${e.recap}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    ),
+  ].join("\n");
+}
+
 export function buildContextBlock(ctx: AgentContext): string {
   return [
+    renderPriorEpisodes(ctx),
     renderMemory("Approved canon (top hits)", ctx.retrievedCanon),
     renderMemory("Working drafts (top hits)", ctx.retrievedDrafts),
     renderTranscript(ctx),
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }

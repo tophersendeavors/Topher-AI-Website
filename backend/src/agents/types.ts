@@ -8,6 +8,13 @@ import type { WorkflowStageId } from "@toburt/shared";
 
 export type { AgentRole };
 
+export interface PriorEpisodeContext {
+  number: number;
+  title: string;
+  logline: string;
+  recap: string;
+}
+
 export interface AgentContext {
   projectId: string;
   workflowId?: string;
@@ -17,6 +24,8 @@ export interface AgentContext {
   retrievedDrafts: MemoryHit[];
   collaborators: AgentRole[];
   transcriptWindow: RoomMessage[];
+  /** Summaries of earlier episodes (set on episode-scoped hydration). */
+  priorEpisodes?: PriorEpisodeContext[];
   user?: { id: string; name?: string };
 }
 

@@ -1,15 +1,19 @@
 import { supabase } from "../db/client.js";
 import { nextStage } from "./graph.js";
 import { getStage } from "./stages/index.js";
+import { materializeEpisodesFromArc, loadSeasonFoundationArtifacts } from "./episodes.js";
 import type { Stage, StageContext } from "./types.js";
-import type { WorkflowStageId, WorkflowStageStatus } from "@toburt/shared";
+import type { SeasonArc, WorkflowStageId, WorkflowStageStatus } from "@toburt/shared";
 
 /**
  * Execute the current stage of a workflow. Persists artifact + checkpoint and
  * advances the workflow status. Approval-gated stages pause and require
  * `resumeWorkflow` after approval.
  */
-export async function advanceWorkflow(workflowId: string, opts: { prompt?: string; userId?: string } = {}) {
+export async function advanceWorkflow(
+  workflowId: string,
+  opts: { prompt?: string; userId?: string; revisionNote?: string } = {}
+) {
   const { data: wf, error } = await supabase
     .from("workflows")
     .select("*")
@@ -34,8 +38,23 @@ export async function advanceWorkflow(workflowId: string, opts: { prompt?: strin
   await setStatus(workflowId, "running");
 
   // Load previous artifacts (top revision per stage_id) so the runner has the
-  // full context for this stage.
-  const previousArtifacts = await loadAllArtifacts(workflowId);
+  // full context for this stage. For an EPISODE workflow, also merge in the
+  // Season workflow's foundation (treatment + season_arc) so episode stages can
+  // read them — the episode workflow's own artifacts take precedence.
+  let previousArtifacts = await loadAllArtifacts(workflowId);
+  let episodeId: string | undefined;
+  let episodeNumber: number | undefined;
+  if (wf.episode_id) {
+    const foundation = await loadSeasonFoundationArtifacts(wf.project_id);
+    previousArtifacts = { ...foundation, ...previousArtifacts };
+    episodeId = wf.episode_id as string;
+    const { data: ep } = await supabase
+      .from("episodes")
+      .select("number")
+      .eq("id", wf.episode_id)
+      .maybeSingle();
+    episodeNumber = (ep?.number as number) ?? undefined;
+  }
 
   const ctx: StageContext = {
     projectId: wf.project_id,
@@ -44,6 +63,9 @@ export async function advanceWorkflow(workflowId: string, opts: { prompt?: strin
     user: opts.userId ? { id: opts.userId } : undefined,
     previousArtifacts,
     prompt: opts.prompt,
+    revisionNote: opts.revisionNote,
+    episodeId,
+    episodeNumber,
   };
 
   let result;
@@ -179,7 +201,29 @@ export async function decideApproval(
       .select("*")
       .eq("id", app.workflow_id)
       .single();
-    if (wf && stageId) {
+    if (wf && stageId === "season_arc" && !wf.episode_id) {
+      // Season foundation approved: materialize episodes from the arc and STOP
+      // the Season workflow here. Each episode is developed in its own
+      // episode-scoped workflow (on demand), not by advancing this one.
+      const { data: art } = await supabase
+        .from("workflow_stage_artifacts")
+        .select("body")
+        .eq("workflow_id", wf.id)
+        .eq("stage_id", "season_arc")
+        .order("revision", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const arc = art?.body as SeasonArc | undefined;
+      if (arc) {
+        try {
+          await materializeEpisodesFromArc(wf.project_id, arc);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error("[season_arc] episode materialization failed", e);
+        }
+      }
+      await setStatus(wf.id, "completed", "season_arc");
+    } else if (wf && stageId) {
       const next = nextStage(stageId);
       if (next) {
         await supabase

@@ -9,9 +9,57 @@ import type { ParsedScreenplay, ScreenplayElement } from "@toburt/shared";
  * Returns a Buffer (Uint8Array) ready to send as `application/pdf`.
  */
 export function exportPDF(parsed: ParsedScreenplay): Uint8Array {
-  const lines: { text: string; indent: number; bold?: boolean; centered?: boolean }[] = [];
+  const lines: { text: string; indent: number; bold?: boolean; centered?: boolean; pageBreak?: boolean }[] = [];
 
-  if (parsed.title) {
+  // -------- TITLE PAGE --------
+  // When the full TitlePageMeta is present, lay it out as a proper title
+  // page (centered series title, episode credit, written/created credits,
+  // draft + date, contact / studio / copyright at the bottom) followed by
+  // a page break so the script body starts on its own page.
+  const tp = parsed.titlePage;
+  if (tp) {
+    // Vertical air at top of title page
+    for (let i = 0; i < 14; i++) lines.push({ text: "", indent: 0 });
+    lines.push({ text: tp.seriesTitle.toUpperCase(), indent: 0, bold: true, centered: true });
+    if (tp.episodeCredit) {
+      lines.push({ text: "", indent: 0 });
+      lines.push({ text: tp.episodeCredit, indent: 0, centered: true });
+    }
+    // Air, then "Written by"
+    for (let i = 0; i < 6; i++) lines.push({ text: "", indent: 0 });
+    if (tp.writers?.length) {
+      lines.push({ text: "Written by", indent: 0, centered: true });
+      lines.push({ text: "", indent: 0 });
+      lines.push({ text: tp.writers.join(", "), indent: 0, centered: true });
+    }
+    if (tp.creators?.length) {
+      lines.push({ text: "", indent: 0 });
+      lines.push({ text: "", indent: 0 });
+      lines.push({ text: `Created by ${tp.creators.join(", ")}`, indent: 0, centered: true });
+    }
+    if (tp.basedOn) {
+      lines.push({ text: "", indent: 0 });
+      lines.push({ text: `Based on ${tp.basedOn}`, indent: 0, centered: true });
+    }
+    // Bottom of page block
+    for (let i = 0; i < 10; i++) lines.push({ text: "", indent: 0 });
+    if (tp.draftLabel) lines.push({ text: tp.draftLabel, indent: 0, centered: true });
+    if (tp.draftDate) lines.push({ text: tp.draftDate, indent: 0, centered: true });
+    if (tp.includeContact !== false) {
+      if (tp.studio) {
+        lines.push({ text: "", indent: 0 });
+        lines.push({ text: tp.studio, indent: 0, centered: true });
+      }
+      if (tp.contact) lines.push({ text: tp.contact, indent: 0, centered: true });
+    }
+    if (tp.copyright) {
+      lines.push({ text: "", indent: 0 });
+      lines.push({ text: tp.copyright, indent: 0, centered: true });
+    }
+    // Force page break — body starts fresh.
+    lines.push({ text: "", indent: 0, pageBreak: true });
+  } else if (parsed.title) {
+    // Backwards-compat fallback (older callers that don't pass titlePage).
     lines.push({ text: "", indent: 0 });
     lines.push({ text: parsed.title.toUpperCase(), indent: 0, bold: true, centered: true });
     if (parsed.authors?.length) {
@@ -45,8 +93,18 @@ export function exportPDF(parsed: ParsedScreenplay): Uint8Array {
   }
 
   for (const ln of lines) {
+    if (ln.pageBreak) {
+      newPage();
+      continue;
+    }
     if (y < 72) newPage();
-    const x = LEFT + ln.indent;
+    // Centered lines: compute approximate text width in Courier 12pt (each
+    // char ≈ 7.2pt) and position from the page midpoint.
+    let x = LEFT + ln.indent;
+    if (ln.centered) {
+      const w = ln.text.length * 7.2;
+      x = Math.max(LEFT, Math.floor((PAGE_W - w) / 2));
+    }
     const text = escapePdf(ln.text);
     body += `BT /${COURIER} 12 Tf ${x} ${y} Td (${text}) Tj ET\n`;
     y -= LINE_H;

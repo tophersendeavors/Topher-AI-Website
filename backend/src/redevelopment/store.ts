@@ -78,6 +78,12 @@ export async function createPass(args: {
   projectId: string;
   title: string;
   createdBy: string;
+  /** Which redev template the new pass runs against. Defaults to
+   *  `"blank"` so new projects don't inherit SELVAJE assumptions.
+   *  Existing SELVAJE passes (pre-refactor) have no value stored and
+   *  are resolved as `"selvaje"` by `resolveActiveTemplate` for
+   *  backward-compat. */
+  redevTemplateId?: string;
 }): Promise<RedevelopmentPass> {
   const meta = await loadProjectMeta(args.projectId);
   const passes = readPasses(meta);
@@ -87,6 +93,7 @@ export async function createPass(args: {
     createdAt: new Date().toISOString(),
     createdBy: args.createdBy,
     status: "in_progress",
+    redevTemplateId: args.redevTemplateId ?? "blank",
     brief: null,
     characterBibles: [],
     protocolModules: [],

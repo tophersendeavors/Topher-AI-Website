@@ -87,10 +87,20 @@ export interface RedevBrief {
    *  SELVAJE: "The body reveals what the mind avoids. People lie in
    *  behavior, not speech. Attack the strategy, not the wound." */
   protocolPhilosophy?: string;
-  /** Architectural decision about a high-leverage character that
-   *  EVERY downstream agent must respect. For SELVAJE: "Solano is not
-   *  a fraud. The Protocol actually works. The danger is truth, not
-   *  deception. Solano is unsettling because she is certain." */
+  /** Architectural decision about a high-leverage character / authority
+   *  figure / system anchor that EVERY downstream agent must respect.
+   *  Generic across templates. For SELVAJE: "Solano is not a fraud. The
+   *  Protocol actually works. The danger is truth, not deception."
+   *
+   *  Field name was originally `solanoRule`. Reads use
+   *  `getCharacterAnchorRule(brief)` (in `briefCompat.ts`) which prefers
+   *  `characterAnchorRule` and falls back to `solanoRule` for
+   *  pre-refactor data. Writes should set BOTH for now until every
+   *  call site migrates. */
+  characterAnchorRule?: string;
+  /** @deprecated use `characterAnchorRule`. Kept for backward-compat
+   *  reads of approved SELVAJE passes. Do not introduce new readers
+   *  of this field directly — use `getCharacterAnchorRule(brief)`. */
   solanoRule?: string;
   /** Tones/textures the show must NOT drift into. Used by every
    *  generation prompt as a hard forbidden list (e.g. hypnosis, magic,
@@ -620,6 +630,13 @@ export interface RedevelopmentPass {
   createdAt: string;
   createdBy: string;
   status: "in_progress" | "approved" | "abandoned";
+  /** Which RedevProjectTemplate this pass runs against. Optional for
+   *  backward-compat: passes created before the template-framework
+   *  refactor have no value and are resolved as `"selvaje"` (since
+   *  SELVAJE was the only pre-existing project). Use
+   *  `resolveActiveTemplate(pass)` from `templates/index.ts` rather
+   *  than reading this field directly. */
+  redevTemplateId?: string | null;
   brief: RedevBrief | null;
   characterBibles: RedevCharacterBible[];
   protocolModules: RedevProtocolModule[];

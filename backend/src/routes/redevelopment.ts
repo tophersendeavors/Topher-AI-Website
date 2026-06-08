@@ -111,14 +111,32 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     await assertProjectMember(user.id, id);
     const body = z
-      .object({ title: z.string().min(1).max(120) })
+      .object({
+        title: z.string().min(1).max(120),
+        redevTemplateId: z.string().min(1).max(64).optional(),
+      })
       .parse(req.body ?? {});
     const pass = await createPass({
       projectId: id,
       title: body.title,
       createdBy: user.id,
+      redevTemplateId: body.redevTemplateId,
     });
     return pass;
+  });
+
+  // GET /templates — list available redev templates so the project-
+  // create UI can render the "Start from template" picker.
+  app.get("/redevelopment/templates", async (req) => {
+    await requireUser(req);
+    // Import locally so backend doesn't pay the cost when this route is unused.
+    const { REDEV_TEMPLATES } = await import("../redevelopment/templates/index.js");
+    return REDEV_TEMPLATES.map((t) => ({
+      templateId: t.templateId,
+      templateName: t.templateName,
+      templateTagline: t.templateTagline,
+      projectFormat: t.projectFormat,
+    }));
   });
 
   app.get("/projects/:id/redevelopment/:passId", async (req) => {
@@ -1015,12 +1033,17 @@ export default async function redevelopmentRoutes(app: FastifyInstance) {
           "R5 Pilot Strategy must be approved before R6 guardrails"
         );
       }
+      const { resolveActiveTemplate, getR6Overlay } = await import(
+        "../redevelopment/templates/index.js"
+      );
+      const template = resolveActiveTemplate(pass);
       const bundle = generateR6Guardrails({
         brief: pass.brief,
         characterBibles: pass.characterBibles,
         protocolModules: pass.protocolModules,
         seasonArc: pass.seasonArc?.episodes ?? [],
         pilotStrategy: pass.pilotStrategy,
+        r6Overlay: getR6Overlay(template),
       });
       return { bundle };
     }

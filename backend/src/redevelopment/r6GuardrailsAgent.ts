@@ -27,150 +27,29 @@ import type {
   RedevR6GuardrailsBundle,
   RedevSeasonArcEpisode,
 } from "./types.js";
+import type { RedevTemplateR6Overlay } from "./templates/types.js";
 
-/** SELVAJE Paul Beaumont contract — the showrunner-locked text from
- *  the directive. Used when the project reads as SELVAJE and one of
- *  the approved bibles is Paul Beaumont. */
-const SELVAJE_PAUL: RedevR6Guardrail = {
-  characterName: "Paul Beaumont",
-  plants: [
-    "phone behavior",
-    "notification-chime body response",
-    "driving avoidance",
-    "hands always doing something for someone else",
-    "caretaking as motion",
-  ],
-  doNotReveal: [
-    "texting",
-    "accident responsibility",
-    "timestamp evidence",
-    "innocent driver / wrongful blame",
-    "Paul's guilt",
-  ],
-  doNotDo: [
-    "imply guilt through dialogue or obvious reaction shots",
-    "make the phone feel like a plot clue",
-    "have anyone confront Paul about the accident",
-    "make Paul visibly suspicious",
-  ],
-  executionRule:
-    "Execute unease only. Plant the body response, not the explanation.",
-};
-
-/** SELVAJE per-character overlays. Each entry adds locked plant /
- *  doNotReveal / doNotDo language on top of whatever the generic
- *  deriver produced. Use `mergeOverlay()` so we don't lose any of the
- *  derived items. */
-const SELVAJE_OVERLAYS: Record<string, Partial<RedevR6Guardrail>> = {
-  "paul beaumont": SELVAJE_PAUL,
-  "margot ellison": {
-    plants: [
-      "analytical reading of the room before she sits",
-      "professional / diagnostic identity made visible",
-      "intellectualizing as her body's first defense",
-    ],
-    doNotReveal: [
-      "the daughter's death (only Margot's avoidance shows)",
-      "Margot's specific guilt or self-narrative about her daughter",
-    ],
-    doNotDo: [
-      "have anyone ask Margot about her daughter",
-      "let Margot articulate her wound in dialogue",
-    ],
-    executionRule:
-      "Plant her analytical avoidance. The wound is internal architecture; do not expose.",
-  },
-  "nadia reyes": {
-    plants: [
-      "an attentive interest in the archive / records / room layouts",
-      "the specific shape of someone she's looking for (without naming Elena)",
-      "a learned smallness — careful in shared space",
-    ],
-    doNotReveal: [
-      "that Elena is Nadia's sister",
-      "why Nadia came to Selvaje",
-      "any explicit search-mission framing",
-    ],
-    doNotDo: [
-      "make Nadia explicitly question staff about Elena",
-      "stage an 'I'm looking for someone' beat in the pilot",
-      "let any character name Nadia's relationship to Elena",
-    ],
-    executionRule:
-      "Plant the searching body. The relationship reveal is later-season.",
-  },
-  "claire beaumont": {
-    plants: [
-      "a small private ritual that reads as memorializing without naming what",
-      "an instinctive caretaking gesture toward Paul (the kind that wears them both down)",
-      "the muscle memory of someone who has practiced grief",
-    ],
-    doNotReveal: [
-      "Marcus by name or by direct reference",
-      "the specific loss Claire is carrying",
-      "the architecture of her marriage with Paul",
-    ],
-    doNotDo: [
-      "let Claire deliver a grief speech",
-      "make the ritual symbolic or magical — keep it observable",
-    ],
-    executionRule:
-      "Plant the practiced grief. Do not let her articulate it.",
-  },
-  "dean palter": {
-    plants: [
-      "the easy charisma of someone who has been admired",
-      "an instinctive deflection toward charm whenever the room turns serious",
-      "a body that is performing health, not having it",
-    ],
-    doNotReveal: [
-      "what Dean's empire actually did or to whom",
-      "the architecture of his shame",
-    ],
-    doNotDo: [
-      "let Dean confess to anything",
-      "frame Dean as a villain in the pilot — his shame surfaces later",
-    ],
-    executionRule:
-      "Plant the performance of success. The shame surfaces later when the Protocol pressures it.",
-  },
-  "dr. izel solano": {
-    plants: [
-      "unsettling certainty — she is the only person in the room not lying",
-      "Protocol-issued language and process visible on screen",
-      "a refusal to perform reassurance",
-    ],
-    doNotReveal: [
-      "the full reach of the Protocol",
-      "Solano's own arc or backstory",
-    ],
-    doNotDo: [
-      "frame Solano as ambiguous, hiding, manipulating, or fraudulent",
-      "let anyone successfully read her",
-      "give her a 'reveal' beat in the pilot",
-    ],
-    executionRule:
-      "She is unsettling because she is certain, not because she is evil. The Protocol works.",
-  },
-};
-
-/** The SELVAJE locked global rule — used when the pass reads as SELVAJE. */
-const SELVAJE_GLOBAL_RULE =
-  "Rewrite the pilot to plant avoidance behaviors, not expose wounds. " +
-  "No flashbacks, no confession circles, no therapy exposition, no cheap " +
-  "thriller twist, no Solano-as-fraud framing, no Paul accident reveal, " +
-  "no Elena-sister reveal. The pilot's engine is Surrender. End with the " +
-  "blended Option A + C hook: bodies after Surrender, then the transparent " +
-  "case, then Paul's body responding to the notification chime.";
-
-/** Detect SELVAJE-shaped passes — the redev brief uses the Solano Rule
- *  + Protocol philosophy fields, which other projects won't have. */
-function isSelvaje(brief: RedevBrief): boolean {
-  return (
-    !!brief.solanoRule?.trim() &&
-    !!brief.protocolPhilosophy?.trim() &&
-    /solano/i.test(brief.solanoRule)
+// Template-driven overlay accessor — looks up a character's contract in
+// the active template's R6 overlay (if the template declared one).
+// SELVAJE supplies a full overlay via `SELVAJE_R6_OVERLAY` in
+// `templates/selvaje.ts`. Blank / new templates supply no overlay and
+// the generic deriver runs alone.
+function lookupTemplateContract(
+  overlay: RedevTemplateR6Overlay | null,
+  characterName: string
+): Partial<RedevR6Guardrail> | undefined {
+  if (!overlay) return undefined;
+  const key = characterName.toLowerCase();
+  const match = overlay.characterContracts.find(
+    (c) => c.characterName.toLowerCase() === key
   );
+  if (!match) return undefined;
+  return {
+    plants: match.plants,
+    doNotReveal: match.doNotReveal,
+    doNotDo: match.doNotDo,
+    executionRule: match.executionRule,
+  };
 }
 
 /** Per approved bible, build the set of name-token aliases (≥4 chars)
@@ -453,23 +332,20 @@ export interface GenerateR6GuardrailsArgs {
   protocolModules: RedevProtocolModule[];
   seasonArc: RedevSeasonArcEpisode[];
   pilotStrategy: RedevPilotStrategy;
+  /** Active project template's R6 overlay (per-character contracts +
+   *  locked global rule + architectural plants). When `null`, the
+   *  generic deriver runs alone — used by `blank` and any new template
+   *  that hasn't opted into R6 overlays. SELVAJE supplies the overlay
+   *  via `SELVAJE_R6_OVERLAY` in `templates/selvaje.ts`. */
+  r6Overlay: RedevTemplateR6Overlay | null;
 }
 
-/** SELVAJE architectural globalPlants overlay. Concrete pilot-level
- *  plants that aren't owned by any single character — preserved here
- *  so they don't pollute the per-character contracts. */
-const SELVAJE_ARCHITECTURAL_PLANTS: string[] = [
-  "Archive room — present in EP01 but not yet explained; later-season payoff.",
-  "Transparent case in the common room — architectural, not symbolic. Surrendered objects live here visibly.",
-  "Photograph wall — if present in the existing pilot, preserve it as a watching surface.",
-  "Surrender architecture: each guest visibly relinquishes their specific avoidance instrument; the drama is what the body does afterward.",
-];
-
-/** Compose a full R6 guardrails bundle from approved R1-R5. */
+/** Compose a full R6 guardrails bundle from approved R1-R5 + the
+ *  active template's R6 overlay. */
 export function generateR6Guardrails(
   args: GenerateR6GuardrailsArgs
 ): RedevR6GuardrailsBundle {
-  const selvaje = isSelvaje(args.brief);
+  const { r6Overlay } = args;
   const approved = args.characterBibles.filter((b) => !!b.approvedAt);
   const ownerMap = buildOwnerMap(args.characterBibles);
 
@@ -480,8 +356,7 @@ export function generateR6Guardrails(
       args.brief,
       ownerMap
     );
-    if (!selvaje) return base;
-    const overlay = SELVAJE_OVERLAYS[bible.characterName.toLowerCase()];
+    const overlay = lookupTemplateContract(r6Overlay, bible.characterName);
     return overlay ? mergeOverlay(base, overlay) : base;
   });
 
@@ -513,12 +388,12 @@ export function generateR6Guardrails(
   const pilotItems = rawPilotItems.map((item) =>
     neutralizeAllCapsCharacterLabels(item, ownerMap)
   );
-  const globalPlants = selvaje
-    ? dedupeNonEmpty([...SELVAJE_ARCHITECTURAL_PLANTS, ...pilotItems])
+  const globalPlants = r6Overlay
+    ? dedupeNonEmpty([...r6Overlay.architecturalPlants, ...pilotItems])
     : dedupeNonEmpty(pilotItems);
 
-  const globalRule = selvaje
-    ? SELVAJE_GLOBAL_RULE
+  const globalRule = r6Overlay
+    ? r6Overlay.globalRule
     : deriveGenericGlobalRule(args.brief, args.pilotStrategy);
 
   return {

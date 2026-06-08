@@ -18,6 +18,8 @@ import {
   type RedevR6Guardrail,
   type RedevR6GuardrailsBundle,
   type RedevR6RewriteScenePlan,
+  type RedevR7PolishItem,
+  type RedevR7PolishPlan,
 } from "./types.js";
 import { normalizeR6Guardrails } from "./types.js";
 
@@ -652,6 +654,195 @@ export async function approveR6Guardrails(args: {
   return passes[ix];
 }
 
+// ============================================================================
+// R7 Pilot Polish Pass (plan-only for now; apply ships next)
+// ============================================================================
+
+export async function setR7PolishPlan(args: {
+  projectId: string;
+  passId: string;
+  items: RedevR7PolishItem[];
+  approachSummary: string;
+  priorScriptId: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const prior = passes[ix].r7Polish;
+  // Preserve plan-approval only if the structural payload is unchanged.
+  const sameStructure =
+    !!prior &&
+    canonicalize({ items: prior.items, approachSummary: prior.approachSummary }) ===
+      canonicalize({ items: args.items, approachSummary: args.approachSummary });
+  const next: RedevR7PolishPlan = {
+    priorScriptId: args.priorScriptId,
+    approachSummary: args.approachSummary,
+    items: args.items,
+    planApprovedAt: sameStructure ? prior?.planApprovedAt ?? null : null,
+    // Preserve any downstream (Pass 2) state if present.
+    polishedDraftText: prior?.polishedDraftText ?? null,
+    polishedDraftAt: prior?.polishedDraftAt ?? null,
+    changeNotes: prior?.changeNotes ?? [],
+    promotedScriptId: prior?.promotedScriptId ?? null,
+    promotedDraftNumber: prior?.promotedDraftNumber ?? null,
+    approvedAt: prior?.approvedAt ?? null,
+  };
+  passes[ix].r7Polish = next;
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+export async function approveR7PolishPlan(args: {
+  projectId: string;
+  passId: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const plan = passes[ix].r7Polish;
+  if (!plan || !plan.items || plan.items.length === 0) {
+    throw new Error("no polish plan to approve — generate one first");
+  }
+  passes[ix].r7Polish = {
+    ...plan,
+    planApprovedAt: new Date().toISOString(),
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+// ----- R7 Pass 2 (apply) ----------------------------------------------
+
+export async function setR7Pass2Draft(args: {
+  projectId: string;
+  passId: string;
+  polishedFountain: string;
+}): Promise<RedevelopmentPass> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const prior = passes[ix].r7Polish;
+  if (!prior) {
+    throw new Error("cannot set R7 Pass 2 draft — no R7 polish plan in pass");
+  }
+  if (!prior.planApprovedAt) {
+    throw new Error(
+      "R7 polish plan must be APPROVED before applying Pass 2"
+    );
+  }
+  passes[ix].r7Polish = {
+    ...prior,
+    polishedDraftText: args.polishedFountain,
+    polishedDraftAt: new Date().toISOString(),
+    // A fresh apply pass drops any prior final-draft approval.
+    approvedAt: null,
+    promotedScriptId: prior.promotedScriptId ?? null,
+    promotedDraftNumber: prior.promotedDraftNumber ?? null,
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+  return passes[ix];
+}
+
+/** Promote the R7-polished draft to a NEW `scripts` row (Draft N+1).
+ *  Mirrors `promoteR6Pass2Draft` — never touches the existing Draft N
+ *  beyond setting `current = false`. */
+export async function promoteR7Pass2Draft(args: {
+  projectId: string;
+  passId: string;
+  approvedBy: string;
+}): Promise<{
+  pass: RedevelopmentPass;
+  scriptId: string;
+  draftNumber: number;
+}> {
+  const meta = await loadProjectMeta(args.projectId);
+  const passes = readPasses(meta);
+  const ix = passes.findIndex((p) => p.id === args.passId);
+  if (ix < 0) throw new Error("pass not found");
+  const plan = passes[ix].r7Polish;
+  if (!plan || !plan.polishedDraftText) {
+    throw new Error(
+      "no R7 polished draft to approve — apply the polish first"
+    );
+  }
+  if (!plan.planApprovedAt) {
+    throw new Error(
+      "R7 plan must be approved before promoting the polished draft"
+    );
+  }
+
+  const { data: eps, error: epErr } = await supabase
+    .from("episodes")
+    .select("id, number, title, project_id")
+    .eq("project_id", args.projectId)
+    .order("number", { ascending: true })
+    .limit(1);
+  if (epErr) throw new Error(`load episode failed: ${epErr.message}`);
+  const ep = eps?.[0];
+  if (!ep) throw new Error("no EP01 episode found for this project");
+
+  await supabase
+    .from("scripts")
+    .update({ current: false })
+    .eq("project_id", args.projectId)
+    .eq("episode_id", ep.id)
+    .eq("current", true);
+
+  const { data: priorScripts } = await supabase
+    .from("scripts")
+    .select("draft_number")
+    .eq("project_id", args.projectId)
+    .eq("episode_id", ep.id)
+    .order("draft_number", { ascending: false })
+    .limit(1);
+  const nextDraft =
+    priorScripts && priorScripts.length > 0
+      ? ((priorScripts[0].draft_number as number) ?? 0) + 1
+      : 1;
+
+  const title = `Episode ${ep.number} — ${ep.title ?? "Untitled"} (R7 polish)`;
+
+  const { data: newScript, error: insertErr } = await supabase
+    .from("scripts")
+    .insert({
+      project_id: args.projectId,
+      episode_id: ep.id,
+      title,
+      draft_number: nextDraft,
+      current: true,
+      fountain: plan.polishedDraftText,
+      metadata: {
+        source: "r7_pass2_polish",
+        priorScriptId: plan.priorScriptId,
+        redevelopmentPassId: args.passId,
+        promotedAt: new Date().toISOString(),
+        promotedBy: args.approvedBy,
+        polishItemCount: plan.items.length,
+      },
+    })
+    .select("*")
+    .single();
+  if (insertErr) throw new Error(`promote failed: ${insertErr.message}`);
+  if (!newScript) throw new Error("promote failed: no script returned");
+
+  passes[ix].r7Polish = {
+    ...plan,
+    approvedAt: new Date().toISOString(),
+    promotedScriptId: newScript.id as string,
+    promotedDraftNumber: nextDraft,
+  };
+  await saveProjectMeta(args.projectId, writePasses(meta, passes));
+
+  return {
+    pass: passes[ix],
+    scriptId: newScript.id as string,
+    draftNumber: nextDraft,
+  };
+}
+
 /** Key-order-independent canonical form (matches the routes helper).
  *  Used here so set-seasonArc can detect "structurally same payload"
  *  even when Postgres jsonb and zod produce different key orders. */
@@ -694,6 +885,12 @@ function isStageApproved(pass: RedevelopmentPass, stage: RedevStageKey): boolean
       return !!pass.pilotStrategy?.approvedAt;
     case "r6_pilot_rewrite":
       return !!pass.pilotRewrite?.approvedAt;
+    case "r7_pilot_polish":
+      // R7 is "approved" only when its plan is approved AND (eventually)
+      // its applied polish has been promoted. For now (plan-only build),
+      // we treat planApproved as the approval signal so the gate logic
+      // can compute downstream stage states even before Pass 2 ships.
+      return !!pass.r7Polish?.approvedAt || !!pass.r7Polish?.planApprovedAt;
   }
 }
 
@@ -711,6 +908,8 @@ function isStageStarted(pass: RedevelopmentPass, stage: RedevStageKey): boolean 
       return !!pass.pilotStrategy;
     case "r6_pilot_rewrite":
       return !!pass.pilotRewrite;
+    case "r7_pilot_polish":
+      return !!pass.r7Polish;
   }
 }
 

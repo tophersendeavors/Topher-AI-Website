@@ -16,7 +16,8 @@ export type RedevStageKey =
   | "r3_protocol_modules"
   | "r4_season_arc"
   | "r5_pilot_strategy"
-  | "r6_pilot_rewrite";
+  | "r6_pilot_rewrite"
+  | "r7_pilot_polish";
 
 export const REDEV_STAGE_ORDER: RedevStageKey[] = [
   "r1_brief",
@@ -25,6 +26,7 @@ export const REDEV_STAGE_ORDER: RedevStageKey[] = [
   "r4_season_arc",
   "r5_pilot_strategy",
   "r6_pilot_rewrite",
+  "r7_pilot_polish",
 ];
 
 export const REDEV_STAGE_LABEL: Record<RedevStageKey, string> = {
@@ -34,6 +36,7 @@ export const REDEV_STAGE_LABEL: Record<RedevStageKey, string> = {
   r4_season_arc: "Season One Arc Redesign",
   r5_pilot_strategy: "Pilot Rewrite Strategy",
   r6_pilot_rewrite: "Pilot Rewrite",
+  r7_pilot_polish: "Pilot Polish Pass",
 };
 
 /** Gate dependencies. Each stage may only be approved after its
@@ -46,6 +49,7 @@ export const REDEV_STAGE_DEPS: Record<RedevStageKey, RedevStageKey[]> = {
   r4_season_arc: ["r2_character_bibles", "r3_protocol_modules"],
   r5_pilot_strategy: ["r4_season_arc"],
   r6_pilot_rewrite: ["r2_character_bibles", "r3_protocol_modules", "r4_season_arc", "r5_pilot_strategy"],
+  r7_pilot_polish: ["r6_pilot_rewrite"],
 };
 
 // =============================================================================
@@ -303,6 +307,89 @@ export interface RedevPilotRewrite {
   approvedAt: string | null;
 }
 
+// =============================================================================
+// R7 — Pilot Polish Pass (Phase 4)
+// =============================================================================
+//
+// R7 does NOT change the approved R1–R6 architecture. It runs targeted
+// polish passes on the promoted R6 pilot draft to fix:
+//   1. Surrender continuity — items surrendered publicly must not have
+//      been surrendered earlier in dialogue.
+//   2. Notebook / recorder object logic — surrendered items must stay
+//      surrendered; characters can't reach for them later.
+//   3. Dialogue polish — replace summarized prose with short, character-
+//      specific dialogue in social scenes.
+//   4. Showrunner-note prose — strip lines that explain what the audience
+//      should feel ("The system is running"). Convert to filmable behavior
+//      or cut.
+//   5. EP2 hook strength — sharpen the final transparent-case / Paul
+//      notification-chime ending without revealing the accident truth.
+//
+// R7 must NEVER violate the locked R6 protections (Paul reveal, Elena
+// sister, Solano framing, Surrender engine, final hook). The R7 audit
+// checks for these explicitly.
+
+/** Five locked polish categories. The agent must use only these tokens. */
+export type RedevR7PolishCategory =
+  | "surrender_continuity"
+  | "notebook_recorder_object_logic"
+  | "dialogue_polish"
+  | "showrunner_note_prose"
+  | "episode_2_hook";
+
+export const R7_POLISH_CATEGORY_LABEL: Record<RedevR7PolishCategory, string> = {
+  surrender_continuity: "Surrender continuity",
+  notebook_recorder_object_logic: "Notebook / recorder object logic",
+  dialogue_polish: "Dialogue polish (replace summarized prose)",
+  showrunner_note_prose: "Remove showrunner-note prose",
+  episode_2_hook: "Strengthen Episode 2 hook",
+};
+
+export type RedevR7PolishSeverity = "high" | "medium" | "low";
+
+/** One polish item — a targeted edit the showrunner should sign off on
+ *  before Pass 2 (apply) runs. Plan-level prose only — no screenplay
+ *  text. */
+export interface RedevR7PolishItem {
+  /** Existing scene ord in the promoted EP01 draft. null = pilot-level
+   *  note (e.g. an overall ending change that spans the closing block). */
+  existingSceneOrd: number | null;
+  /** Original slugline (for existing scenes — informational). */
+  existingSlugline?: string;
+  category: RedevR7PolishCategory;
+  /** What's wrong (1-2 sentences, plan-level). Quote the existing text
+   *  briefly when useful (e.g. "Line: 'The system is running.'"). */
+  diagnosis: string;
+  /** What to change (1-3 sentences). Behavior-level direction, not
+   *  screenplay text. */
+  fixDirection: string;
+  severity?: RedevR7PolishSeverity;
+  /** Optional scope hint for the apply pass — line vs. scene vs.
+   *  ending. */
+  scope?: "line" | "scene" | "ending";
+}
+
+export interface RedevR7PolishPlan {
+  /** The promoted R6 script id this polish targets. Frozen at plan
+   *  generation time so a later promotion doesn't quietly retarget. */
+  priorScriptId: string;
+  /** Plan-level approach (1-3 sentences). */
+  approachSummary: string;
+  /** All polish items, in pilot order where possible. */
+  items: RedevR7PolishItem[];
+  /** Plan-stage approval. Independent of the final-draft approval —
+   *  Pass 2 (apply) only runs after this is set. */
+  planApprovedAt: string | null;
+  // ----- Pass 2 (apply) outputs — populated later, not by this turn:
+  polishedDraftText?: string | null;
+  polishedDraftAt?: string | null;
+  changeNotes?: string[];
+  promotedScriptId?: string | null;
+  promotedDraftNumber?: number | null;
+  /** Final-draft approval (post-apply promotion). */
+  approvedAt?: string | null;
+}
+
 /** Per-character contract for R6 — what the rewrite is allowed to plant,
  *  what it must NOT reveal, what executional moves are forbidden, and
  *  the overall tone the rewrite should land. R6's system prompt MUST
@@ -376,6 +463,9 @@ export interface RedevelopmentPass {
    *  `RedevR6Guardrail[]` (pre-bundle shape); readers should normalize
    *  with `normalizeR6Guardrails()`. */
   r6Guardrails?: RedevR6GuardrailsBundle | RedevR6Guardrail[];
+  /** R7 Pilot Polish Pass — targeted polish on the promoted R6 draft.
+   *  Plan-stage only on first build (Pass 2 / apply ships next). */
+  r7Polish?: RedevR7PolishPlan | null;
 }
 
 // =============================================================================
@@ -436,6 +526,29 @@ export type AuditCheckId =
   // R6 — contamination + global plant separation
   | "r6_no_cross_contamination"
   | "r6_global_plants_separated"
+  // R7 — Polish plan
+  | "r7plan_items_present"
+  | "r7plan_categories_covered"
+  | "r7plan_no_screenplay_text"
+  | "r7plan_paul_reveal_protected"
+  | "r7plan_elena_protected"
+  | "r7plan_solano_framing_protected"
+  | "r7plan_surrender_preserved"
+  | "r7plan_final_hook_preserved"
+  | "r7plan_no_architecture_drift"
+  // R7 Pass 2 — applied draft
+  | "r7apply_draft_changed"
+  | "r7apply_paul_reveal_protected"
+  | "r7apply_elena_protected"
+  | "r7apply_solano_protected"
+  | "r7apply_surrender_present"
+  | "r7apply_final_hook_present"
+  | "r7apply_no_flashbacks"
+  | "r7apply_no_confession_circles"
+  | "r7apply_no_therapy_exposition"
+  | "r7apply_no_explanatory_replacement"
+  | "r7apply_showrunner_notes_removed"
+  | "r7apply_no_screenplay_drift"
   // R6 Rewrite Plan (Pass 1) — coverage + safety + scope
   | "r6plan_existing_scenes_covered"
   | "r6plan_targets_covered"

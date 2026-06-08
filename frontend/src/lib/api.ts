@@ -3282,6 +3282,96 @@ export const api = {
     ),
   /** Surgical plant-repair on the CURRENT Pass 2 proposedDraftText.
    *  Does NOT promote the draft — caller must still call approveRedevR6Pass2Draft. */
+  // ----- R7 Pilot Polish Pass — plan-only (Pass 2 apply ships next) ---
+  generateRedevR7PolishPlan: (
+    projectId: string,
+    passId: string,
+    body?: { notes?: string }
+  ) =>
+    request<{
+      approachSummary: string;
+      items: RedevR7PolishItem[];
+      priorScriptId: string;
+      promotedDraftNumber: number | null;
+      audit: RedevAuditReport;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r7-polish/plan/generate`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  saveRedevR7PolishPlan: (
+    projectId: string,
+    passId: string,
+    body: {
+      approachSummary: string;
+      items: RedevR7PolishItem[];
+      priorScriptId: string;
+    }
+  ) =>
+    request<RedevPassReport>(
+      `/projects/${projectId}/redevelopment/${passId}/r7-polish/plan`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+  approveRedevR7PolishPlan: (projectId: string, passId: string) =>
+    request<RedevPassReport>(
+      `/projects/${projectId}/redevelopment/${passId}/r7-polish/plan/approve`,
+      { method: "POST", body: "{}" }
+    ),
+  auditRedevR7PolishPlan: (projectId: string, passId: string) =>
+    request<{
+      audit: RedevAuditReport;
+      approvedAt: string | null;
+      auditedAt: string;
+      auditSource: "current_stored_polish_plan";
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r7-polish/plan/audit`
+    ),
+  applyRedevR7Polish: (
+    projectId: string,
+    passId: string,
+    body?: { notes?: string }
+  ) =>
+    request<{
+      polishedFountain: string;
+      applied: Array<{
+        category: string;
+        location: string;
+        before: string;
+        after: string;
+        replacementKind: "action" | "dialogue" | "continuity_correction" | "removal";
+      }>;
+      unapplied: Array<{ itemIndex: number; reason: string }>;
+      fountainChanged: boolean;
+      bytesDelta: number;
+      baseLen: number;
+      newLen: number;
+      audit: RedevAuditReport;
+      auditedAt: string;
+      auditSource: "r7_apply_polished_draft";
+      report: RedevPassReport;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r7-polish/apply`,
+      { method: "POST", body: JSON.stringify(body ?? {}) }
+    ),
+  auditRedevR7PolishedDraft: (projectId: string, passId: string) =>
+    request<{
+      audit: RedevAuditReport;
+      approvedAt: string | null;
+      auditedAt: string;
+      auditSource: "current_stored_polished_draft";
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r7-polish/draft/audit`
+    ),
+  approveRedevR7PolishedDraft: (projectId: string, passId: string) =>
+    request<{
+      report: RedevPassReport;
+      scriptId: string;
+      draftNumber: number;
+      sceneIndexWarning?: string;
+    }>(
+      `/projects/${projectId}/redevelopment/${passId}/r7-polish/draft/approve`,
+      { method: "POST", body: "{}" }
+    ),
+
   repairRedevR6Pass2Draft: (
     projectId: string,
     passId: string,
@@ -3333,7 +3423,46 @@ export type RedevStageKey =
   | "r3_protocol_modules"
   | "r4_season_arc"
   | "r5_pilot_strategy"
-  | "r6_pilot_rewrite";
+  | "r6_pilot_rewrite"
+  | "r7_pilot_polish";
+
+export type RedevR7PolishCategory =
+  | "surrender_continuity"
+  | "notebook_recorder_object_logic"
+  | "dialogue_polish"
+  | "showrunner_note_prose"
+  | "episode_2_hook";
+
+export const R7_POLISH_CATEGORY_LABEL: Record<RedevR7PolishCategory, string> = {
+  surrender_continuity: "Surrender continuity",
+  notebook_recorder_object_logic: "Notebook / recorder object logic",
+  dialogue_polish: "Dialogue polish",
+  showrunner_note_prose: "Remove showrunner-note prose",
+  episode_2_hook: "Strengthen Episode 2 hook",
+};
+
+export interface RedevR7PolishItem {
+  existingSceneOrd: number | null;
+  existingSlugline?: string;
+  category: RedevR7PolishCategory;
+  diagnosis: string;
+  fixDirection: string;
+  severity?: "high" | "medium" | "low";
+  scope?: "line" | "scene" | "ending";
+}
+
+export interface RedevR7PolishPlan {
+  priorScriptId: string;
+  approachSummary: string;
+  items: RedevR7PolishItem[];
+  planApprovedAt: string | null;
+  // Pass 2 (apply) fields:
+  polishedDraftText?: string | null;
+  polishedDraftAt?: string | null;
+  approvedAt?: string | null;
+  promotedScriptId?: string | null;
+  promotedDraftNumber?: number | null;
+}
 
 export type RedevStageStatus = "locked" | "available" | "in_progress" | "approved";
 
@@ -3449,6 +3578,9 @@ export interface RedevelopmentPass {
   /** R6 guardrails bundle. Older passes may still hold a bare
    *  `RedevR6Guardrail[]` — use `normalizeR6Guardrails()` to coerce. */
   r6Guardrails?: RedevR6GuardrailsBundle | RedevR6Guardrail[];
+  /** R7 Pilot Polish Pass. Plan-only on first build; Pass 2 (apply)
+   *  ships next. */
+  r7Polish?: RedevR7PolishPlan | null;
 }
 
 /** Per-character protection contract honored by R6 (pilot rewrite). */

@@ -29,6 +29,8 @@ import type {
   RedevR6GuardrailsBundle,
   RedevR6RewriteScenePlan,
   RedevR6RewriteTarget,
+  RedevR7PolishCategory,
+  RedevR7PolishItem,
   RedevSeasonArcEpisode,
 } from "./types.js";
 import { R6_REWRITE_TARGET_LABEL } from "./types.js";
@@ -1850,6 +1852,479 @@ export function auditAndRepairR6Pass2Draft(args: {
 
   // Used variable to silence TS unused warning when only some branches reference `lower`.
   void lower;
+
+  return { checks, repairs };
+}
+
+// ============================================================================
+// R7 — Pilot Polish Plan audit (warning-only)
+// ============================================================================
+//
+// Checks the plan stays within scope (no architecture drift, no
+// screenplay text, no protected reveals). Warning-only — the
+// showrunner reviews and decides.
+
+const R7_VALID_CATEGORIES: RedevR7PolishCategory[] = [
+  "surrender_continuity",
+  "notebook_recorder_object_logic",
+  "dialogue_polish",
+  "showrunner_note_prose",
+  "episode_2_hook",
+];
+
+const R7_CATEGORY_LABEL: Record<RedevR7PolishCategory, string> = {
+  surrender_continuity: "Surrender continuity",
+  notebook_recorder_object_logic: "Notebook / recorder object logic",
+  dialogue_polish: "Dialogue polish",
+  showrunner_note_prose: "Showrunner-note prose removal",
+  episode_2_hook: "Episode 2 hook strengthening",
+};
+
+export function auditAndRepairR7PolishPlan(args: {
+  items: RedevR7PolishItem[];
+  approachSummary: string;
+}): AuditReport {
+  const checks: AuditCheck[] = [];
+  const repairs: AuditRepair[] = [];
+  const { items, approachSummary } = args;
+
+  // 1. At least one polish item present.
+  checks.push({
+    id: "r7plan_items_present",
+    label: "Polish items present",
+    status: items.length > 0 ? "passed" : "warning",
+    message:
+      items.length > 0
+        ? `${items.length} polish item${items.length === 1 ? "" : "s"} proposed.`
+        : "No polish items generated. Regenerate the plan or accept that the promoted draft needs no polish.",
+  });
+
+  // 2. Category coverage. At least 3 of 5 should appear in a healthy
+  //    polish plan (showrunner explicitly asked for 5 areas).
+  const seenCategories = new Set<RedevR7PolishCategory>();
+  for (const it of items) seenCategories.add(it.category);
+  const missingCategories = R7_VALID_CATEGORIES.filter(
+    (c) => !seenCategories.has(c)
+  );
+  checks.push({
+    id: "r7plan_categories_covered",
+    label: "Polish categories covered",
+    status: missingCategories.length === 0 ? "passed" : "warning",
+    message:
+      missingCategories.length === 0
+        ? `All 5 polish categories addressed.`
+        : `${missingCategories.length} category(ies) not addressed: ${missingCategories
+            .map((c) => R7_CATEGORY_LABEL[c])
+            .join(", ")}. Either the promoted draft is clean there, or the plan missed them.`,
+  });
+
+  // 3. No screenplay text in diagnosis / fixDirection.
+  const SCREENPLAY = [
+    /\bFADE\s+(IN|OUT)\b/,
+    /\b(INT|EXT)\.\s+[A-Z]+/,
+    /\([A-Z][a-z]+\s+[a-z]+,?\s+(then|now|softly|quietly)\)/,
+    /\bCUT\s+TO:/,
+    /\bV\.O\.\b/,
+    /\bO\.S\.\b/,
+  ];
+  const flatText = items
+    .map((i) => `${i.diagnosis}\n${i.fixDirection}`)
+    .join("\n");
+  const screenplayHit = SCREENPLAY.some((re) => re.test(flatText));
+  checks.push({
+    id: "r7plan_no_screenplay_text",
+    label: "Plan stayed at plan level",
+    status: screenplayHit ? "warning" : "passed",
+    message: screenplayHit
+      ? "Plan contains screenplay formatting (FADE IN, INT./EXT., parentheticals). R7 Pass 1 is plan-level only — screenplay text comes in Pass 2 apply."
+      : "Plan stayed at plan level — no screenplay text leaked in.",
+  });
+
+  // Helper — does a string violate a protection in a non-negated way?
+  // Reuses the unnegatedHit helper from earlier in this file. (We need
+  // a forward reference here; declared at top of file.)
+  const lowerFlat = flatText.toLowerCase();
+
+  // 4. Paul reveal protected — flag if any plan item discusses
+  //    surfacing the texting/accident/guilt in the pilot.
+  const PAUL_LATE = [
+    /\b(reveal|expose|show|surface)\b[^.]{0,80}\bpaul'?s?\s+(texting|accident|guilt|timestamp|crash)\b/i,
+    /\bpaul\b[^.]{0,40}\b(killed|caused|responsible)\b/i,
+    /\btimestamp\s+evidence\b/i,
+  ];
+  const paulLeak = unnegatedHit(flatText, PAUL_LATE);
+  checks.push({
+    id: "r7plan_paul_reveal_protected",
+    label: "Paul reveal protected in polish plan",
+    status: paulLeak ? "warning" : "passed",
+    message: paulLeak
+      ? "Polish plan proposes surfacing Paul's late-season reveal (texting / accident / timestamp / guilt). R7 cannot reveal this; the hook plants UNEASE only."
+      : "Polish plan keeps Paul's late-season reveal protected.",
+  });
+
+  // 5. Elena protected.
+  const ELENA = [
+    /\belena\b[^.]{0,60}\b(is|was)\b[^.]{0,40}\bsister\b/i,
+    /\bnadia'?s?\s+sister\b/i,
+    /\b(reveal|name|expose)\b[^.]{0,40}\bsister\b[^.]{0,30}\belena\b/i,
+  ];
+  const elenaLeak = unnegatedHit(flatText, ELENA);
+  checks.push({
+    id: "r7plan_elena_protected",
+    label: "Elena sister relationship protected",
+    status: elenaLeak ? "warning" : "passed",
+    message: elenaLeak
+      ? "Polish plan proposes revealing the Elena / sister relationship. R7 cannot reveal this — it's a later-season landing."
+      : "Polish plan keeps the Elena / sister relationship protected.",
+  });
+
+  // 6. Solano framing protected.
+  const SOLANO_FRAUD = [
+    /\bsolano\b[^.]{0,80}\b(fraud|liar|con\b|cult|manipulat|deceiv)/i,
+    /\bframe\s+solano\b/i,
+  ];
+  const solanoLeak = unnegatedHit(flatText, SOLANO_FRAUD);
+  checks.push({
+    id: "r7plan_solano_framing_protected",
+    label: "Solano framing protected",
+    status: solanoLeak ? "warning" : "passed",
+    message: solanoLeak
+      ? "Polish plan drifts into framing Solano as fraud/cult/con/manipulator. The Solano Rule: Protocol works; she is unsettlingly certain."
+      : "Polish plan keeps the Solano Rule intact.",
+  });
+
+  // 7. Surrender preserved as the pilot engine — flag if any item
+  //    proposes removing or replacing Surrender.
+  const SURRENDER_REMOVE = [
+    /\bremove\b[^.]{0,40}\bsurrender\b/i,
+    /\breplace\b[^.]{0,40}\bsurrender\b/i,
+    /\bcut\b[^.]{0,40}\bsurrender\s+(scene|sequence|beat|module)\b/i,
+    /\bsurrender\b[^.]{0,40}\b(is|stays|remains)?\s*not\b[^.]{0,40}\b(driver|engine|module)\b/i,
+  ];
+  const surrenderRemove = SURRENDER_REMOVE.some((re) => re.test(flatText));
+  checks.push({
+    id: "r7plan_surrender_preserved",
+    label: "Surrender preserved as pilot engine",
+    status: surrenderRemove ? "warning" : "passed",
+    message: surrenderRemove
+      ? "Polish plan proposes removing or replacing Surrender. Surrender stays as the pilot's Protocol engine — polish only."
+      : "Polish plan keeps Surrender as the pilot engine.",
+  });
+
+  // 8. Final hook preserved — flag any proposal to remove the
+  //    transparent case / chime ending.
+  const HOOK_REMOVE = [
+    /\bremove\b[^.]{0,60}\b(transparent\s+case|chime|hook)\b/i,
+    /\breplace\b[^.]{0,60}\b(transparent\s+case|chime|final\s+hook)\b/i,
+    /\bcut\b[^.]{0,40}\b(transparent\s+case|chime|final\s+hook)\b/i,
+    /\bdrop\b[^.]{0,40}\b(transparent\s+case|chime|final\s+hook)\b/i,
+  ];
+  const hookRemove = HOOK_REMOVE.some((re) => re.test(flatText));
+  // Also: the episode_2_hook category should be present if any
+  // polish is happening, since it's the strongest hook lever.
+  const hookCategoryPresent = seenCategories.has("episode_2_hook");
+  let hookStatus: AuditCheck["status"];
+  let hookMessage: string;
+  if (hookRemove) {
+    hookStatus = "warning";
+    hookMessage =
+      "Polish plan proposes removing or replacing the final transparent-case / chime hook. The hook stays — only its texture can be tuned.";
+  } else if (!hookCategoryPresent) {
+    hookStatus = "warning";
+    hookMessage =
+      "No items in the `episode_2_hook` category. The hook may already land — or the plan missed an opportunity to sharpen it. Review.";
+  } else {
+    hookStatus = "passed";
+    hookMessage =
+      "Final hook is preserved; plan includes hook-strengthening items.";
+  }
+  checks.push({
+    id: "r7plan_final_hook_preserved",
+    label: "Final hook preserved",
+    status: hookStatus,
+    message: hookMessage,
+  });
+
+  // 9. No architecture drift — flag language that suggests R7 is
+  //    redeveloping the series (touching protocols, modules, season
+  //    arc, character bibles).
+  const ARCH_DRIFT = [
+    /\brewrite\s+(the\s+)?(series|architecture|engine|arc|season|bible|principle|module)\b/i,
+    /\b(redefine|redevelop|reframe)\s+(the\s+)?(series|engine|arc|module|principle)\b/i,
+    /\bchange\s+(the\s+)?protocol\b/i,
+    /\bchange\s+(the\s+)?series\s+question\b/i,
+  ];
+  const archDrift = ARCH_DRIFT.some((re) => re.test(flatText));
+  checks.push({
+    id: "r7plan_no_architecture_drift",
+    label: "No architecture drift",
+    status: archDrift ? "warning" : "passed",
+    message: archDrift
+      ? "Polish plan proposes architecture-level changes (rewriting principle / engine / arc / modules). R7 is polish only — the architecture is locked from R1-R6."
+      : "Polish plan stays within R7 scope — no architecture drift.",
+  });
+
+  // suppress unused var warning for the lowerFlat helper kept for
+  // potential future checks
+  void approachSummary;
+  void lowerFlat;
+
+  return { checks, repairs };
+}
+
+// ============================================================================
+// R7 Pass 2 (apply) — full-document audit (warning-only)
+// ============================================================================
+//
+// Runs on the polished Fountain Pass 2 produced. Verifies:
+//   1. The draft actually changed.
+//   2. R6 protections still intact (Paul / Elena / Solano / Surrender /
+//      final hook / no flashbacks / no confession / no therapy).
+//   3. Pass 2 didn't introduce new showrunner-note prose (the
+//      "no explanatory replacement" rule from memory).
+//   4. Showrunner-note lines that the plan flagged are actually gone.
+
+const R7_EXPLANATORY_PHRASES: RegExp[] = [
+  // Lines that explain what the audience should feel.
+  /\bthe\s+audience\s+(feels?|knows?|sees?|understands?)/i,
+  // "The room knows" / "The body understands"
+  /\bthe\s+room\s+(knows?|understands?)/i,
+  /\bthe\s+body\s+(knows?|understands?)/i,
+  // "The wound is …"
+  /\bthe\s+wound\s+(is|sits|lives|remains|stays)/i,
+  // "The avoidance strategies …"
+  /\bthe\s+avoidance\s+strategies?\b/i,
+  // "The system is running"
+  /\bthe\s+system\s+(is|was|remains|stays)\s+\w+ing\b/i,
+  /\bthe\s+system\s+is\s+running\b/i,
+  // Generic meta-narration like "What [verb] is …"
+  /\bwhat\s+\w+\s+(is|are|isn'?t|aren'?t)\s+saying\b/i,
+];
+
+export function auditAndRepairR7Pass2Draft(args: {
+  baseFountain: string;
+  polishedFountain: string;
+  guardrails: RedevR6GuardrailsBundle;
+  /** The approved R7 plan items — used to verify the removed lines are
+   *  actually gone from the polished draft. */
+  planItems: import("./types.js").RedevR7PolishItem[];
+}): AuditReport {
+  const checks: AuditCheck[] = [];
+  const repairs: AuditRepair[] = [];
+  const text = args.polishedFountain ?? "";
+  const base = args.baseFountain ?? "";
+
+  // 1. Draft actually changed.
+  const changed = text !== base && text.trim().length > 0;
+  checks.push({
+    id: "r7apply_draft_changed",
+    label: "Draft changed vs. base",
+    status: changed ? "passed" : "warning",
+    message: changed
+      ? `Polished draft differs from base (${text.length.toLocaleString()} chars vs ${base.length.toLocaleString()}).`
+      : "Polished draft is identical to the base. No polish applied.",
+  });
+
+  // 2-9. Re-run the R6 Pass 2 protection set on the polished draft.
+  // These mirror auditAndRepairR6Pass2Draft so the protections are
+  // verified continuously, not just at the rewrite stage.
+  const PAUL_LATE = [
+    /\bpaul\b[^.]{0,80}\b(texting|texts|texted)\b/i,
+    /\b(reveal|expose|admit|confess)\b[^.]{0,40}\b(accident|timestamp|guilt)/i,
+    /\bpaul'?s?\s+guilt\b/i,
+    /\btimestamp\s+evidence\b/i,
+  ];
+  const paulLeak = unnegatedHit(text, PAUL_LATE);
+  checks.push({
+    id: "r7apply_paul_reveal_protected",
+    label: "Paul reveal still protected after polish",
+    status: paulLeak ? "warning" : "passed",
+    message: paulLeak
+      ? "Polished draft exposes Paul's late-season reveal. Polish must NOT surface texting / accident / timestamp / guilt."
+      : "Paul's late-season reveal remains protected.",
+  });
+
+  const ELENA = [
+    /\belena\b[^.]{0,60}\b(is|was)\b[^.]{0,40}\bsister\b/i,
+    /\bnadia'?s?\s+sister\b/i,
+    /\bmy\s+sister\b[^.]{0,30}\belena\b/i,
+  ];
+  const elenaLeak = unnegatedHit(text, ELENA);
+  checks.push({
+    id: "r7apply_elena_protected",
+    label: "Elena sister relationship still protected",
+    status: elenaLeak ? "warning" : "passed",
+    message: elenaLeak
+      ? "Polished draft reveals the sister relationship. Polish cannot surface this."
+      : "Sister relationship stays protected.",
+  });
+
+  const SOLANO_FRAUD = [
+    /\bsolano\b[^.]{0,80}\b(lying|liar|fraud|fake|con\b|cult|deceiv|manipulat)/i,
+    /\b(reveal|expose|prove)\b[^.]{0,40}\bsolano\b[^.]{0,40}\bnot\b/i,
+  ];
+  const solanoLeak = unnegatedHit(text, SOLANO_FRAUD);
+  checks.push({
+    id: "r7apply_solano_protected",
+    label: "Solano rule still protected",
+    status: solanoLeak ? "warning" : "passed",
+    message: solanoLeak
+      ? "Polished draft drifts into Solano-as-fraud/cult/con framing."
+      : "Solano framing honors the Solano Rule.",
+  });
+
+  const surrenderPresent = /\bsurrender\b/i.test(text);
+  checks.push({
+    id: "r7apply_surrender_present",
+    label: "Surrender preserved as pilot engine",
+    status: surrenderPresent ? "passed" : "warning",
+    message: surrenderPresent
+      ? "Surrender remains present in the polished pilot."
+      : "Surrender is missing from the polished pilot. Polish stripped the engine.",
+  });
+
+  // Final hook — bodies after Surrender + transparent case + Paul + chime.
+  const tail = text.slice(Math.max(0, text.length - 3000));
+  const hookAnchors = {
+    bodies: /\bbodies\b/i.test(tail) || /\bafter\s+surrender\b/i.test(tail),
+    case: /\btransparent\s+case\b/i.test(tail),
+    chime:
+      /\b(chime|notification|phone)\b/i.test(tail) && /\bpaul\b/i.test(tail),
+  };
+  const anchorCount = [
+    hookAnchors.bodies,
+    hookAnchors.case,
+    hookAnchors.chime,
+  ].filter(Boolean).length;
+  checks.push({
+    id: "r7apply_final_hook_present",
+    label: "Final blended hook still present",
+    status: anchorCount >= 2 ? "passed" : "warning",
+    message:
+      anchorCount >= 2
+        ? `Final hook anchors detected: ${[
+            hookAnchors.bodies && "bodies",
+            hookAnchors.case && "transparent case",
+            hookAnchors.chime && "Paul + chime",
+          ]
+            .filter(Boolean)
+            .join(", ")}.`
+        : "Final blended hook anchors not detected in the polished closing. Polish must preserve the hook.",
+  });
+
+  const FLASHBACK = [
+    /\bFLASHBACK\b/,
+    /\bINT\.\s+[A-Z][^\n]*?\b-\s*FLASHBACK\b/,
+    /\bEXT\.\s+[A-Z][^\n]*?\b-\s*FLASHBACK\b/,
+    /\b\(FLASHBACK\)/,
+  ];
+  const flashback = FLASHBACK.some((re) => re.test(text));
+  checks.push({
+    id: "r7apply_no_flashbacks",
+    label: "No flashbacks introduced",
+    status: flashback ? "warning" : "passed",
+    message: flashback
+      ? "Polish introduced FLASHBACK markers. Global rule forbids flashbacks."
+      : "No flashbacks introduced.",
+  });
+
+  const confession = /\bconfession\s+circle\b/i.test(text);
+  checks.push({
+    id: "r7apply_no_confession_circles",
+    label: "No confession circles introduced",
+    status: confession ? "warning" : "passed",
+    message: confession
+      ? "Polish introduced a confession-circle beat. Global rule forbids confession circles."
+      : "No confession circles introduced.",
+  });
+
+  const THERAPY = [
+    /\btell\s+me\s+about\s+your\s+(childhood|mother|father|family)\b/i,
+    /\bhow\s+does\s+that\s+make\s+you\s+feel\b/i,
+    /\band\s+how\s+do\s+you\s+feel\s+about\b/i,
+  ];
+  const therapy = THERAPY.some((re) => re.test(text));
+  checks.push({
+    id: "r7apply_no_therapy_exposition",
+    label: "No therapy exposition introduced",
+    status: therapy ? "warning" : "passed",
+    message: therapy
+      ? "Polish introduced therapy-style exposition. Global rule forbids it."
+      : "No therapy exposition introduced.",
+  });
+
+  // 10. NO EXPLANATORY REPLACEMENT — the showrunner's R7 rule.
+  // Count explanatory phrases in base vs polished. If polished has
+  // MORE than base, polish introduced new meta-narration — fail.
+  const countExplanatory = (s: string): number => {
+    let n = 0;
+    for (const re of R7_EXPLANATORY_PHRASES) {
+      const gre = new RegExp(
+        re.source,
+        re.flags.includes("g") ? re.flags : re.flags + "g"
+      );
+      const matches = s.match(gre);
+      if (matches) n += matches.length;
+    }
+    return n;
+  };
+  const baseCount = countExplanatory(base);
+  const polishedCount = countExplanatory(text);
+  const introducedNew = polishedCount > baseCount;
+  checks.push({
+    id: "r7apply_no_explanatory_replacement",
+    label: "No new showrunner-note prose introduced",
+    status: introducedNew ? "warning" : "passed",
+    message: introducedNew
+      ? `Polish added ${polishedCount - baseCount} new line(s) containing meta-narration phrases ('the audience…', 'the room knows…', 'the body understands…', 'the wound is…', etc.). Showrunner-note removals must be replaced with FILMABLE ACTION, SHORT DIALOGUE, or a CONTINUITY CORRECTION — never new explanatory prose.`
+      : `No new showrunner-note prose introduced (base: ${baseCount}, polished: ${polishedCount}).`,
+  });
+
+  // 11. Showrunner-note removals actually applied. For every plan
+  //     item in the showrunner_note_prose category, check that any
+  //     quoted snippet in `diagnosis` is no longer present in the
+  //     polished text. (We extract quoted substrings of length >= 5.)
+  const showrunnerItems = args.planItems.filter(
+    (it) => it.category === "showrunner_note_prose"
+  );
+  const STILL_PRESENT_QUOTES: string[] = [];
+  for (const it of showrunnerItems) {
+    // Extract quoted snippets from diagnosis: things in 'single' or
+    // "double" quotes that are at least 5 characters.
+    const QUOTE_RE = /(['"])([^'"]{5,200})\1/g;
+    let m: RegExpExecArray | null;
+    while ((m = QUOTE_RE.exec(it.diagnosis)) !== null) {
+      const snippet = m[2].trim();
+      if (snippet && text.includes(snippet)) {
+        STILL_PRESENT_QUOTES.push(snippet);
+      }
+    }
+  }
+  checks.push({
+    id: "r7apply_showrunner_notes_removed",
+    label: "Showrunner-note lines actually removed",
+    status: STILL_PRESENT_QUOTES.length === 0 ? "passed" : "warning",
+    message:
+      STILL_PRESENT_QUOTES.length === 0
+        ? "Plan-flagged showrunner-note lines are gone from the polished draft."
+        : `${STILL_PRESENT_QUOTES.length} flagged line(s) still present in polished draft: ${STILL_PRESENT_QUOTES.slice(0, 2)
+            .map((q) => `"${q.slice(0, 60)}${q.length > 60 ? "…" : ""}"`)
+            .join(" · ")}${STILL_PRESENT_QUOTES.length > 2 ? " · …" : ""}.`,
+  });
+
+  // 12. Screenplay structure sanity — the polished draft should still
+  //     parse as Fountain. Look for at least one scene heading and
+  //     reasonable length.
+  const sluglineCount = (text.match(/^(INT\.|EXT\.)\s+[A-Z]/gm) ?? []).length;
+  const validStructure = sluglineCount >= 3 && text.length >= 1000;
+  checks.push({
+    id: "r7apply_no_screenplay_drift",
+    label: "Polished draft is still a valid screenplay",
+    status: validStructure ? "passed" : "warning",
+    message: validStructure
+      ? `Polished draft has ${sluglineCount} scene headings — structure intact.`
+      : `Polished draft looks malformed (slugs: ${sluglineCount}, length: ${text.length}). The polish may have damaged the Fountain structure.`,
+  });
 
   return { checks, repairs };
 }

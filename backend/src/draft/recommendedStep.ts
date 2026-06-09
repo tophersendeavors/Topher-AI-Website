@@ -158,7 +158,7 @@ export async function recommendNextStep(projectId: string): Promise<NextStep> {
   }
   if (speculativeCount > 0) {
     return {
-      title: `${speculativeCount} relationship${speculativeCount === 1 ? "" : "s"} contain speculative details`,
+      title: `${speculativeCount} relationship${speculativeCount === 1 ? "" : "s"} ${speculativeCount === 1 ? "contains" : "contain"} speculative details`,
       body: "Run Source-Strict Regenerate to remove invented specifics before approving. Source-strict mode reads only your approved bibles.",
       ctaLabel: "Open Relationships",
       toRel: "/character-bible?tab=relationships",

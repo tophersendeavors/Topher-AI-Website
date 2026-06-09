@@ -36,9 +36,8 @@ import {
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
-import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
+import { StoryCleanupPanel } from "@/components/ui/StoryCleanupPanel";
 import { StudioTimeline } from "@/components/ui/StudioTimeline";
-import { RecommendedNextStep } from "@/components/ui/RecommendedNextStep";
 import { Button } from "@/components/ui/Button";
 import { BusyBar } from "@/components/ui/BusyBar";
 
@@ -259,14 +258,13 @@ export function ProjectOverviewPage() {
         }
       />
 
-      {/* AI-derived next step — most-impactful action given current state. */}
-      <div className="px-8">
-        <RecommendedNextStep projectId={projectId} />
-      </div>
-
+      {/* Studio Timeline is the single source of truth for "where am I
+          and what's next" on this page. The legacy /next-step engine
+          still surfaces non-blocking story-cleanup warnings below — but
+          they no longer compete with the timeline. */}
       <div className="px-8 space-y-4">
         <StudioTimeline projectId={projectId} />
-        <WayfinderPanel projectId={projectId} />
+        <StoryCleanupPanel projectId={projectId} />
       </div>
 
       {/* Project Type chip + Micro Drama Bible (when applicable). */}

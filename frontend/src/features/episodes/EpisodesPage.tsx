@@ -19,6 +19,7 @@ import {
   TrendingDown,
   Copy,
   Check,
+  AudioLines,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -452,7 +453,7 @@ function EpisodeCard({
        *  12-stage workflow. Available for every project type, not just
        *  micro-drama. See docs/PROJECT_TYPE_ADAPTERS.md — the workflow
        *  is shared; Stage 1 reads the right approval signal per type. */}
-      <div className="mt-4 border-t border-white/8 pt-4">
+      <div className="mt-4 border-t border-white/8 pt-4 space-y-2">
         <Link
           to={`/projects/${projectId}/episodes/${episode.id}/workflow`}
           className="os-btn os-btn-primary w-full justify-center"
@@ -461,6 +462,15 @@ function EpisodeCard({
           <Briefcase className="h-4 w-4" />
           Open Production Workflow
           <ArrowRight className="h-4 w-4" />
+        </Link>
+        <Link
+          to={`/projects/${projectId}/episodes/${episode.id}/sound-bible`}
+          className="os-btn os-btn-outline w-full justify-center"
+          style={{ width: "100%", justifyContent: "center" }}
+          title="Sound / Music / Atmosphere Bible — feeds approved sound canon into AI video prompt audio"
+        >
+          <AudioLines className="h-4 w-4" />
+          Sound Bible
         </Link>
         <p className="mt-2 text-[11px] text-bone-500 text-center">
           The 12-stage guided workflow — script → canon → blocking → DP → continuity → prompts → final.

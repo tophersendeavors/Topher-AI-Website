@@ -7,3 +7,4 @@ export * from "./emotionalAnalysis";
 export * from "./turnDetection";
 export * from "./naming";
 export * from "./projectTypeConfig";
+export * from "./sound";

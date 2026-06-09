@@ -142,6 +142,21 @@ export interface LocationBible {
   notes?: string;
   /** Whether the writer has marked this bible as production-ready. */
   approved?: boolean;
+  /** Sound Bible — per-episode sound signature for this location.
+   *  Optional. The Sound Bible composer injection reads only approved
+   *  episode entries. Keyed by episodeId. */
+  soundSignatureByEpisode?: Record<
+    string,
+    {
+      ambientBed: string;
+      keyDiegeticPresent: string[];
+      musicProhibited: boolean;
+      anchoredMotifIds: string[];
+      notes: string;
+      sectionApprovedAt: string | null;
+      sectionApprovedBy: string | null;
+    }
+  >;
   createdAt: string;
   updatedAt: string;
 }

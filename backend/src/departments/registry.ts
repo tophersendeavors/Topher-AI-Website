@@ -22,6 +22,7 @@ export type DepartmentKey =
   | "wardrobe_hmu"
   | "cinematography"
   | "blocking"
+  | "sound"
   | "prompt_supervisor"
   | "quality_gate";
 
@@ -121,6 +122,23 @@ export const DEPARTMENT_REGISTRY: Record<DepartmentKey, DepartmentMeta> = {
       "Character start/end positions, movement paths, eyeline targets, prop positions per shot.",
     canonOwner: false,
     ownedFieldPaths: [],
+  },
+  sound: {
+    key: "sound",
+    label: "Sound / Music / Atmosphere",
+    description:
+      "Per-episode sonic identity, scene-by-scene ambient bed + diegetic sounds + non-diegetic music guidance, motif registry, character & location sound signatures, score philosophy. Approved canon flows into AI video prompt audio fields.",
+    canonOwner: true,
+    ownedFieldPaths: [
+      "soundBibles.*.episodeSoundIdentity.*",
+      "soundBibles.*.scenes.*",
+      "soundBibles.*.motifs.*",
+      "soundBibles.*.characterSignatures.*",
+      "soundBibles.*.locationSignatures.*",
+      "soundBibles.*.musicGuidance.*",
+      "characters.*.visualBible.soundSignatureByEpisode.*",
+      "locationBibles.*.soundSignatureByEpisode.*",
+    ],
   },
   prompt_supervisor: {
     key: "prompt_supervisor",

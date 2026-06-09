@@ -14,6 +14,11 @@ import type {
   SceneEmotionalState,
   Script,
   Season,
+  SoundAuditResult,
+  SoundBible,
+  SoundBibleResponse,
+  SoundSceneBreakdown,
+  SoundSection,
   TitlePageMeta,
   WorkflowStageId,
   WorkflowSummary,
@@ -3605,6 +3610,72 @@ export const api = {
       `/projects/${projectId}/redevelopment/${passId}/r6-rewrite/draft/repair`,
       { method: "POST", body: JSON.stringify(body) }
     ),
+
+  // --- Sound / Music / Atmosphere Bible -------------------------------------
+  //
+  // All endpoints write to projects.metadata.soundBibles[episodeId]. None
+  // touch scripts.fountain or script_scenes. Locked drafts are valid READ
+  // sources; the lock guard is non-applicable here by design.
+  getSoundBible: (projectId: string, episodeId: string) =>
+    request<SoundBibleResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible`
+    ),
+  generateSoundBible: (projectId: string, episodeId: string) =>
+    request<{ bible: SoundBible }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/generate`,
+      { method: "POST" }
+    ),
+  generateSoundBibleSection: (
+    projectId: string,
+    episodeId: string,
+    section: SoundSection,
+    notes?: string
+  ) =>
+    request<{ bible: SoundBible }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/section/${section}/generate`,
+      { method: "POST", body: JSON.stringify({ notes }) }
+    ),
+  saveSoundBible: (projectId: string, episodeId: string, body: Partial<SoundBible>) =>
+    request<{ bible: SoundBible }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+  saveSoundSceneRow: (
+    projectId: string,
+    episodeId: string,
+    ord: number,
+    body: Partial<SoundSceneBreakdown>
+  ) =>
+    request<{ bible: SoundBible }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/scenes/${ord}`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+  approveSoundScene: (projectId: string, episodeId: string, ord: number) =>
+    request<{ bible: SoundBible }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/scenes/${ord}/approve`,
+      { method: "POST" }
+    ),
+  approveSoundSection: (projectId: string, episodeId: string, section: SoundSection) =>
+    request<{ bible: SoundBible }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/section/${section}/approve`,
+      { method: "POST" }
+    ),
+  approveSoundBible: (projectId: string, episodeId: string) =>
+    request<{ bible: SoundBible }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/approve`,
+      { method: "POST" }
+    ),
+  auditSoundBible: (projectId: string, episodeId: string) =>
+    request<{ audit: SoundAuditResult }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/audit`,
+      { method: "POST" }
+    ),
+  exportSoundBibleUrl: (
+    projectId: string,
+    episodeId: string,
+    format: "markdown" | "json"
+  ) =>
+    `/api/projects/${projectId}/episodes/${episodeId}/sound-bible/export?format=${format}`,
 };
 
 // --- Series Redevelopment types --------------------------------------

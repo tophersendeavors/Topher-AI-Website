@@ -702,6 +702,56 @@ export async function generatePromptForModel(args: {
     continuityWithVisible =
       `${continuityWithVisible}\n\n[DP BRIEF — APPROVED CANON, OBEY VERBATIM]\n${dpBrief.trim()}`;
   }
+  // Sound Bible — composer injection, GATED ON APPROVAL.
+  //
+  // The Sound Bible lives in projects.metadata.soundBibles[episodeId]
+  // and is owned by the new "sound" department. The composer reads ONLY
+  // approved per-scene rows (and only an approved episodeSoundIdentity).
+  // Unapproved rows / drafts do NOT influence prompts — the build plan's
+  // "approval gate before AI prompt injection" requirement is enforced
+  // here at the single read point. Zero regression for projects that
+  // haven't built a Sound Bible yet — the directive is empty.
+  try {
+    const { buildSoundDirective } = await import("../../sound/composerDirective.js");
+    const { getSoundBible } = await import("../../sound/store.js");
+    // Resolve which episodeId this script belongs to (some legacy scripts
+    // have episode_id=null; in that case the SoundBible is empty and the
+    // builder returns empty strings).
+    const { data: scriptForEp } = await supabase
+      .from("scripts")
+      .select("episode_id")
+      .eq("id", args.scriptId)
+      .maybeSingle();
+    const episodeId = (scriptForEp?.episode_id as string | null) ?? null;
+    if (episodeId) {
+      const bible = await getSoundBible(ctx.projectId, episodeId);
+      const sd = buildSoundDirective({
+        bible,
+        sceneOrd: args.sceneOrd,
+        // First-shot detection: scene ord 1 + shot index 0/1 is the
+        // canonical "first shot of the episode". We use a simple heuristic
+        // so the preamble only fires once per episode.
+        isFirstShotOfEpisode: args.sceneOrd === 1 && args.shotIndex <= 1,
+      });
+      if (sd.episodePreamble) {
+        continuityWithVisible = `${continuityWithVisible}\n\n${sd.episodePreamble}`;
+      }
+      if (sd.shotBlock) {
+        continuityWithVisible = `${continuityWithVisible}\n\n${sd.shotBlock}`;
+      }
+      // Veo / Kling audio-field hook — attach the approved audio note onto
+      // the brief so the model-specific adapter can route it into the
+      // platform's audio field. Unapproved scenes never touch this.
+      if (sd.audioField) {
+        (brief as Record<string, unknown>).soundAudioField = sd.audioField;
+      }
+    }
+  } catch (err) {
+    // Soft fail — sound canon is additive; if anything errors here we
+    // log and keep the existing prompts unchanged.
+    // eslint-disable-next-line no-console
+    console.warn("[aiPrompts] Sound Bible injection skipped:", (err as Error).message);
+  }
   // Stage 4 — collect approved canon references that touch this shot's
   // bibles, so the composer's referenceMetadata.canonReferences[] picks
   // them up. Each reference is an approved image / URL / color attached

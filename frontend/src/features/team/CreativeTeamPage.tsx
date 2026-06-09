@@ -344,7 +344,7 @@ function SummaryStrip({ roster }: { roster: TeamRosterResponse }) {
     },
     { label: "AI", value: String(s.byKind.ai) },
     { label: "AI Creative", value: String(s.byKind.ai_creative) },
-    { label: "Live Person", value: String(s.byKind.live_person) },
+    { label: "Real Person", value: String(s.byKind.live_person) },
     {
       label: "Roster",
       value: s.rosterApprovedAt ? "Approved" : "Draft",
@@ -616,8 +616,19 @@ function AssignmentDrawer({
         </div>
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
           <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2.5 text-[12px] leading-relaxed text-bone-300">
-            AI Generator creates the final asset. AI Creative helps
-            plan/direct/review. Real Person owns the role.
+            <p>
+              <span className="text-bone-100">AI Generator</span> creates the
+              final asset.{" "}
+              <span className="text-bone-100">AI Creative</span> helps
+              plan/direct/review.{" "}
+              <span className="text-bone-100">Real Person</span> owns the
+              role.
+            </p>
+            <p className="mt-1.5 text-[11.5px] text-bone-400">
+              Real Person does not turn AI off. It means AI supports the
+              person — with briefs, checklists, notes, options, and
+              continuity warnings — instead of replacing the role.
+            </p>
           </div>
 
           {rec && (

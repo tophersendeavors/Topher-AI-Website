@@ -45,11 +45,16 @@ export const ROLE_KIND_LABEL: Record<RoleKind, string> = {
 };
 
 /** Plain-language one-liner shown next to each kind option in the
- *  Creative Team drawer so the user doesn't have to guess. */
+ *  Creative Team drawer so the user doesn't have to guess. Reflects
+ *  ownership — not whether AI is on or off. Studio OS still produces
+ *  support materials (briefs, checklists, continuity warnings,
+ *  references) for every role kind. */
 export const ROLE_KIND_DESCRIPTION: Record<RoleKind, string> = {
-  ai: "AI creates the final asset.",
-  ai_creative: "AI helps plan, direct, review, or brief.",
-  live_person: "A human owns this role.",
+  ai: "AI creates the final asset or draft. You review and approve.",
+  ai_creative:
+    "AI provides direction, planning, review, options, or strategy. You decide what to use.",
+  live_person:
+    "A human owns the role and final decisions. AI supports them with briefs, checklists, notes, and continuity warnings.",
 };
 
 export type RoleCategory =

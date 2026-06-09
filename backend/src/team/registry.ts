@@ -167,7 +167,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "director_notes",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "Produces shot intent and staging direction — a creative-direction role, not the final generated asset.",
+        "Produces shot intent and staging direction — a creative-direction role that briefs the shot composer.",
     },
     recommendationsByMode: {
       human_led: {

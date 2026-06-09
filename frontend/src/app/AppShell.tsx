@@ -2,6 +2,7 @@ import { NavLink, Outlet, useParams } from "react-router-dom";
 import {
   Briefcase,
   Clapperboard,
+  Compass,
   Film,
   GitBranch,
   Heart,
@@ -23,29 +24,32 @@ import { useAuth } from "@/lib/auth";
 import { useUIMode } from "@/lib/uiMode";
 import { api } from "@/lib/api";
 
-// Sidebar nav (Stage 6 — consolidated).
+// Sidebar nav — organised by the three studio phases:
 //
-// 5 sections, ~10 entries. Production Tools / Departments / Rewrites and
-// the 4 sub-pitch entries are gone — their content lives inside other
-// pages (Episode workflow stages, single Pitch page with internal tabs,
-// Drafts page with rewrites tab). The Episode-level WORKFLOW page is
-// the canonical entry point for everything production-related.
-const NAV: Array<{ to: (id: string) => string; label: string; Icon: typeof Film; section: 1 | 2 | 3 | 4 }> = [
-  // PLAN
-  { to: (id) => `/projects/${id}`, label: "Overview", Icon: Layers, section: 1 },
+//   • Studio (overview / always at top)
+//   • Writing       (write → review → lock)
+//   • Production    (assemble canon, plan shots, run the queue)
+//   • Delivery      (pitch + final exports)
+//
+// Routes are preserved — only labels and grouping change. The Studio
+// Timeline on the Overview page is the canonical "what to do next"
+// surface; the sidebar is the directory.
+const NAV: Array<{ to: (id: string) => string; label: string; Icon: typeof Film; section: 0 | 1 | 2 | 3 }> = [
+  // STUDIO — overview always at the top
+  { to: (id) => `/projects/${id}`, label: "Studio Timeline", Icon: Compass, section: 0 },
+  // WRITING — write + review + lock
   { to: (id) => `/projects/${id}/writers-room`, label: "Writers Room", Icon: Sparkles, section: 1 },
-  { to: (id) => `/projects/${id}/character-bible`, label: "Character Bible", Icon: Users, section: 1 },
-  { to: (id) => `/projects/${id}/story-bible`, label: "Story Bible", Icon: ScrollText, section: 1 },
-  // WRITE & PRODUCE
+  { to: (id) => `/projects/${id}/drafts`, label: "Drafts", Icon: Film, section: 1 },
+  { to: (id) => `/projects/${id}/continuity`, label: "Continuity", Icon: GitBranch, section: 1 },
+  { to: (id) => `/projects/${id}/emotional`, label: "Emotional Intelligence", Icon: Heart, section: 1 },
+  // PRODUCTION — assemble canon, plan, queue
   { to: (id) => `/projects/${id}/episodes`, label: "Episodes", Icon: ListTree, section: 2 },
+  { to: (id) => `/projects/${id}/character-bible`, label: "Character Bible", Icon: Users, section: 2 },
+  { to: (id) => `/projects/${id}/story-bible`, label: "Story Bible", Icon: ScrollText, section: 2 },
   { to: (id) => `/projects/${id}/production`, label: "Production Hub", Icon: Layers, section: 2 },
-  { to: (id) => `/projects/${id}/drafts`, label: "Drafts", Icon: Film, section: 2 },
-  { to: (id) => `/projects/${id}/continuity`, label: "Continuity", Icon: GitBranch, section: 2 },
-  { to: (id) => `/projects/${id}/emotional`, label: "Emotional Intelligence", Icon: Heart, section: 2 },
-  // PITCH (single entry — the 5 deck types are tabs inside the page)
+  // DELIVERY — pitch + exports
   { to: (id) => `/projects/${id}/pitch`, label: "Pitch Materials", Icon: Presentation, section: 3 },
-  // EXPORT
-  { to: (id) => `/projects/${id}/exports`, label: "Export Center", Icon: Clapperboard, section: 4 },
+  { to: (id) => `/projects/${id}/exports`, label: "Export Center", Icon: Clapperboard, section: 3 },
 ];
 
 export function AppShell() {
@@ -81,20 +85,20 @@ export function AppShell() {
 
         {projectId ? (
           <nav className="flex flex-1 flex-col overflow-y-auto pb-4">
-            <SectionLabel label="Plan" />
+            <SectionLabel label="Studio" />
+            {NAV.filter((n) => n.section === 0).map((n) => (
+              <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
+            ))}
+            <SectionLabel label="Writing" />
             {NAV.filter((n) => n.section === 1).map((n) => (
               <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
             ))}
-            <SectionLabel label="Write & Produce" />
+            <SectionLabel label="Production" />
             {NAV.filter((n) => n.section === 2).map((n) => (
               <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
             ))}
-            <SectionLabel label="Pitch" />
+            <SectionLabel label="Delivery" />
             {NAV.filter((n) => n.section === 3).map((n) => (
-              <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
-            ))}
-            <SectionLabel label="Export" />
-            {NAV.filter((n) => n.section === 4).map((n) => (
               <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
             ))}
           </nav>

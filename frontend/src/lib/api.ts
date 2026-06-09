@@ -3871,6 +3871,12 @@ export const api = {
       ? `/api/projects/${projectId}/episodes/${episodeId}/production-package/export`
       : `/api/projects/${projectId}/production-package/export`,
 
+  // --- Studio Timeline ---------------------------------------------------
+  getStudioTimeline: (projectId: string) =>
+    request<import("@toburt/shared").StudioTimelineResponse>(
+      `/projects/${projectId}/studio-timeline`
+    ),
+
   // --- Wayfinder ---------------------------------------------------------
   getWayfinder: (
     projectId: string,

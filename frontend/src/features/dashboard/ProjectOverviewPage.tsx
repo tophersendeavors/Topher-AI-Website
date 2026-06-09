@@ -37,6 +37,7 @@ import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
+import { StudioTimeline } from "@/components/ui/StudioTimeline";
 import { RecommendedNextStep } from "@/components/ui/RecommendedNextStep";
 import { Button } from "@/components/ui/Button";
 import { BusyBar } from "@/components/ui/BusyBar";
@@ -263,7 +264,8 @@ export function ProjectOverviewPage() {
         <RecommendedNextStep projectId={projectId} />
       </div>
 
-      <div className="px-8">
+      <div className="px-8 space-y-4">
+        <StudioTimeline projectId={projectId} />
         <WayfinderPanel projectId={projectId} />
       </div>
 

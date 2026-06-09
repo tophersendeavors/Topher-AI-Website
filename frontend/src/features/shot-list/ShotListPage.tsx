@@ -6,6 +6,7 @@
 
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { RoleBriefsSection } from "@/components/ui/RoleBriefsSection";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -669,9 +670,25 @@ function ShotCard({
               {shot.soundContext.audioField ? ` · audio: ${shot.soundContext.audioField}` : ""}
             </div>
           )}
+          <ShotCardRoleBriefs ord={ord} shotIndex={shot.shotIndex} />
         </div>
       )}
     </li>
+  );
+}
+
+function ShotCardRoleBriefs({ ord, shotIndex }: { ord: number; shotIndex: number }) {
+  const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
+  if (!projectId || !episodeId) return null;
+  return (
+    <div className="md:col-span-2">
+      <RoleBriefsSection
+        projectId={projectId}
+        episodeId={episodeId}
+        shotKey={`${ord}-${shotIndex}`}
+        dense
+      />
+    </div>
   );
 }
 

@@ -564,8 +564,61 @@ function EpisodeExportBody({
       <EpisodeMusicPack projectId={projectId} row={row} epSlug={epSlug} />
       <EpisodeShotList projectId={projectId} row={row} epSlug={epSlug} />
       <EpisodeAIVideoPrompts projectId={projectId} row={row} />
+      <EpisodeRoleBriefs projectId={projectId} row={row} epSlug={epSlug} />
       <EpisodeTrailer projectId={projectId} row={row} epSlug={epSlug} />
       <EpisodeGenerationQueue projectId={projectId} row={row} epSlug={epSlug} />
+    </div>
+  );
+}
+
+function EpisodeRoleBriefs({
+  projectId,
+  row,
+  epSlug,
+}: {
+  projectId: string;
+  row: ProductionHubEpisodeRow;
+  epSlug: string;
+}) {
+  return (
+    <div className="rounded-md border border-white/5 bg-white/[0.015] p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-bone-100">
+        <Sparkles className="h-4 w-4" />
+        <span>Role-routed briefs</span>
+        <Link
+          to={`/projects/${projectId}/team`}
+          className="ml-1 inline-flex items-center gap-1 text-[11px] text-bone-400 hover:text-bone-200"
+        >
+          <ExternalLink className="h-3 w-3" /> Open Creative Team
+        </Link>
+      </div>
+      <div className="text-[11px] text-bone-400">
+        Per-shot handoffs grouped by role kind. AI roles get model-ready prompts;
+        AI Creative roles get briefs / strategy / review; Live Person roles get
+        human-readable handoffs. Assign roles on Creative Team to populate.
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <a
+          className="btn-outline"
+          href={api.exportRoleBriefsUrl(projectId, row.episodeId, "json")}
+          download={`${epSlug}_role_briefs.json`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Download className="h-3.5 w-3.5" />
+          .json
+        </a>
+        <a
+          className="btn-outline"
+          href={api.exportRoleBriefsUrl(projectId, row.episodeId, "markdown")}
+          download={`${epSlug}_role_briefs.md`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Download className="h-3.5 w-3.5" />
+          .md
+        </a>
+      </div>
     </div>
   );
 }

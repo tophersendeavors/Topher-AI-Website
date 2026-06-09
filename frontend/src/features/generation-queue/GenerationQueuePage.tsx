@@ -41,6 +41,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
+import { RoleBriefsSection } from "@/components/ui/RoleBriefsSection";
 
 export function GenerationQueuePage() {
   const { projectId, episodeId } = useParams<{
@@ -530,6 +531,12 @@ function QueueItemRow({
         <div className="border-t border-white/8 p-3 space-y-3">
           <ReadinessBlock item={item} />
           <PromptHandoffBlock item={item} />
+          <RoleBriefsSection
+            projectId={projectId}
+            episodeId={episodeId}
+            shotKey={`${item.sceneOrd}-${item.shotIndex}`}
+            dense
+          />
           <ControlsBlock
             item={item}
             onPatch={(p) => patch.mutate(p)}

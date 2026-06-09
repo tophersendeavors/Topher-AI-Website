@@ -544,7 +544,9 @@ function makeStages(
             ? `Approve the remaining ${snap.totalShots - snap.approvedShots} shot${snap.totalShots - snap.approvedShots === 1 ? "" : "s"}.`
             : !allComposed
               ? `Compose prompts for ${snap.briefs - snap.composed} more shot${snap.briefs - snap.composed === 1 ? "" : "s"}.`
-              : "Shot list + prompts complete.",
+              : snap.allRequiredRolesAssigned
+                ? "Shot list + prompts complete — role-routed briefs are available on each shot card."
+                : "Shot list + prompts complete. Assign roles on Creative Team to unlock per-role handoffs.",
       status,
       statusDetail:
         snap.totalShots === 0

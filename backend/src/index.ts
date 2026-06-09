@@ -32,6 +32,7 @@ import generationQueueRoutes from "./routes/generationQueue.js";
 import wayfinderRoutes from "./routes/wayfinder.js";
 import studioRoutes from "./routes/studio.js";
 import teamRoutes from "./routes/team.js";
+import briefRouterRoutes from "./routes/briefRouter.js";
 
 async function main() {
   const app = Fastify({
@@ -80,6 +81,7 @@ async function main() {
       await api.register(wayfinderRoutes);
       await api.register(studioRoutes);
       await api.register(teamRoutes);
+      await api.register(briefRouterRoutes);
     },
     { prefix: "/api" }
   );

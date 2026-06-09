@@ -3871,6 +3871,27 @@ export const api = {
       ? `/api/projects/${projectId}/episodes/${episodeId}/production-package/export`
       : `/api/projects/${projectId}/production-package/export`,
 
+  // --- Brief Router ------------------------------------------------------
+  getEpisodeRoleBriefs: (
+    projectId: string,
+    episodeId: string,
+    opts?: { shotKey?: string; roleKey?: string }
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.shotKey) qs.set("shotKey", opts.shotKey);
+    if (opts?.roleKey) qs.set("roleKey", opts.roleKey);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<import("@toburt/shared").EpisodeRoleBriefsResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/role-briefs${suffix}`
+    );
+  },
+  exportRoleBriefsUrl: (
+    projectId: string,
+    episodeId: string,
+    format: "json" | "markdown"
+  ) =>
+    `/api/projects/${projectId}/episodes/${episodeId}/role-briefs/export?format=${format}`,
+
   // --- Creative Team / Roles --------------------------------------------
   getTeamRoster: (projectId: string) =>
     request<import("@toburt/shared").TeamRosterResponse>(

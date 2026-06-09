@@ -16,3 +16,4 @@ export * from "./generationQueue";
 export * from "./wayfinder";
 export * from "./studioTimeline";
 export * from "./team";
+export * from "./brief";

@@ -752,6 +752,29 @@ export async function generatePromptForModel(args: {
     // eslint-disable-next-line no-console
     console.warn("[aiPrompts] Sound Bible injection skipped:", (err as Error).message);
   }
+  // Curated Shot List approval gate — informational only. The composer
+  // continues to generate prompts even when a shot is unapproved, but
+  // surfaces "Using unapproved shot brief" so the prompt supervisor
+  // knows a writer hasn't signed off yet. No prompt change when the
+  // shot or its scene or the episode is approved.
+  try {
+    const { getShotListApprovalState } = await import("./approvalState.js");
+    const state = await getShotListApprovalState(
+      args.scriptId,
+      args.sceneOrd,
+      args.shotIndex
+    );
+    (brief as Record<string, unknown>).shotListApprovalState = state;
+    if (state.status === "unapproved" && state.totalShots > 0) {
+      continuityWithVisible = `${continuityWithVisible}\n\n[SHOT LIST — UNAPPROVED] This shot brief has not yet been approved on the Curated Shot List. The output below should be reviewed before production handoff.`;
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[aiPrompts] shot-list approval state skipped:",
+      (err as Error).message
+    );
+  }
   // Stage 4 — collect approved canon references that touch this shot's
   // bibles, so the composer's referenceMetadata.canonReferences[] picks
   // them up. Each reference is an approved image / URL / color attached

@@ -8,3 +8,4 @@ export * from "./turnDetection";
 export * from "./naming";
 export * from "./projectTypeConfig";
 export * from "./sound";
+export * from "./shotList";

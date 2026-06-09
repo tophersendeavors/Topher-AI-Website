@@ -472,6 +472,15 @@ function EpisodeCard({
           <AudioLines className="h-4 w-4" />
           Sound Bible
         </Link>
+        <Link
+          to={`/projects/${projectId}/episodes/${episode.id}/shot-list`}
+          className="os-btn os-btn-outline w-full justify-center"
+          style={{ width: "100%", justifyContent: "center" }}
+          title="Curated Shot List — group, edit, approve shot briefs that feed the AI Video Prompts panel"
+        >
+          <ListTree className="h-4 w-4" />
+          Shot List
+        </Link>
         <p className="mt-2 text-[11px] text-bone-500 text-center">
           The 12-stage guided workflow — script → canon → blocking → DP → continuity → prompts → final.
         </p>

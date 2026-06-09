@@ -23,6 +23,7 @@ import { DepartmentWorkspacePage } from "@/features/departments/DepartmentWorksp
 import { WorkflowPage } from "@/features/workflow/WorkflowPage";
 import { RedevelopmentPage } from "@/features/redevelopment/RedevelopmentPage";
 import { SoundBiblePage } from "@/features/sound-bible/SoundBiblePage";
+import { ShotListPage } from "@/features/shot-list/ShotListPage";
 
 export function App() {
   return (
@@ -70,6 +71,10 @@ function AppRoutes() {
             <Route
               path="projects/:projectId/episodes/:episodeId/sound-bible"
               element={<SoundBiblePage />}
+            />
+            <Route
+              path="projects/:projectId/episodes/:episodeId/shot-list"
+              element={<ShotListPage />}
             />
             <Route
               path="projects/:projectId/redevelopment"

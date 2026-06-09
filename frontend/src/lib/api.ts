@@ -18,6 +18,9 @@ import type {
   MusicPackResponse,
   MusicPromptPack,
   MusicSlot,
+  ShotEditPatch,
+  ShotListResponse,
+  ShotListRow,
   SoundAuditResult,
   SoundBible,
   SoundBibleResponse,
@@ -3721,6 +3724,67 @@ export const api = {
   },
   musicPackJsonUrl: (projectId: string, episodeId: string) =>
     `/api/projects/${projectId}/episodes/${episodeId}/sound-bible/music/export.json`,
+
+  // --- Curated Shot List -------------------------------------------------
+  getShotList: (scriptId: string) =>
+    request<ShotListResponse>(`/scripts/${scriptId}/shot-list`),
+  patchShot: (scriptId: string, ord: number, shotIndex: number, patch: ShotEditPatch) =>
+    request<{ row: ShotListRow }>(
+      `/scripts/${scriptId}/scenes/${ord}/shots/${shotIndex}/curated`,
+      { method: "PATCH", body: JSON.stringify(patch) }
+    ),
+  addShot: (scriptId: string, ord: number, seed?: ShotEditPatch) =>
+    request<{ row: ShotListRow }>(
+      `/scripts/${scriptId}/scenes/${ord}/shots`,
+      { method: "POST", body: JSON.stringify(seed ?? {}) }
+    ),
+  removeShot: (scriptId: string, ord: number, shotIndex: number) =>
+    request<void>(`/scripts/${scriptId}/scenes/${ord}/shots/${shotIndex}`, {
+      method: "DELETE",
+    }),
+  duplicateShot: (scriptId: string, ord: number, shotIndex: number) =>
+    request<{ row: ShotListRow }>(
+      `/scripts/${scriptId}/scenes/${ord}/shots/${shotIndex}/duplicate`,
+      { method: "POST" }
+    ),
+  reorderShots: (scriptId: string, ord: number, order: number[]) =>
+    request<{ ok: true }>(
+      `/scripts/${scriptId}/scenes/${ord}/shots/reorder`,
+      { method: "PATCH", body: JSON.stringify({ order }) }
+    ),
+  regenerateOneShot: (
+    scriptId: string,
+    ord: number,
+    shotIndex: number,
+    body: { notes?: string; sourceStrict?: boolean; force?: boolean }
+  ) =>
+    request<unknown>(`/scripts/${scriptId}/scenes/${ord}/shots/${shotIndex}/regenerate`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  regenerateSceneShotList: (
+    scriptId: string,
+    ord: number,
+    body: { notes?: string; mode?: "replace" | "fill-empty"; confirmOverwriteUserEdits?: boolean }
+  ) =>
+    request<unknown>(`/scripts/${scriptId}/scenes/${ord}/shots/regenerate-scene`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  approveOneShot: (scriptId: string, ord: number, shotIndex: number) =>
+    request<{ ok: true }>(
+      `/scripts/${scriptId}/scenes/${ord}/shots/${shotIndex}/approve`,
+      { method: "POST" }
+    ),
+  approveSceneShots: (scriptId: string, ord: number) =>
+    request<{ ok: true }>(
+      `/scripts/${scriptId}/scenes/${ord}/shots/approve-scene`,
+      { method: "POST" }
+    ),
+  approveShotList: (scriptId: string) =>
+    request<{ ok: true }>(`/scripts/${scriptId}/shot-list/approve`, { method: "POST" }),
+  exportShotListUrl: (scriptId: string, format: "markdown" | "csv" | "json") =>
+    `/api/scripts/${scriptId}/shot-list/export?format=${format}`,
 };
 
 // --- Series Redevelopment types --------------------------------------

@@ -34,7 +34,7 @@ import { api } from "@/lib/api";
 // Routes are preserved — only labels and grouping change. The Studio
 // Timeline on the Overview page is the canonical "what to do next"
 // surface; the sidebar is the directory.
-const NAV: Array<{ to: (id: string) => string; label: string; Icon: typeof Film; section: 0 | 1 | 2 | 3 }> = [
+const NAV: Array<{ to: (id: string) => string; label: string; Icon: typeof Film; section: 0 | 1 | 2 | 3 | 4 }> = [
   // STUDIO — overview always at the top
   { to: (id) => `/projects/${id}`, label: "Studio Timeline", Icon: Compass, section: 0 },
   // WRITING — write + review + lock
@@ -42,14 +42,16 @@ const NAV: Array<{ to: (id: string) => string; label: string; Icon: typeof Film;
   { to: (id) => `/projects/${id}/drafts`, label: "Drafts", Icon: Film, section: 1 },
   { to: (id) => `/projects/${id}/continuity`, label: "Continuity", Icon: GitBranch, section: 1 },
   { to: (id) => `/projects/${id}/emotional`, label: "Emotional Intelligence", Icon: Heart, section: 1 },
+  // TEAM — assemble + assign roles
+  { to: (id) => `/projects/${id}/team`, label: "Creative Team", Icon: Users, section: 2 },
   // PRODUCTION — assemble canon, plan, queue
-  { to: (id) => `/projects/${id}/episodes`, label: "Episodes", Icon: ListTree, section: 2 },
-  { to: (id) => `/projects/${id}/character-bible`, label: "Character Bible", Icon: Users, section: 2 },
-  { to: (id) => `/projects/${id}/story-bible`, label: "Story Bible", Icon: ScrollText, section: 2 },
-  { to: (id) => `/projects/${id}/production`, label: "Production Hub", Icon: Layers, section: 2 },
+  { to: (id) => `/projects/${id}/episodes`, label: "Episodes", Icon: ListTree, section: 3 },
+  { to: (id) => `/projects/${id}/character-bible`, label: "Character Bible", Icon: Users, section: 3 },
+  { to: (id) => `/projects/${id}/story-bible`, label: "Story Bible", Icon: ScrollText, section: 3 },
+  { to: (id) => `/projects/${id}/production`, label: "Production Hub", Icon: Layers, section: 3 },
   // DELIVERY — pitch + exports
-  { to: (id) => `/projects/${id}/pitch`, label: "Pitch Materials", Icon: Presentation, section: 3 },
-  { to: (id) => `/projects/${id}/exports`, label: "Export Center", Icon: Clapperboard, section: 3 },
+  { to: (id) => `/projects/${id}/pitch`, label: "Pitch Materials", Icon: Presentation, section: 4 },
+  { to: (id) => `/projects/${id}/exports`, label: "Export Center", Icon: Clapperboard, section: 4 },
 ];
 
 export function AppShell() {
@@ -93,12 +95,16 @@ export function AppShell() {
             {NAV.filter((n) => n.section === 1).map((n) => (
               <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
             ))}
-            <SectionLabel label="Production" />
+            <SectionLabel label="Team" />
             {NAV.filter((n) => n.section === 2).map((n) => (
               <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
             ))}
-            <SectionLabel label="Delivery" />
+            <SectionLabel label="Production" />
             {NAV.filter((n) => n.section === 3).map((n) => (
+              <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
+            ))}
+            <SectionLabel label="Delivery" />
+            {NAV.filter((n) => n.section === 4).map((n) => (
               <Item key={n.label} to={n.to(projectId)} label={n.label} Icon={n.Icon} />
             ))}
           </nav>

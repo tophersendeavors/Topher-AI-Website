@@ -27,6 +27,7 @@ import { ShotListPage } from "@/features/shot-list/ShotListPage";
 import { TrailerBuilderPage } from "@/features/trailer-builder/TrailerBuilderPage";
 import { ProductionHubPage } from "@/features/production-hub/ProductionHubPage";
 import { GenerationQueuePage } from "@/features/generation-queue/GenerationQueuePage";
+import { CreativeTeamPage } from "@/features/team/CreativeTeamPage";
 
 export function App() {
   return (
@@ -63,6 +64,7 @@ function AppRoutes() {
             <Route path="projects/:projectId/production" element={<ProductionHubPage />} />
             <Route path="projects/:projectId/production-tools" element={<ProductionPage />} />
             <Route path="projects/:projectId/exports" element={<ExportCenterPage />} />
+            <Route path="projects/:projectId/team" element={<CreativeTeamPage />} />
             <Route path="projects/:projectId/departments" element={<DepartmentsHubPage />} />
             <Route
               path="projects/:projectId/departments/:deptKey"

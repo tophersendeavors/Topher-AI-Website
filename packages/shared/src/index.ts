@@ -15,3 +15,4 @@ export * from "./productionHub";
 export * from "./generationQueue";
 export * from "./wayfinder";
 export * from "./studioTimeline";
+export * from "./team";

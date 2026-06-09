@@ -13,6 +13,7 @@ import { getSoundBible } from "../sound/store.js";
 import { getShotList } from "../shotList/store.js";
 import { getTrailerPack } from "../trailer/store.js";
 import { loadQueue } from "../generationQueue/store.js";
+import { buildTeamRoster } from "../team/aggregator.js";
 import type {
   StudioStage,
   StudioStageKey,
@@ -122,6 +123,13 @@ interface Snapshot {
   trailerGenerated: boolean;
   packageBasicAvailable: boolean;
   packageFullReady: boolean;
+  // Team state — populated by buildTeamRoster.
+  totalRoles: number;
+  requiredRoles: number;
+  assignedRoles: number;
+  assignedRequiredRoles: number;
+  rosterApprovedAt: string | null;
+  allRequiredRolesAssigned: boolean;
 }
 
 async function buildSnapshot(
@@ -250,6 +258,15 @@ async function buildSnapshot(
     queueItems > 0 &&
     trailerGenerated;
 
+  // Team roster
+  const team = await buildTeamRoster(project.id);
+  const totalRoles = team?.summary.totalRoles ?? 0;
+  const requiredRoles = team?.summary.requiredRoles ?? 0;
+  const assignedRoles = team?.summary.assignedRoles ?? 0;
+  const assignedRequiredRoles = team?.summary.assignedRequiredRoles ?? 0;
+  const rosterApprovedAt = team?.summary.rosterApprovedAt ?? null;
+  const allRequiredRolesAssigned = team?.summary.allRequiredAssigned ?? false;
+
   return {
     hasCurrentScript,
     scriptId,
@@ -273,6 +290,12 @@ async function buildSnapshot(
     trailerGenerated,
     packageBasicAvailable,
     packageFullReady,
+    totalRoles,
+    requiredRoles,
+    assignedRoles,
+    assignedRequiredRoles,
+    rosterApprovedAt,
+    allRequiredRolesAssigned,
   };
 }
 
@@ -377,38 +400,78 @@ function makeStages(
     };
   })();
 
-  // 4. Assemble Creative Team (Phase A: placeholder)
-  const assembleTeam: StudioStage = {
-    number: 4,
-    key: "assemble_team",
-    phase: "team",
-    title: "Assemble Creative Team",
-    deliverable: "Approved team roster",
-    nextAction:
-      "Team page coming in Phase C. For now, draft your roster in the Character Bible and Departments Hub.",
-    status: "not_started",
-    statusDetail: "Phase C — not yet built",
-    primary: { label: "Open Departments", toRel: "/departments" },
-    surfaces: [
-      { label: "Character Bible", toRel: "/character-bible" },
-      { label: "Departments", toRel: "/departments" },
-    ],
-  };
+  // 4. Assemble Creative Team
+  const assembleTeam: StudioStage = (() => {
+    // Stage 4 = the roster exists. Completion signal: either the roster
+    // has been explicitly approved, or every required role has an
+    // assignment (in which case the user clearly assembled the team).
+    const isComplete =
+      snap.rosterApprovedAt !== null || snap.allRequiredRolesAssigned;
+    const isInProgress = snap.assignedRoles > 0;
+    const status: StudioStageStatus = !snap.scriptLocked
+      ? "blocked"
+      : isComplete
+        ? "complete"
+        : isInProgress
+          ? "in_progress"
+          : "not_started";
+    return {
+      number: 4,
+      key: "assemble_team",
+      phase: "team",
+      title: "Assemble Creative Team",
+      deliverable: "An approved team roster covering every required role",
+      nextAction: !snap.scriptLocked
+        ? "Lock the script first — the team is built against a locked draft."
+        : isComplete
+          ? "Team is assembled. Move to role assignments."
+          : isInProgress
+            ? `${snap.assignedRoles} of ${snap.totalRoles} role${snap.totalRoles === 1 ? "" : "s"} assigned. Keep going on the Creative Team page.`
+            : "Start the team — assign at minimum the writer, director, DP, composer, sound designer, prompt supervisor, and AI video operator.",
+      status,
+      statusDetail: snap.rosterApprovedAt
+        ? `Roster approved ${new Date(snap.rosterApprovedAt).toLocaleDateString()}`
+        : `${snap.assignedRoles} / ${snap.totalRoles} roles assigned · ${snap.assignedRequiredRoles} / ${snap.requiredRoles} required`,
+      primary: { label: "Open Creative Team", toRel: "/team" },
+      secondary: { label: "Character Bible", toRel: "/character-bible" },
+      surfaces: [
+        { label: "Creative Team", toRel: "/team" },
+        { label: "Character Bible", toRel: "/character-bible" },
+        { label: "Departments", toRel: "/departments" },
+      ],
+    };
+  })();
 
-  // 5. Assign Roles (Phase A: placeholder)
-  const assignRoles: StudioStage = {
-    number: 5,
-    key: "assign_roles",
-    phase: "team",
-    title: "Assign Roles",
-    deliverable: "Every role mapped to AI / AI-Creative / Live Person",
-    nextAction:
-      "Role assignment is Phase C. Departments Hub already enumerates roles — use it as a placeholder.",
-    status: "not_started",
-    statusDetail: "Phase C — not yet built",
-    primary: { label: "Open Departments", toRel: "/departments" },
-    surfaces: [{ label: "Departments", toRel: "/departments" }],
-  };
+  // 5. Assign Roles
+  const assignRoles: StudioStage = (() => {
+    // Stage 5 = every required role has a kind (ai / ai_creative /
+    // live_person) — same signal as buildTeamRoster.allRequiredAssigned.
+    const status: StudioStageStatus = !snap.scriptLocked
+      ? "blocked"
+      : snap.allRequiredRolesAssigned
+        ? "complete"
+        : snap.assignedRoles > 0
+          ? "in_progress"
+          : "not_started";
+    return {
+      number: 5,
+      key: "assign_roles",
+      phase: "team",
+      title: "Assign Roles",
+      deliverable: "Every required role mapped to AI / AI-Creative / Live Person",
+      nextAction: !snap.scriptLocked
+        ? "Lock the script first."
+        : snap.allRequiredRolesAssigned
+          ? "All required roles are assigned. Production prep can begin."
+          : snap.requiredRoles - snap.assignedRequiredRoles > 0
+            ? `Assign ${snap.requiredRoles - snap.assignedRequiredRoles} remaining required role${snap.requiredRoles - snap.assignedRequiredRoles === 1 ? "" : "s"} on the Creative Team page.`
+            : "Open the Creative Team page to begin assignments.",
+      status,
+      statusDetail: `${snap.assignedRequiredRoles} / ${snap.requiredRoles} required · ${snap.assignedRoles - snap.assignedRequiredRoles} optional`,
+      primary: { label: "Open Creative Team", toRel: "/team" },
+      surfaces: [{ label: "Creative Team", toRel: "/team" }],
+    };
+  })();
 
   // 6. Production Prep
   const productionPrep: StudioStage = (() => {

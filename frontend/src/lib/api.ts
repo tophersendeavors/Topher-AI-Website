@@ -3871,6 +3871,31 @@ export const api = {
       ? `/api/projects/${projectId}/episodes/${episodeId}/production-package/export`
       : `/api/projects/${projectId}/production-package/export`,
 
+  // --- Creative Team / Roles --------------------------------------------
+  getTeamRoster: (projectId: string) =>
+    request<import("@toburt/shared").TeamRosterResponse>(
+      `/projects/${projectId}/team`
+    ),
+  upsertRoleAssignment: (
+    projectId: string,
+    roleKey: string,
+    body: import("@toburt/shared").RoleAssignmentPatch
+  ) =>
+    request<import("@toburt/shared").TeamRosterResponse>(
+      `/projects/${projectId}/team/roles/${encodeURIComponent(roleKey)}`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+  deleteRoleAssignment: (projectId: string, roleKey: string) =>
+    request<import("@toburt/shared").TeamRosterResponse>(
+      `/projects/${projectId}/team/roles/${encodeURIComponent(roleKey)}`,
+      { method: "DELETE" }
+    ),
+  approveTeamRoster: (projectId: string, approved: boolean) =>
+    request<import("@toburt/shared").TeamRosterResponse>(
+      `/projects/${projectId}/team/approve`,
+      { method: "POST", body: JSON.stringify({ approved }) }
+    ),
+
   // --- Studio Timeline ---------------------------------------------------
   getStudioTimeline: (projectId: string) =>
     request<import("@toburt/shared").StudioTimelineResponse>(

@@ -11,3 +11,4 @@ export * from "./sound";
 export * from "./shotList";
 export * from "./trailer";
 export * from "./productionPackage";
+export * from "./productionHub";

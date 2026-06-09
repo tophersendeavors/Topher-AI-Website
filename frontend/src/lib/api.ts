@@ -3870,6 +3870,12 @@ export const api = {
     episodeId
       ? `/api/projects/${projectId}/episodes/${episodeId}/production-package/export`
       : `/api/projects/${projectId}/production-package/export`,
+
+  // --- Production Hub ----------------------------------------------------
+  getProductionHub: (projectId: string) =>
+    request<import("@toburt/shared").ProductionHubResponse>(
+      `/projects/${projectId}/production-hub`
+    ),
 };
 
 // --- Series Redevelopment types --------------------------------------

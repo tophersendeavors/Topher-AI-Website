@@ -25,6 +25,7 @@ import { RedevelopmentPage } from "@/features/redevelopment/RedevelopmentPage";
 import { SoundBiblePage } from "@/features/sound-bible/SoundBiblePage";
 import { ShotListPage } from "@/features/shot-list/ShotListPage";
 import { TrailerBuilderPage } from "@/features/trailer-builder/TrailerBuilderPage";
+import { ProductionHubPage } from "@/features/production-hub/ProductionHubPage";
 
 export function App() {
   return (
@@ -58,7 +59,8 @@ function AppRoutes() {
             <Route path="projects/:projectId/rewrites" element={<RewritesPage />} />
             <Route path="projects/:projectId/continuity" element={<ContinuityPage />} />
             <Route path="projects/:projectId/emotional" element={<EmotionalIntelligencePage />} />
-            <Route path="projects/:projectId/production" element={<ProductionPage />} />
+            <Route path="projects/:projectId/production" element={<ProductionHubPage />} />
+            <Route path="projects/:projectId/production-tools" element={<ProductionPage />} />
             <Route path="projects/:projectId/exports" element={<ExportCenterPage />} />
             <Route path="projects/:projectId/departments" element={<DepartmentsHubPage />} />
             <Route

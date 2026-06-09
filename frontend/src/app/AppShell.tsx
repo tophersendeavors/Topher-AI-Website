@@ -38,6 +38,7 @@ const NAV: Array<{ to: (id: string) => string; label: string; Icon: typeof Film;
   { to: (id) => `/projects/${id}/story-bible`, label: "Story Bible", Icon: ScrollText, section: 1 },
   // WRITE & PRODUCE
   { to: (id) => `/projects/${id}/episodes`, label: "Episodes", Icon: ListTree, section: 2 },
+  { to: (id) => `/projects/${id}/production`, label: "Production Hub", Icon: Layers, section: 2 },
   { to: (id) => `/projects/${id}/drafts`, label: "Drafts", Icon: Film, section: 2 },
   { to: (id) => `/projects/${id}/continuity`, label: "Continuity", Icon: GitBranch, section: 2 },
   { to: (id) => `/projects/${id}/emotional`, label: "Emotional Intelligence", Icon: Heart, section: 2 },

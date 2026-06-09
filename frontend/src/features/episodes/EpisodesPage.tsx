@@ -150,6 +150,9 @@ export function EpisodesPage() {
         description="Episodes group beat sheets, scene lists and drafts. Tentpole episodes anchor the season."
         actions={
           <div className="flex items-center gap-2">
+            <Link to={`/projects/${projectId}/production`}>
+              <Button variant="outline">Production Hub</Button>
+            </Link>
             <Button variant="outline" onClick={() => fromArc.mutate()} disabled={fromArc.isPending}>
               {fromArc.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
               Generate from Season Arc

@@ -563,6 +563,80 @@ function EpisodeExportBody({
       <EpisodeShotList projectId={projectId} row={row} epSlug={epSlug} />
       <EpisodeAIVideoPrompts projectId={projectId} row={row} />
       <EpisodeTrailer projectId={projectId} row={row} epSlug={epSlug} />
+      <EpisodeGenerationQueue projectId={projectId} row={row} epSlug={epSlug} />
+    </div>
+  );
+}
+
+function EpisodeGenerationQueue({
+  projectId,
+  row,
+  epSlug,
+}: {
+  projectId: string;
+  row: ProductionHubEpisodeRow;
+  epSlug: string;
+}) {
+  // The queue derives its own status from approvals — we surface it here as
+  // a flat block of download links to the existing export endpoints.
+  return (
+    <div className="rounded-md border border-white/5 bg-white/[0.015] p-3 space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-bone-100">
+        <Sparkles className="h-4 w-4" />
+        <span>AI Production Queue</span>
+        <Link
+          to={`/projects/${projectId}/episodes/${row.episodeId}/generation-queue`}
+          className="ml-1 inline-flex items-center gap-1 text-[11px] text-bone-400 hover:text-bone-200"
+        >
+          <ExternalLink className="h-3 w-3" /> Open Generation Planner
+        </Link>
+      </div>
+      <div className="text-[11px] text-bone-400">
+        Hand off the queue to your model of choice. Items mirror approved
+        shots — fix upstream and resync from the planner.
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <a
+          className="btn-outline"
+          href={`/api/projects/${projectId}/episodes/${row.episodeId}/generation-queue/export?format=queue_csv`}
+          download={`${epSlug}_generation_queue.csv`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Queue .csv
+        </a>
+        <a
+          className="btn-outline"
+          href={`/api/projects/${projectId}/episodes/${row.episodeId}/generation-queue/export?format=approved_manifest_json`}
+          download={`${epSlug}_approved_manifest.json`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Approved manifest .json
+        </a>
+        <a
+          className="btn-outline"
+          href={`/api/projects/${projectId}/episodes/${row.episodeId}/generation-queue/export?format=scene_assembly_checklist_markdown`}
+          download={`${epSlug}_scene_assembly_checklist.md`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Scene checklist .md
+        </a>
+        <a
+          className="btn-outline"
+          href={`/api/projects/${projectId}/episodes/${row.episodeId}/generation-queue/export?format=trailer_batch_text`}
+          download={`${epSlug}_trailer_batch.txt`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Trailer batch .txt
+        </a>
+      </div>
     </div>
   );
 }

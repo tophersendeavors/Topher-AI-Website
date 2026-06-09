@@ -28,6 +28,7 @@ import shotListRoutes from "./routes/shotList.js";
 import trailerRoutes from "./routes/trailer.js";
 import productionPackageRoutes from "./routes/productionPackage.js";
 import productionHubRoutes from "./routes/productionHub.js";
+import generationQueueRoutes from "./routes/generationQueue.js";
 
 async function main() {
   const app = Fastify({
@@ -72,6 +73,7 @@ async function main() {
       await api.register(trailerRoutes);
       await api.register(productionPackageRoutes);
       await api.register(productionHubRoutes);
+      await api.register(generationQueueRoutes);
     },
     { prefix: "/api" }
   );

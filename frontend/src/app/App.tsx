@@ -26,6 +26,7 @@ import { SoundBiblePage } from "@/features/sound-bible/SoundBiblePage";
 import { ShotListPage } from "@/features/shot-list/ShotListPage";
 import { TrailerBuilderPage } from "@/features/trailer-builder/TrailerBuilderPage";
 import { ProductionHubPage } from "@/features/production-hub/ProductionHubPage";
+import { GenerationQueuePage } from "@/features/generation-queue/GenerationQueuePage";
 
 export function App() {
   return (
@@ -82,6 +83,10 @@ function AppRoutes() {
             <Route
               path="projects/:projectId/episodes/:episodeId/trailer-builder"
               element={<TrailerBuilderPage />}
+            />
+            <Route
+              path="projects/:projectId/episodes/:episodeId/generation-queue"
+              element={<GenerationQueuePage />}
             />
             <Route
               path="projects/:projectId/redevelopment"

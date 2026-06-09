@@ -23,6 +23,7 @@ import {
   Film,
   Package,
   AlertTriangle,
+  Layers,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -495,6 +496,15 @@ function EpisodeCard({
         >
           <Film className="h-4 w-4" />
           Trailer Builder
+        </Link>
+        <Link
+          to={`/projects/${projectId}/episodes/${episode.id}/generation-queue`}
+          className="os-btn os-btn-outline w-full justify-center"
+          style={{ width: "100%", justifyContent: "center" }}
+          title="AI Production Queue — model assignment, generation status, outputs, batch grouping"
+        >
+          <Layers className="h-4 w-4" />
+          Generation Queue
         </Link>
         <ProductionPackageButton
           projectId={projectId!}

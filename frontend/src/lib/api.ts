@@ -3876,6 +3876,70 @@ export const api = {
     request<import("@toburt/shared").ProductionHubResponse>(
       `/projects/${projectId}/production-hub`
     ),
+
+  // --- Generation Queue --------------------------------------------------
+  getGenerationQueue: (projectId: string, episodeId: string) =>
+    request<import("@toburt/shared").GenerationQueueResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/generation-queue`
+    ),
+  resyncGenerationQueue: (projectId: string, episodeId: string) =>
+    request<import("@toburt/shared").GenerationQueueResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/generation-queue/sync`,
+      { method: "POST" }
+    ),
+  patchGenerationQueueItem: (
+    projectId: string,
+    episodeId: string,
+    itemId: string,
+    patch: import("@toburt/shared").GenerationQueueItemPatch
+  ) =>
+    request<import("@toburt/shared").GenerationQueueResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/generation-queue/items/${itemId}`,
+      { method: "PATCH", body: JSON.stringify(patch) }
+    ),
+  addGenerationOutput: (
+    projectId: string,
+    episodeId: string,
+    itemId: string,
+    body: import("@toburt/shared").GenerationOutputCreate
+  ) =>
+    request<import("@toburt/shared").GenerationQueueResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/generation-queue/items/${itemId}/outputs`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  reviewGenerationOutput: (
+    projectId: string,
+    episodeId: string,
+    itemId: string,
+    outputId: string,
+    body: import("@toburt/shared").GenerationOutputReviewPatch
+  ) =>
+    request<import("@toburt/shared").GenerationQueueResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/generation-queue/items/${itemId}/outputs/${outputId}`,
+      { method: "PATCH", body: JSON.stringify(body) }
+    ),
+  deleteGenerationOutput: (
+    projectId: string,
+    episodeId: string,
+    itemId: string,
+    outputId: string
+  ) =>
+    request<import("@toburt/shared").GenerationQueueResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/generation-queue/items/${itemId}/outputs/${outputId}`,
+      { method: "DELETE" }
+    ),
+  exportGenerationQueueUrl: (
+    projectId: string,
+    episodeId: string,
+    opts: {
+      format: import("@toburt/shared").GenerationQueueExportFormat;
+      model?: import("@toburt/shared").ModelTarget;
+    }
+  ) => {
+    const qs = new URLSearchParams({ format: opts.format });
+    if (opts.model) qs.set("model", opts.model);
+    return `/api/projects/${projectId}/episodes/${episodeId}/generation-queue/export?${qs.toString()}`;
+  },
 };
 
 // --- Series Redevelopment types --------------------------------------

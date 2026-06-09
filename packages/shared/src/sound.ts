@@ -83,6 +83,13 @@ export interface SoundBible {
   sourceScriptId: string | null;
   sourceDraftNumber: number | null;
   sourceWasLocked: boolean;
+  /** Friendly source label e.g. "Draft 5". */
+  sourceDraftLabel: string | null;
+  /** djb2 hashes of the source script's fountain + scene index at the
+   *  time the bible was generated. Used to detect drift. */
+  sourceFountainHash: string | null;
+  sourceScenesHash: string | null;
+  sourceSceneCount: number | null;
   updatedAt: string;
   createdAt: string;
   episodeSoundIdentity: EpisodeSoundIdentity;
@@ -136,9 +143,20 @@ export interface SoundBibleSourceInfo {
   sceneCount: number;
 }
 
+/** Coverage of the SoundBible vs the current locked source draft. */
+export interface SoundBibleCoverage {
+  expectedOrds: number[];
+  presentOrds: number[];
+  missingOrds: number[];
+  extraOrds: number[];
+  approvedSceneCount: number;
+  isFullyCovered: boolean;
+}
+
 export interface SoundBibleResponse {
   bible: SoundBible;
   source: SoundBibleSourceInfo;
+  coverage: SoundBibleCoverage;
 }
 
 // ---------------------------------------------------------------------------

@@ -620,11 +620,24 @@ export async function generateFullSoundBible(
     .filter(([, n]) => n >= 2)
     .map(([id]) => id);
 
+  // Stamp provenance: fountain + scene-index hashes so the verifier and
+  // the UI coverage gate can detect when the bible is stale relative to
+  // the source draft.
+  const sceneRowsForHash = ctx.scenes.map((s) => ({
+    ord: s.ord,
+    slugline: s.slugline,
+    fountainLen: s.fountain.length,
+  }));
   return {
     ...base,
     sourceScriptId: ctx.scriptId,
     sourceDraftNumber: ctx.scriptDraftNumber,
     sourceWasLocked: ctx.scriptIsLocked,
+    sourceDraftLabel:
+      ctx.scriptDraftNumber != null ? `Draft ${ctx.scriptDraftNumber}` : null,
+    sourceFountainHash: djb2Hex(ctx.scriptFountain ?? ""),
+    sourceScenesHash: djb2Hex(JSON.stringify(sceneRowsForHash)),
+    sourceSceneCount: ctx.scenes.length,
     episodeSoundIdentity: { ...identity, recurringMotifIds },
     musicGuidance,
     motifs,
@@ -632,6 +645,12 @@ export async function generateFullSoundBible(
     locationSignatures,
     scenes,
   };
+}
+
+function djb2Hex(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i);
+  return (h >>> 0).toString(16);
 }
 
 // ---------------------------------------------------------------------------

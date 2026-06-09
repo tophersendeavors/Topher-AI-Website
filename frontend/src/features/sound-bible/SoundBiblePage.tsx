@@ -140,6 +140,7 @@ export function SoundBiblePage() {
       <div className="px-8 space-y-6">
         <WayfinderPanel projectId={projectId} episodeId={episodeId} scope="production" />
         <SourceBanner data={data} />
+        <CoverageBanner data={data} />
         <Explainer>
           The Sound Bible is its own department. It reads from the current draft (you can read a
           locked draft — you just can't modify it). All sound canon writes to project metadata.
@@ -267,6 +268,59 @@ function SourceBanner({ data }: { data: SoundBibleResponse }) {
       mode="outline_only"
       outlineKind="scene_list"
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Coverage banner — non-blocking note when bible covers every locked
+// scene, blocking warning when scenes are missing or extra.
+// ---------------------------------------------------------------------------
+
+function CoverageBanner({ data }: { data: SoundBibleResponse }) {
+  const { coverage, bible } = data;
+  if (!coverage || bible.version === 0) return null;
+  if (coverage.isFullyCovered) {
+    return (
+      <div className="rounded-md border border-emerald-700/30 bg-emerald-900/10 px-3 py-2 text-[12.5px] text-bone-200">
+        <span className="text-emerald-200">Coverage complete:</span>{" "}
+        {coverage.presentOrds.length} of {coverage.expectedOrds.length}{" "}
+        locked scenes covered ·{" "}
+        {coverage.approvedSceneCount} of {coverage.expectedOrds.length}{" "}
+        approved.
+        {bible.sourceDraftLabel && (
+          <span className="text-bone-400">
+            {" "}· source: {bible.sourceDraftLabel}
+            {bible.sourceWasLocked ? " (locked)" : ""}
+          </span>
+        )}
+      </div>
+    );
+  }
+  const missingNote =
+    coverage.missingOrds.length > 0
+      ? ` Missing scene${coverage.missingOrds.length === 1 ? "" : "s"} ${coverage.missingOrds.join(", ")}.`
+      : "";
+  const extraNote =
+    coverage.extraOrds.length > 0
+      ? ` Extra row${coverage.extraOrds.length === 1 ? "" : "s"} for scene${coverage.extraOrds.length === 1 ? "" : "s"} ${coverage.extraOrds.join(", ")} (no longer in script).`
+      : "";
+  return (
+    <div className="rounded-lg border border-amber-700/40 bg-amber-900/15 p-3.5">
+      <div className="flex items-start gap-2 text-[10.5px] uppercase tracking-[0.18em] text-amber-200">
+        Sound Bible incomplete
+      </div>
+      <div className="mt-1 text-[13.5px] text-bone-50">
+        {coverage.presentOrds.length} of {coverage.expectedOrds.length}{" "}
+        locked scenes covered.{missingNote}{extraNote}
+      </div>
+      <p className="mt-1 text-[12px] leading-snug text-bone-300">
+        The whole-bible approval is blocked until coverage is complete. Use{" "}
+        <strong>Regenerate</strong> on the Scenes section to fill the missing
+        row{coverage.missingOrds.length === 1 ? "" : "s"}, or prune the extra
+        row{coverage.extraOrds.length === 1 ? "" : "s"} if scenes have been
+        removed from the script.
+      </p>
+    </div>
   );
 }
 

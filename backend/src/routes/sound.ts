@@ -52,6 +52,10 @@ import {
 } from "../sound/musicAdapters.js";
 import { auditSoundBible } from "../sound/validator.js";
 import {
+  computeSoundBibleCoverage,
+  describeCoverageGap,
+} from "../sound/coverage.js";
+import {
   exportSoundBibleJSON,
   exportSoundBibleMarkdown,
 } from "../sound/exporter.js";
@@ -80,6 +84,10 @@ export default async function soundRoutes(app: FastifyInstance) {
       // Surface source-draft identity so the UI banner can read it
       // without an extra query.
       const ctx = await buildGeneratorContext(projectId, episodeId);
+      const coverage = computeSoundBibleCoverage(
+        bible,
+        ctx.scenes.map((s) => s.ord)
+      );
       return {
         bible,
         source: {
@@ -90,6 +98,7 @@ export default async function soundRoutes(app: FastifyInstance) {
           episodeTitle: ctx.episodeTitle,
           sceneCount: ctx.scenes.length,
         },
+        coverage,
       };
     }
   );
@@ -234,15 +243,32 @@ export default async function soundRoutes(app: FastifyInstance) {
     }
   );
 
-  // POST whole-bible approve.
+  // POST whole-bible approve. Refuses when the bible does not cover
+  // every scene in the locked source draft — the writer must fill the
+  // gap (typically via /scenes/regenerate for the missing ord) before
+  // the whole bible can ship.
   app.post(
     "/projects/:projectId/episodes/:episodeId/sound-bible/approve",
-    async (req) => {
+    async (req, reply) => {
       const user = await requireUser(req);
       const { projectId, episodeId } = req.params as { projectId: string; episodeId: string };
       await assertProjectMember(user.id, projectId);
+      const bible = await getSoundBible(projectId, episodeId);
+      const ctx = await buildGeneratorContext(projectId, episodeId);
+      const coverage = computeSoundBibleCoverage(
+        bible,
+        ctx.scenes.map((s) => s.ord)
+      );
+      if (!coverage.isFullyCovered) {
+        reply.code(409);
+        return {
+          error: "sound_bible_incomplete_coverage",
+          message: describeCoverageGap(coverage),
+          coverage,
+        };
+      }
       const saved = await approveSoundBible(projectId, episodeId, user.id);
-      return { bible: saved };
+      return { bible: saved, coverage };
     }
   );
 

@@ -23,6 +23,15 @@ export interface SoundBible {
   sourceScriptId: string | null;
   sourceDraftNumber: number | null;
   sourceWasLocked: boolean;
+  /** Friendly label for the source (e.g. "Draft 5"). Derived from
+   *  sourceDraftNumber at write time. */
+  sourceDraftLabel: string | null;
+  /** Bookkeeping for coverage / drift detection. Set at generation time
+   *  from the script's fountain + scene index. The verifier compares
+   *  these to the current draft to detect tampering or stale bibles. */
+  sourceFountainHash: string | null;
+  sourceScenesHash: string | null;
+  sourceSceneCount: number | null;
   updatedAt: string;
   createdAt: string;
 
@@ -271,6 +280,10 @@ export function emptySoundBible(episodeId: string): SoundBible {
     sourceScriptId: null,
     sourceDraftNumber: null,
     sourceWasLocked: false,
+    sourceDraftLabel: null,
+    sourceFountainHash: null,
+    sourceScenesHash: null,
+    sourceSceneCount: null,
     updatedAt: now,
     createdAt: now,
     episodeSoundIdentity: emptyEpisodeSoundIdentity(),

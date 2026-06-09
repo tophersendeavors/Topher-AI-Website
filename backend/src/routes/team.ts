@@ -131,6 +131,65 @@ export default async function teamRoutes(app: FastifyInstance) {
     }
   );
 
+  // POST apply recommended setup — bulk-assign defaults to every
+  // required (and optionally optional) role that doesn't already have
+  // an assignment. Skips slots that already have one unless
+  // overwriteExisting=true.
+  app.post(
+    "/projects/:projectId/team/apply-recommendations",
+    async (req) => {
+      const user = await requireUser(req);
+      const { projectId } = req.params as { projectId: string };
+      await assertProjectMember(user.id, projectId);
+      const body = (req.body ?? {}) as {
+        overwriteExisting?: boolean;
+        includeOptional?: boolean;
+      };
+      const overwrite = body.overwriteExisting === true;
+      const includeOptional = body.includeOptional === true;
+
+      const beforeRoster = await buildTeamRoster(projectId);
+      if (!beforeRoster) return { assigned: 0, skipped: 0, roster: null };
+
+      const userId = user.id ?? null;
+      let assigned = 0;
+      let skipped = 0;
+      const stamp = new Date().toISOString();
+      for (const slot of beforeRoster.slots) {
+        if (!slot.definition.recommendation) {
+          skipped += 1;
+          continue;
+        }
+        if (!slot.definition.required && !includeOptional) {
+          skipped += 1;
+          continue;
+        }
+        if (slot.assignment && !overwrite) {
+          skipped += 1;
+          continue;
+        }
+        const rec = slot.definition.recommendation;
+        const assignment: RoleAssignment = {
+          kind: rec.recommendedKind,
+          label: defaultLabelForRecommendation(slot.definition.label, rec.recommendedKind),
+          assignedAt: stamp,
+          assignedBy: userId,
+        };
+        if (rec.recommendedKind === "ai") {
+          assignment.modelTarget = rec.recommendedModelTarget;
+        } else if (rec.recommendedKind === "ai_creative") {
+          assignment.creativeBriefStyle = rec.recommendedBriefStyle;
+        } else if (rec.recommendedKind === "live_person") {
+          assignment.handoffFormat = rec.recommendedHandoffFormat;
+        }
+        await upsertAssignment(projectId, slot.definition.key, assignment);
+        assigned += 1;
+      }
+      const roster = await buildTeamRoster(projectId);
+      return { assigned, skipped, roster };
+    }
+  );
+
   // POST approve / unapprove roster
   app.post(
     "/projects/:projectId/team/approve",
@@ -144,4 +203,13 @@ export default async function teamRoutes(app: FastifyInstance) {
       return buildTeamRoster(projectId);
     }
   );
+}
+
+function defaultLabelForRecommendation(
+  baseLabel: string,
+  kind: RoleAssignment["kind"]
+): string {
+  if (kind === "ai") return `AI · ${baseLabel}`;
+  if (kind === "ai_creative") return `AI Creative · ${baseLabel}`;
+  return baseLabel;
 }

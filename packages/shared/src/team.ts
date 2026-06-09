@@ -83,6 +83,30 @@ export const HANDOFF_LABEL: Record<HandoffFormat, string> = {
 // Reuse the GenerationQueue model registry instead of duplicating it.
 // (Imported into the team page rather than re-declared here.)
 
+// Conceptual category each model target belongs to. Used to filter
+// the model picker per role — e.g. a Composer should not see Veo, and
+// a Voice role should not see video models.
+export type ModelTargetCategory =
+  | "video_generation"
+  | "image_generation"
+  | "voice_generation"
+  | "music_generation"
+  | "text_creative"
+  | "manual_external";
+
+import type { ModelTarget } from "./generationQueue";
+
+export const MODEL_TARGET_CATEGORY: Record<ModelTarget, ModelTargetCategory> = {
+  veo: "video_generation",
+  kling: "video_generation",
+  runway: "video_generation",
+  luma: "video_generation",
+  pika: "video_generation",
+  higgsfield: "video_generation",
+  midjourney_still: "image_generation",
+  manual_external: "manual_external",
+};
+
 // ---------------------------------------------------------------------------
 // Role definition — one row in the static registry, plus the derived
 // shape for actor:<id> / voice:<id> rows.
@@ -107,6 +131,31 @@ export interface RoleDefinition {
   derivedFromCharacterId?: string;
   /** Convenience label suggestions for the UI. */
   exampleAssignments?: string[];
+  /** Smart defaults + filtering rules — what the OS recommends for this
+   *  role and what model targets the picker should show. */
+  recommendation?: RoleRecommendation;
+}
+
+/** Per-role recommendation surfaced in the assignment drawer. */
+export interface RoleRecommendation {
+  /** Default kind the drawer pre-selects on first open. */
+  recommendedKind: RoleKind;
+  /** Kinds the picker offers. Other kinds are hidden so the user can't
+   *  pick obviously-wrong combos (e.g. Producer → AI → Veo). */
+  allowedKinds: RoleKind[];
+  /** When kind === "ai", the model target the drawer pre-selects. */
+  recommendedModelTarget?: ModelTarget;
+  /** When kind === "ai", filters the model picker. Models outside this
+   *  list are hidden. */
+  allowedModelTargets?: ModelTarget[];
+  /** When kind === "ai_creative", the brief style the drawer pre-selects. */
+  recommendedBriefStyle?: CreativeBriefStyle;
+  /** When kind === "live_person", the handoff format the drawer
+   *  pre-selects. */
+  recommendedHandoffFormat?: HandoffFormat;
+  /** One-line explanation of why this default is suggested. Surfaced in
+   *  the drawer's recommendation card. */
+  reason: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,12 @@
 // one voice slot per character).
 
 import { supabase } from "../db/client.js";
-import type { RoleDefinition, RoleKind } from "@toburt/shared";
+import type {
+  ModelTarget,
+  RoleDefinition,
+  RoleKind,
+  RoleRecommendation,
+} from "@toburt/shared";
 
 interface CoreRole {
   key: string;
@@ -17,7 +22,20 @@ interface CoreRole {
   required: boolean;
   departmentKey?: string;
   exampleAssignments?: string[];
+  recommendation: RoleRecommendation;
 }
+
+// Convenience model lists used by recommendations below.
+const ALL_VIDEO_MODELS: ModelTarget[] = [
+  "veo",
+  "kling",
+  "runway",
+  "luma",
+  "pika",
+  "higgsfield",
+];
+const MANUAL_ONLY: ModelTarget[] = ["manual_external"];
+const VIDEO_PLUS_MANUAL: ModelTarget[] = [...ALL_VIDEO_MODELS, "manual_external"];
 
 const CORE_ROLES: CoreRole[] = [
   {
@@ -28,6 +46,15 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "live_person",
     required: true,
     exampleAssignments: ["Showrunner / Creator"],
+    recommendation: {
+      recommendedKind: "live_person",
+      allowedKinds: ["live_person", "ai_creative"],
+      recommendedHandoffFormat: "director_notes",
+      recommendedBriefStyle: "review_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Owns creative vision and final approvals — usually a human creative lead, occasionally an AI Creative reviewer.",
+    },
   },
   {
     key: "producer",
@@ -36,6 +63,15 @@ const CORE_ROLES: CoreRole[] = [
     category: "leadership",
     defaultKind: "live_person",
     required: true,
+    recommendation: {
+      recommendedKind: "live_person",
+      allowedKinds: ["live_person", "ai_creative"],
+      recommendedHandoffFormat: "task_list",
+      recommendedBriefStyle: "review_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Coordinates logistics, approvals, and delivery — not a generative video model role.",
+    },
   },
   {
     key: "writer",
@@ -44,6 +80,14 @@ const CORE_ROLES: CoreRole[] = [
     category: "writing",
     defaultKind: "live_person",
     required: true,
+    recommendation: {
+      recommendedKind: "live_person",
+      allowedKinds: ["live_person", "ai_creative"],
+      recommendedHandoffFormat: "human_brief",
+      recommendedBriefStyle: "rewrite_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason: "Drafts the screenplay — a human or AI creative writing role.",
+    },
   },
   {
     key: "co_writer",
@@ -52,6 +96,14 @@ const CORE_ROLES: CoreRole[] = [
     category: "writing",
     defaultKind: "live_person",
     required: false,
+    recommendation: {
+      recommendedKind: "live_person",
+      allowedKinds: ["live_person", "ai_creative"],
+      recommendedHandoffFormat: "human_brief",
+      recommendedBriefStyle: "rewrite_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason: "Pairs with the writer on the screenplay — not a model-generation role.",
+    },
   },
   {
     key: "director",
@@ -62,6 +114,15 @@ const CORE_ROLES: CoreRole[] = [
     required: true,
     departmentKey: "director",
     exampleAssignments: ["AI Director (shot plan)", "Live Director"],
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "shot_plan",
+      recommendedHandoffFormat: "director_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Produces shot intent and staging direction — a creative-direction role, not the final generated asset.",
+    },
   },
   {
     key: "cinematographer",
@@ -71,6 +132,15 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: true,
     departmentKey: "cinematography",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "shot_plan",
+      recommendedHandoffFormat: "director_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Defines lensing and framing language for the AI shot composer — direction, not final generation.",
+    },
   },
   {
     key: "production_designer",
@@ -80,6 +150,14 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: true,
     departmentKey: "production_design",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "department_note",
+      recommendedHandoffFormat: "wardrobe_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason: "Owns world look + environments — direction guidance, not a final asset.",
+    },
   },
   {
     key: "art_director",
@@ -88,6 +166,15 @@ const CORE_ROLES: CoreRole[] = [
     category: "production_design",
     defaultKind: "ai_creative",
     required: false,
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "department_note",
+      recommendedHandoffFormat: "wardrobe_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Translates Production Design into scene-level direction — creative briefs, not generation.",
+    },
   },
   {
     key: "prop_master",
@@ -97,6 +184,14 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: false,
     departmentKey: "props",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "department_note",
+      recommendedHandoffFormat: "wardrobe_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason: "Owns prop continuity — a department brief role.",
+    },
   },
   {
     key: "wardrobe_hmu",
@@ -106,6 +201,15 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: false,
     departmentKey: "wardrobe",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "department_note",
+      recommendedHandoffFormat: "wardrobe_notes",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Owns wardrobe / HMU continuity — a continuity-driven department brief.",
+    },
   },
   {
     key: "composer",
@@ -115,6 +219,19 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: true,
     departmentKey: "music",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      // Composer can be AI when paired with a music tool — but we don't
+      // expose video models for that. AI mode uses manual_external +
+      // user-supplied profile id (Suno, Udio, etc).
+      allowedKinds: ["ai_creative", "live_person", "ai"],
+      recommendedBriefStyle: "department_note",
+      recommendedHandoffFormat: "composer_brief",
+      recommendedModelTarget: "manual_external",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Music role — AI Creative briefs are common; if you go AI, use a music tool via manual_external (not a video model).",
+    },
   },
   {
     key: "sound_designer",
@@ -124,6 +241,14 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: true,
     departmentKey: "sound",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "department_note",
+      recommendedHandoffFormat: "composer_brief",
+      allowedModelTargets: MANUAL_ONLY,
+      reason: "Ambient + motifs — a department brief role, not video generation.",
+    },
   },
   {
     key: "editor",
@@ -132,6 +257,15 @@ const CORE_ROLES: CoreRole[] = [
     category: "post",
     defaultKind: "live_person",
     required: true,
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "review_notes",
+      recommendedHandoffFormat: "task_list",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "Assembles approved shots into final cut — review-driven, not generation.",
+    },
   },
   {
     key: "trailer_editor",
@@ -140,6 +274,16 @@ const CORE_ROLES: CoreRole[] = [
     category: "post",
     defaultKind: "ai_creative",
     required: false,
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "prompt_strategy",
+      recommendedHandoffFormat: "task_list",
+      // Trailer editor can stand up trailer-shot video generation.
+      allowedModelTargets: VIDEO_PLUS_MANUAL,
+      reason:
+        "Owns teaser / trailer cuts — prompt strategy + review. Video models allowed if you generate trailer shots.",
+    },
   },
   {
     key: "script_supervisor",
@@ -149,6 +293,14 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: false,
     departmentKey: "continuity",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "review_notes",
+      recommendedHandoffFormat: "task_list",
+      allowedModelTargets: MANUAL_ONLY,
+      reason: "Continuity + canon checks — review-driven, not generation.",
+    },
   },
   {
     key: "prompt_supervisor",
@@ -158,6 +310,14 @@ const CORE_ROLES: CoreRole[] = [
     defaultKind: "ai_creative",
     required: true,
     departmentKey: "prompt_supervision",
+    recommendation: {
+      recommendedKind: "ai_creative",
+      allowedKinds: ["ai_creative", "live_person"],
+      recommendedBriefStyle: "prompt_strategy",
+      recommendedHandoffFormat: "task_list",
+      allowedModelTargets: MANUAL_ONLY,
+      reason: "Owns prompt strategy + QA — a creative-direction role.",
+    },
   },
   {
     key: "ai_video_operator",
@@ -166,6 +326,17 @@ const CORE_ROLES: CoreRole[] = [
     category: "ops",
     defaultKind: "live_person",
     required: true,
+    recommendation: {
+      recommendedKind: "live_person",
+      // AI Video Operator is a human running the external models — not
+      // the performer. AI kind is intentionally not in allowedKinds.
+      allowedKinds: ["live_person", "ai_creative"],
+      recommendedHandoffFormat: "task_list",
+      recommendedBriefStyle: "prompt_strategy",
+      allowedModelTargets: MANUAL_ONLY,
+      reason:
+        "A human operator running external models — not a performer model. Use Actor roles to specify generation targets.",
+    },
   },
 ];
 
@@ -179,6 +350,7 @@ function definitionFromCore(c: CoreRole): RoleDefinition {
     required: c.required,
     departmentKey: c.departmentKey,
     exampleAssignments: c.exampleAssignments,
+    recommendation: c.recommendation,
   };
 }
 
@@ -232,6 +404,17 @@ export async function derivedTalentDefinitions(
       defaultKind: "ai",
       required: false,
       derivedFromCharacterId: c.id,
+      recommendation: {
+        recommendedKind: "ai",
+        allowedKinds: ["ai", "live_person"],
+        recommendedModelTarget: "veo",
+        // Actor performance shots — video models are fair game. Manual
+        // stays available for tools we don't model directly.
+        allowedModelTargets: VIDEO_PLUS_MANUAL,
+        recommendedHandoffFormat: "actor_notes",
+        reason:
+          `Performs ${c.name} in generated shots. Pair with the character's visual bible. If casting live, switch to Live Person.`,
+      },
     });
     if (isVOPresent(c)) {
       out.push({
@@ -242,6 +425,18 @@ export async function derivedTalentDefinitions(
         defaultKind: "ai",
         required: false,
         derivedFromCharacterId: c.id,
+        recommendation: {
+          recommendedKind: "ai",
+          allowedKinds: ["ai", "live_person"],
+          // Voice generation — no video models. We don't have a
+          // first-class voice model target, so manual_external is used
+          // with a profile id pointing at the chosen voice tool.
+          recommendedModelTarget: "manual_external",
+          allowedModelTargets: MANUAL_ONLY,
+          recommendedHandoffFormat: "actor_notes",
+          reason:
+            "Voice performance for V.O. / looping. Use a voice tool via manual_external — video models do not apply.",
+        },
       });
     }
   }

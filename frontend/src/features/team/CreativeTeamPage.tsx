@@ -13,11 +13,13 @@ import {
   Brain,
   Check,
   ChevronRight,
+  Lightbulb,
   Loader2,
   Sparkles,
   Trash2,
   User,
   Users,
+  Wand2,
   X,
 } from "lucide-react";
 import {
@@ -36,7 +38,9 @@ import {
   type RoleAssignment,
   type RoleAssignmentPatch,
   type RoleCategory,
+  type RoleDefinition,
   type RoleKind,
+  type RoleRecommendation,
   type RoleSlot,
   type TeamRosterResponse,
 } from "@toburt/shared";
@@ -65,6 +69,18 @@ export function CreativeTeamPage() {
 
   const [editing, setEditing] = useState<RoleSlot | null>(null);
   const [filter, setFilter] = useState<FilterKind>("all");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ assigned: number; skipped: number } | null>(null);
+
+  const applyRecsM = useMutation({
+    mutationFn: (opts: { overwriteExisting: boolean; includeOptional: boolean }) =>
+      api.applyTeamRecommendations(projectId, opts),
+    onSuccess: (data) => {
+      if (data.roster) qc.setQueryData(["team-roster", projectId], data.roster);
+      setBulkResult({ assigned: data.assigned, skipped: data.skipped });
+      setBulkOpen(false);
+    },
+  });
 
   if (rosterQ.isLoading) return <div className="p-8 text-bone-300">Loading creative team…</div>;
   if (rosterQ.isError || !rosterQ.data)
@@ -94,6 +110,15 @@ export function CreativeTeamPage() {
             <Link to={`/projects/${projectId}`}>
               <Button variant="outline">Studio Timeline</Button>
             </Link>
+            <Button
+              variant="outline"
+              onClick={() => setBulkOpen(true)}
+              disabled={applyRecsM.isPending}
+              title="Auto-assign recommended defaults for every required role still unassigned"
+            >
+              <Wand2 className="h-4 w-4" />
+              Apply recommended setup
+            </Button>
             {summary.rosterApprovedAt ? (
               <Button
                 variant="outline"
@@ -159,6 +184,22 @@ export function CreativeTeamPage() {
             qc.setQueryData(["team-roster", projectId], data);
             setEditing(null);
           }}
+        />
+      )}
+
+      {bulkOpen && (
+        <BulkApplyModal
+          pending={applyRecsM.isPending}
+          summary={summary}
+          onClose={() => setBulkOpen(false)}
+          onApply={(opts) => applyRecsM.mutate(opts)}
+        />
+      )}
+
+      {bulkResult && (
+        <BulkResultToast
+          result={bulkResult}
+          onClose={() => setBulkResult(null)}
         />
       )}
     </div>
@@ -380,24 +421,58 @@ function AssignmentDrawer({
   onSaved: (data: TeamRosterResponse) => void;
 }) {
   const a = slot.assignment;
-  const [kind, setKind] = useState<RoleKind>(a?.kind ?? slot.definition.defaultKind);
+  const rec = slot.definition.recommendation;
+
+  // For a brand-new (unassigned) role, pre-fill from the recommendation
+  // when one exists. For an existing assignment, respect what was saved.
+  const initialKind: RoleKind =
+    a?.kind ?? rec?.recommendedKind ?? slot.definition.defaultKind;
+  const initialModel: ModelTarget =
+    a?.modelTarget ?? rec?.recommendedModelTarget ?? "veo";
+  const initialBriefStyle: CreativeBriefStyle =
+    a?.creativeBriefStyle ?? rec?.recommendedBriefStyle ?? "department_note";
+  const initialHandoff: HandoffFormat =
+    a?.handoffFormat ?? rec?.recommendedHandoffFormat ?? "human_brief";
+
+  const [kind, setKind] = useState<RoleKind>(initialKind);
   const [label, setLabel] = useState<string>(a?.label ?? "");
   const [notes, setNotes] = useState<string>(a?.notes ?? "");
-  const [modelTarget, setModelTarget] = useState<ModelTarget>(
-    a?.modelTarget ?? "veo"
-  );
+  const [modelTarget, setModelTarget] = useState<ModelTarget>(initialModel);
   const [profileId, setProfileId] = useState<string>(a?.profileId ?? "");
   const [avoidList, setAvoidList] = useState<string>(
     a?.avoidList ? a.avoidList.join(", ") : ""
   );
-  const [creativeBriefStyle, setCreativeBriefStyle] = useState<CreativeBriefStyle>(
-    a?.creativeBriefStyle ?? "department_note"
-  );
+  const [creativeBriefStyle, setCreativeBriefStyle] =
+    useState<CreativeBriefStyle>(initialBriefStyle);
   const [personName, setPersonName] = useState<string>(a?.personName ?? "");
   const [personEmail, setPersonEmail] = useState<string>(a?.personEmail ?? "");
-  const [handoffFormat, setHandoffFormat] = useState<HandoffFormat>(
-    a?.handoffFormat ?? "human_brief"
-  );
+  const [handoffFormat, setHandoffFormat] = useState<HandoffFormat>(initialHandoff);
+
+  const allowedKinds: RoleKind[] = rec?.allowedKinds ?? [...ROLE_KINDS];
+  const allowedModels: ModelTarget[] = useMemo(() => {
+    if (rec?.allowedModelTargets && rec.allowedModelTargets.length > 0) {
+      return rec.allowedModelTargets;
+    }
+    return [...MODEL_TARGETS];
+  }, [rec]);
+
+  // If the saved model is no longer in the allowed list for this role
+  // (e.g. legacy data after we tightened recommendations), clamp it to
+  // the recommended one so the picker is consistent with the rules.
+  if (!allowedModels.includes(modelTarget) && allowedModels.length > 0) {
+    queueMicrotask(() => setModelTarget(allowedModels[0]));
+  }
+
+  function applyRecommendation() {
+    if (!rec) return;
+    setKind(rec.recommendedKind);
+    if (rec.recommendedModelTarget) setModelTarget(rec.recommendedModelTarget);
+    if (rec.recommendedBriefStyle) setCreativeBriefStyle(rec.recommendedBriefStyle);
+    if (rec.recommendedHandoffFormat) setHandoffFormat(rec.recommendedHandoffFormat);
+    if (!label.trim()) {
+      setLabel(suggestDefaultLabel(slot, rec.recommendedKind));
+    }
+  }
 
   const saveM = useMutation({
     mutationFn: () => {
@@ -432,50 +507,84 @@ function AssignmentDrawer({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/60 p-0">
-      <div className="flex w-full max-w-md flex-col overflow-hidden border-l border-white/10 bg-graphite-900 shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-white/8 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="flex w-full max-w-[480px] flex-col overflow-hidden border-l border-white/15 bg-graphite-950 shadow-[0_0_60px_rgba(0,0,0,0.6)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-white/10 bg-graphite-950/95 px-5 py-4 backdrop-blur">
           <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase tracking-[0.18em] text-bone-500">
               {ROLE_CATEGORY_LABEL[slot.definition.category]}
+              {slot.definition.required && (
+                <span className="ml-2 text-amber-300">· required</span>
+              )}
             </div>
-            <h3 className="mt-0.5 font-serif text-lg text-bone-50">
+            <h3 className="mt-0.5 font-serif text-xl text-bone-50">
               {slot.definition.label}
             </h3>
-            <p className="mt-0.5 text-[11.5px] text-bone-400">
+            <p className="mt-1 text-[12px] leading-snug text-bone-400">
               {slot.definition.description}
             </p>
           </div>
           <button
-            className="rounded-md border border-white/10 bg-white/[0.02] p-1.5 hover:bg-white/[0.05]"
+            className="rounded-md border border-white/15 bg-white/[0.04] p-2 hover:bg-white/[0.08]"
             onClick={onClose}
             aria-label="Close drawer"
           >
-            <X className="h-3.5 w-3.5 text-bone-300" />
+            <X className="h-4 w-4 text-bone-300" />
           </button>
         </div>
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+          {rec && (
+            <RecommendationCard
+              recommendation={rec}
+              definition={slot.definition}
+              isApplied={isRecommendationApplied(rec, {
+                kind,
+                modelTarget,
+                creativeBriefStyle,
+                handoffFormat,
+              })}
+              onApply={applyRecommendation}
+            />
+          )}
+
           <div>
-            <div className="mb-1 text-[10.5px] uppercase tracking-wide text-bone-500">
+            <div className="mb-1.5 text-[10.5px] uppercase tracking-wide text-bone-500">
               Role kind
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {ROLE_KINDS.map((k) => (
-                <button
-                  key={k}
-                  onClick={() => setKind(k)}
-                  className={
-                    "rounded-md border px-2.5 py-1.5 text-[12px] " +
-                    (kind === k
-                      ? "border-ember-500/60 bg-ember-500/15 text-ember-100"
-                      : "border-white/10 bg-white/[0.02] text-bone-300 hover:bg-white/[0.05]")
-                  }
-                >
-                  {ROLE_KIND_LABEL[k]}
-                </button>
-              ))}
+              {ROLE_KINDS.map((k) => {
+                const disabled = !allowedKinds.includes(k);
+                return (
+                  <button
+                    key={k}
+                    onClick={() => !disabled && setKind(k)}
+                    disabled={disabled}
+                    title={
+                      disabled
+                        ? `${ROLE_KIND_LABEL[k]} isn't a sensible choice for ${slot.definition.label}.`
+                        : undefined
+                    }
+                    className={
+                      "rounded-md border px-2.5 py-1.5 text-[12px] " +
+                      (disabled
+                        ? "cursor-not-allowed border-white/5 bg-white/[0.01] text-bone-600 line-through"
+                        : kind === k
+                          ? "border-ember-500/60 bg-ember-500/15 text-ember-100"
+                          : "border-white/10 bg-white/[0.02] text-bone-300 hover:bg-white/[0.05]")
+                    }
+                  >
+                    {ROLE_KIND_LABEL[k]}
+                  </button>
+                );
+              })}
             </div>
-            <div className="mt-1 text-[11px] text-bone-500">{kindHint(kind)}</div>
+            <div className="mt-1.5 text-[11px] text-bone-500">{kindHint(kind)}</div>
           </div>
 
           <Field label="Display label">
@@ -495,12 +604,18 @@ function AssignmentDrawer({
                   value={modelTarget}
                   onChange={(e) => setModelTarget(e.target.value as ModelTarget)}
                 >
-                  {MODEL_TARGETS.map((m) => (
+                  {allowedModels.map((m) => (
                     <option key={m} value={m}>
                       {MODEL_TARGET_LABEL[m]}
                     </option>
                   ))}
                 </select>
+                {rec?.allowedModelTargets &&
+                  rec.allowedModelTargets.length < MODEL_TARGETS.length && (
+                    <div className="mt-1 text-[10.5px] text-bone-500">
+                      Picker filtered to models that make sense for this role.
+                    </div>
+                  )}
               </Field>
               <Field label="Profile id (optional)">
                 <input
@@ -583,7 +698,7 @@ function AssignmentDrawer({
             />
           </Field>
         </div>
-        <div className="flex items-center justify-between gap-2 border-t border-white/8 p-4">
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-2 border-t border-white/10 bg-graphite-950/95 px-5 py-4 backdrop-blur">
           <div>
             {a && (
               <button
@@ -623,6 +738,213 @@ function AssignmentDrawer({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Recommendation card (inside drawer)
+// ---------------------------------------------------------------------------
+
+function RecommendationCard({
+  recommendation,
+  definition,
+  isApplied,
+  onApply,
+}: {
+  recommendation: RoleRecommendation;
+  definition: RoleDefinition;
+  isApplied: boolean;
+  onApply: () => void;
+}) {
+  void definition;
+  const bits: string[] = [ROLE_KIND_LABEL[recommendation.recommendedKind]];
+  if (recommendation.recommendedKind === "ai" && recommendation.recommendedModelTarget) {
+    bits.push(MODEL_TARGET_LABEL[recommendation.recommendedModelTarget]);
+  }
+  if (
+    recommendation.recommendedKind === "ai_creative" &&
+    recommendation.recommendedBriefStyle
+  ) {
+    bits.push(CREATIVE_BRIEF_LABEL[recommendation.recommendedBriefStyle]);
+  }
+  if (
+    recommendation.recommendedKind === "live_person" &&
+    recommendation.recommendedHandoffFormat
+  ) {
+    bits.push(HANDOFF_LABEL[recommendation.recommendedHandoffFormat]);
+  }
+  return (
+    <div className="rounded-lg border border-amber-700/35 bg-amber-900/[0.08] p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-amber-200">
+          <Lightbulb className="h-3.5 w-3.5" />
+          Recommended setup
+        </div>
+        {isApplied && (
+          <span className="chip border-emerald-700/40 bg-emerald-900/15 text-emerald-200">
+            <Check className="h-3 w-3" />
+            Applied
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5 font-serif text-base text-bone-50">
+        {bits.join(" · ")}
+      </div>
+      <div className="mt-1 text-[12px] leading-snug text-bone-300">
+        {recommendation.reason}
+      </div>
+      {!isApplied && (
+        <button
+          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-600/50 bg-amber-500/15 px-2.5 py-1.5 text-[12px] text-amber-100 hover:bg-amber-500/25"
+          onClick={onApply}
+        >
+          <Wand2 className="h-3.5 w-3.5" />
+          Use recommendation
+        </button>
+      )}
+    </div>
+  );
+}
+
+function isRecommendationApplied(
+  rec: RoleRecommendation,
+  current: {
+    kind: RoleKind;
+    modelTarget: ModelTarget;
+    creativeBriefStyle: CreativeBriefStyle;
+    handoffFormat: HandoffFormat;
+  }
+): boolean {
+  if (current.kind !== rec.recommendedKind) return false;
+  if (rec.recommendedKind === "ai") {
+    return current.modelTarget === rec.recommendedModelTarget;
+  }
+  if (rec.recommendedKind === "ai_creative") {
+    return current.creativeBriefStyle === rec.recommendedBriefStyle;
+  }
+  if (rec.recommendedKind === "live_person") {
+    return current.handoffFormat === rec.recommendedHandoffFormat;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Bulk apply modal + toast
+// ---------------------------------------------------------------------------
+
+function BulkApplyModal({
+  pending,
+  summary,
+  onClose,
+  onApply,
+}: {
+  pending: boolean;
+  summary: TeamRosterResponse["summary"];
+  onClose: () => void;
+  onApply: (opts: { overwriteExisting: boolean; includeOptional: boolean }) => void;
+}) {
+  const [overwriteExisting, setOverwrite] = useState(false);
+  const [includeOptional, setIncludeOptional] = useState(false);
+  const unassignedRequired = Math.max(
+    0,
+    summary.requiredRoles - summary.assignedRequiredRoles
+  );
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-xl border border-white/15 bg-graphite-950 p-5 shadow-[0_0_60px_rgba(0,0,0,0.6)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2">
+          <Wand2 className="h-4 w-4 text-amber-300" />
+          <h3 className="font-serif text-lg text-bone-50">Apply recommended setup</h3>
+        </div>
+        <p className="mt-2 text-[13px] leading-relaxed text-bone-300">
+          Fill in defaults for every <span className="text-amber-200">required</span>{" "}
+          role that's still unassigned. You currently have{" "}
+          <span className="text-bone-100">{unassignedRequired}</span> unassigned
+          required role{unassignedRequired === 1 ? "" : "s"}.
+        </p>
+        <p className="mt-1 text-[12px] text-bone-500">
+          You can edit any role afterwards in the drawer.
+        </p>
+        <div className="mt-4 space-y-2">
+          <label className="flex items-start gap-2 text-[13px] text-bone-200">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={overwriteExisting}
+              onChange={(e) => setOverwrite(e.target.checked)}
+            />
+            <span>
+              <span className="text-bone-100">Overwrite existing assignments</span>
+              <span className="block text-[11.5px] text-bone-500">
+                Off: skip roles that already have an assignment.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-[13px] text-bone-200">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={includeOptional}
+              onChange={(e) => setIncludeOptional(e.target.checked)}
+            />
+            <span>
+              <span className="text-bone-100">Include optional roles</span>
+              <span className="block text-[11.5px] text-bone-500">
+                On: also fill in non-required slots (Editor, Composer, etc.).
+              </span>
+            </span>
+          </label>
+        </div>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onApply({ overwriteExisting, includeOptional })}
+            disabled={pending}
+          >
+            {pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Wand2 className="h-4 w-4" />
+            )}
+            Apply defaults
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkResultToast({
+  result,
+  onClose,
+}: {
+  result: { assigned: number; skipped: number };
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-lg border border-emerald-700/40 bg-emerald-950/80 px-4 py-3 shadow-2xl backdrop-blur">
+      <Check className="h-4 w-4 text-emerald-300" />
+      <div className="text-[13px] text-bone-100">
+        <span className="text-emerald-200">{result.assigned}</span> role
+        {result.assigned === 1 ? "" : "s"} assigned ·{" "}
+        <span className="text-bone-400">{result.skipped} skipped</span>
+      </div>
+      <button
+        className="rounded-md border border-white/10 bg-white/[0.04] p-1 hover:bg-white/[0.08]"
+        onClick={onClose}
+        aria-label="Dismiss"
+      >
+        <X className="h-3.5 w-3.5 text-bone-300" />
+      </button>
     </div>
   );
 }

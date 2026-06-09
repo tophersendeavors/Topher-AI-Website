@@ -3916,6 +3916,18 @@ export const api = {
       `/projects/${projectId}/team/approve`,
       { method: "POST", body: JSON.stringify({ approved }) }
     ),
+  applyTeamRecommendations: (
+    projectId: string,
+    opts: { overwriteExisting?: boolean; includeOptional?: boolean }
+  ) =>
+    request<{
+      assigned: number;
+      skipped: number;
+      roster: import("@toburt/shared").TeamRosterResponse | null;
+    }>(`/projects/${projectId}/team/apply-recommendations`, {
+      method: "POST",
+      body: JSON.stringify(opts),
+    }),
 
   // --- Studio Timeline ---------------------------------------------------
   getStudioTimeline: (projectId: string) =>

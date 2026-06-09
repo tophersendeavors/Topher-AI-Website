@@ -25,6 +25,7 @@ import workflowRoutes from "./routes/workflow.js";
 import redevelopmentRoutes from "./routes/redevelopment.js";
 import soundRoutes from "./routes/sound.js";
 import shotListRoutes from "./routes/shotList.js";
+import trailerRoutes from "./routes/trailer.js";
 
 async function main() {
   const app = Fastify({
@@ -66,6 +67,7 @@ async function main() {
       await api.register(redevelopmentRoutes);
       await api.register(soundRoutes);
       await api.register(shotListRoutes);
+      await api.register(trailerRoutes);
     },
     { prefix: "/api" }
   );

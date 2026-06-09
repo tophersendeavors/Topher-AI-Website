@@ -20,6 +20,7 @@ import {
   Copy,
   Check,
   AudioLines,
+  Film,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -480,6 +481,15 @@ function EpisodeCard({
         >
           <ListTree className="h-4 w-4" />
           Shot List
+        </Link>
+        <Link
+          to={`/projects/${projectId}/episodes/${episode.id}/trailer-builder`}
+          className="os-btn os-btn-outline w-full justify-center"
+          style={{ width: "100%", justifyContent: "center" }}
+          title="Trailer / Teaser Builder — 15s / 30s / 60s plans grounded in approved shots, sound, and chain"
+        >
+          <Film className="h-4 w-4" />
+          Trailer Builder
         </Link>
         <p className="mt-2 text-[11px] text-bone-500 text-center">
           The 12-stage guided workflow — script → canon → blocking → DP → continuity → prompts → final.

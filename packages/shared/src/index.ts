@@ -9,3 +9,4 @@ export * from "./naming";
 export * from "./projectTypeConfig";
 export * from "./sound";
 export * from "./shotList";
+export * from "./trailer";

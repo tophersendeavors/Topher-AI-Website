@@ -21,6 +21,10 @@ import type {
   ShotEditPatch,
   ShotListResponse,
   ShotListRow,
+  TrailerPack,
+  TrailerPackResponse,
+  TrailerPlan,
+  TrailerVariantKey,
   SoundAuditResult,
   SoundBible,
   SoundBibleResponse,
@@ -3785,6 +3789,62 @@ export const api = {
     request<{ ok: true }>(`/scripts/${scriptId}/shot-list/approve`, { method: "POST" }),
   exportShotListUrl: (scriptId: string, format: "markdown" | "csv" | "json") =>
     `/api/scripts/${scriptId}/shot-list/export?format=${format}`,
+
+  // --- Trailer / Teaser Builder -----------------------------------------
+  getTrailerPack: (projectId: string, episodeId: string) =>
+    request<TrailerPackResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/trailer-builder`
+    ),
+  generateTrailerPack: (projectId: string, episodeId: string, includeSocial: boolean) =>
+    request<{ pack: TrailerPack }>(
+      `/projects/${projectId}/episodes/${episodeId}/trailer-builder/generate`,
+      { method: "POST", body: JSON.stringify({ includeSocial }) }
+    ),
+  generateTrailerVariant: (
+    projectId: string,
+    episodeId: string,
+    variant: TrailerVariantKey,
+    notes?: string
+  ) =>
+    request<{ pack: TrailerPack }>(
+      `/projects/${projectId}/episodes/${episodeId}/trailer-builder/variant/${variant}/generate`,
+      { method: "POST", body: JSON.stringify({ notes }) }
+    ),
+  saveTrailerVariant: (
+    projectId: string,
+    episodeId: string,
+    variant: TrailerVariantKey,
+    body: Partial<TrailerPlan>
+  ) =>
+    request<{ pack: TrailerPack }>(
+      `/projects/${projectId}/episodes/${episodeId}/trailer-builder/variant/${variant}`,
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
+  approveTrailerVariant: (
+    projectId: string,
+    episodeId: string,
+    variant: TrailerVariantKey
+  ) =>
+    request<{ pack: TrailerPack }>(
+      `/projects/${projectId}/episodes/${episodeId}/trailer-builder/variant/${variant}/approve`,
+      { method: "POST" }
+    ),
+  approveTrailerPack: (projectId: string, episodeId: string) =>
+    request<{ pack: TrailerPack }>(
+      `/projects/${projectId}/episodes/${episodeId}/trailer-builder/approve`,
+      { method: "POST" }
+    ),
+  exportTrailerUrl: (
+    projectId: string,
+    episodeId: string,
+    opts: { format?: "markdown" | "json"; variant?: TrailerVariantKey; kind?: "video_prompts" | "music_prompt" } = {}
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts.format) qs.set("format", opts.format);
+    if (opts.variant) qs.set("variant", opts.variant);
+    if (opts.kind) qs.set("kind", opts.kind);
+    return `/api/projects/${projectId}/episodes/${episodeId}/trailer-builder/export?${qs.toString()}`;
+  },
 };
 
 // --- Series Redevelopment types --------------------------------------

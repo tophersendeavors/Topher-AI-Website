@@ -3872,10 +3872,17 @@ export const api = {
       : `/api/projects/${projectId}/production-package/export`,
 
   // --- Wayfinder ---------------------------------------------------------
-  getWayfinder: (projectId: string, episodeId?: string | null) => {
-    const qs = episodeId ? `?episodeId=${encodeURIComponent(episodeId)}` : "";
+  getWayfinder: (
+    projectId: string,
+    episodeId?: string | null,
+    scope?: import("@toburt/shared").WayfinderScope
+  ) => {
+    const qs = new URLSearchParams();
+    if (episodeId) qs.set("episodeId", episodeId);
+    if (scope) qs.set("scope", scope);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return request<import("@toburt/shared").WayfinderResponse>(
-      `/projects/${projectId}/wayfinder${qs}`
+      `/projects/${projectId}/wayfinder${suffix}`
     );
   },
 

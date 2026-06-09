@@ -103,7 +103,7 @@ export function ExportCenterPage() {
       />
 
       <div className="px-8 space-y-6">
-        <WayfinderPanel projectId={projectId} />
+        <WayfinderPanel projectId={projectId} scope="production" />
         <div className="rounded-lg border border-white/8 bg-white/[0.02] px-4 py-3 text-[12.5px] text-bone-300">
           The Export Center is the one place to grab everything ready to ship:
           drafts, production packages, sound &amp; music prompts, curated shot

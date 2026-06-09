@@ -138,7 +138,7 @@ export function SoundBiblePage() {
       />
 
       <div className="px-8 space-y-6">
-        <WayfinderPanel projectId={projectId} episodeId={episodeId} />
+        <WayfinderPanel projectId={projectId} episodeId={episodeId} scope="production" />
         <SourceBanner data={data} />
         <Explainer>
           The Sound Bible is its own department. It reads from the current draft (you can read a

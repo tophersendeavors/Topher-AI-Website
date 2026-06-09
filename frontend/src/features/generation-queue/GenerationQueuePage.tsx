@@ -122,7 +122,7 @@ export function GenerationQueuePage() {
       />
 
       <div className="px-8 space-y-6">
-        <WayfinderPanel projectId={projectId} episodeId={episodeId} />
+        <WayfinderPanel projectId={projectId} episodeId={episodeId} scope="production" />
         <Explainer scriptLocked={resp.scriptIsLocked} />
         {resp.queue.items.length === 0 ? (
           <EmptyQueueGetStarted

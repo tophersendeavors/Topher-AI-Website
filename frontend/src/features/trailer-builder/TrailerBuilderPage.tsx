@@ -122,7 +122,7 @@ export function TrailerBuilderPage() {
       />
 
       <div className="px-8 space-y-6">
-        <WayfinderPanel projectId={projectId} episodeId={episodeId} />
+        <WayfinderPanel projectId={projectId} episodeId={episodeId} scope="production" />
         <SourceBanner source={source} pack={pack} />
         <Explainer>
           The Trailer Builder is purely a derived view. It reads the

@@ -1,11 +1,19 @@
 // Wayfinder — persistent "Next Step" system.
 //
-// One endpoint, one response shape, surfaced as a banner on every major
-// page. Extends the development-phase recommendedStep engine with a
-// production-phase resolver (sound bible → shot list → prompts → queue
-// → review → exports). The resolver is order-sensitive: it returns the
-// first unfinished step and never overwhelms the user with parallel
-// "do these eight things" lists.
+// Two scopes:
+//   • "general"    — full ladder including dev-phase (characters,
+//                    treatment, season arc, episodes, relationships,
+//                    pitch, draft 1). Used on Project Overview.
+//   • "production" — skips dev-phase. Walks the production ladder only
+//                    (screenplay → sound → shots → prompts → queue →
+//                    review → trailer → exports). Used on Production
+//                    Hub, Episodes, Sound Bible, Shot List, Trailer
+//                    Builder, Generation Queue, Export Center.
+//
+// Production scope still surfaces stale dev-phase findings, but as a
+// secondary `nonProductionWarnings` list, not the primary step.
+
+export type WayfinderScope = "general" | "production";
 
 export type WayfinderPhase =
   | "development"
@@ -43,10 +51,40 @@ export interface WayfinderStep {
   tone: WayfinderTone;
 }
 
+/** Production path stepper — the 7-stage production journey. */
+export type ProductionPathState =
+  | "complete"
+  | "current"
+  | "missing"
+  | "blocked";
+
+export interface ProductionPathStep {
+  key:
+    | "screenplay"
+    | "sound_bible"
+    | "shot_list"
+    | "ai_prompts"
+    | "generation_queue"
+    | "trailer"
+    | "exports";
+  label: string;
+  state: ProductionPathState;
+  /** Short status line — e.g. "Draft 5 locked", "v0 — not generated". */
+  status: string;
+  /** Page to open for this step. Relative to /projects/:projectId. */
+  toRel: string;
+}
+
 export interface WayfinderResponse {
   projectId: string;
   episodeId: string | null;
   episodeNumber: number | null;
   episodeTitle: string | null;
+  scope: WayfinderScope;
   step: WayfinderStep;
+  /** Present on production scope — the 7-step production journey state. */
+  productionPath?: ProductionPathStep[];
+  /** Present on production scope — dev-phase warnings that exist but are
+   *  not blocking production. Displayed as a secondary panel. */
+  nonProductionWarnings?: string[];
 }

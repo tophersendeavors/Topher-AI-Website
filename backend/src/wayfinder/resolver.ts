@@ -1,25 +1,21 @@
 // Wayfinder resolver — returns the single most-impactful next step given
 // current project + (optional) episode state.
 //
-// Ordering (first-match wins):
-//   1. Development-phase steps (delegated to recommendNextStep — characters,
-//      treatment, season arc, episodes, relationships, pitch, draft 1).
-//   2. Production-phase ladder, episode-scoped:
-//        a. No current draft for this episode
-//        b. Draft is locked? if not, suggest lock-or-approve
-//        c. Sound Bible missing
-//        d. Sound Bible unapproved
-//        e. Shot List empty
-//        f. Shots unapproved
-//        g. AI Video Prompts missing (composedPrompt absent on briefs)
-//        h. Generation Queue empty / unsynced
-//        i. Queue items not ready (model not assigned)
-//        j. Outputs need review
-//        k. Trailer not generated
-//        l. Exports ready (complete)
+// Two scopes:
+//   • "general"    — runs the dev-phase engine first. Only flips into the
+//                    production ladder once dev is "all clear". Used on
+//                    Project Overview / Story Bible.
+//   • "production" — skips dev. Walks the production ladder only. Dev
+//                    issues, if any, are returned as nonProductionWarnings
+//                    (secondary) instead of overriding the next step. Used
+//                    on Production Hub, Episodes, Sound/Shot/Trailer/Queue
+//                    pages, and the Export Center.
 //
-// Reads from supabase only. Writes nothing. Never mutates fountain or
-// script_scenes.
+// The production ladder reads:
+//   screenplay locked → sound bible → shot list → AI prompts →
+//   generation queue → trailer → exports.
+//
+// Read-only. Never mutates fountain or script_scenes.
 
 import { supabase } from "../db/client.js";
 import { recommendNextStep, type NextStep } from "../draft/recommendedStep.js";
@@ -28,7 +24,10 @@ import { getShotList } from "../shotList/store.js";
 import { getTrailerPack } from "../trailer/store.js";
 import { loadQueue } from "../generationQueue/store.js";
 import type {
+  ProductionPathState,
+  ProductionPathStep,
   WayfinderResponse,
+  WayfinderScope,
   WayfinderStep,
   WayfinderTone,
 } from "@toburt/shared";
@@ -62,13 +61,19 @@ async function loadEpisode(episodeId: string | null): Promise<EpisodeRow | null>
   };
 }
 
+interface ScriptInfo {
+  id: string;
+  draftNumber: number;
+  locked: boolean;
+}
+
 async function resolveCurrentScript(
   projectId: string,
   episodeId: string
-): Promise<{ id: string; draftNumber: number; locked: boolean; titlePageOk: boolean } | null> {
+): Promise<ScriptInfo | null> {
   const { data } = await supabase
     .from("scripts")
-    .select("id, draft_number, metadata, title_page")
+    .select("id, draft_number, metadata")
     .eq("project_id", projectId)
     .eq("episode_id", episodeId)
     .eq("current", true)
@@ -79,13 +84,9 @@ async function resolveCurrentScript(
     id: data.id as string,
     draftNumber: (data.draft_number as number) ?? 0,
     locked: meta.lockedWritingDraft === true,
-    titlePageOk: !!data.title_page,
   };
 }
 
-/** Heuristic for "AI Video Prompts have been generated for this episode" —
- *  any brief with a non-empty composedPrompt counts. Briefs are stored at
- *  scripts.metadata.aiPrompts.briefs[ord][shotIndex]. */
 function countComposedPrompts(scriptMeta: Json): { briefs: number; composed: number } {
   const ai = j(scriptMeta.aiPrompts);
   const briefs = (ai.briefs as Record<string, Record<string, Json>>) ?? {};
@@ -102,20 +103,118 @@ function countComposedPrompts(scriptMeta: Json): { briefs: number; composed: num
 }
 
 // ---------------------------------------------------------------------------
-// Builders — each returns a fully-shaped WayfinderStep.
+// Production state snapshot — one place that reads every signal the
+// ladder + path stepper care about. The resolver picks the next step,
+// the stepper visualizes the whole ladder, both from the same snapshot.
 // ---------------------------------------------------------------------------
 
-function fromDevelopment(step: NextStep): WayfinderStep {
+interface ProductionSnapshot {
+  episodeId: string;
+  episodeNumber: number | null;
+  episodeTitle: string | null;
+  script: ScriptInfo | null;
+  // Sound Bible
+  soundBibleGenerated: boolean;
+  soundBibleApproved: boolean;
+  // Shot List
+  totalShots: number;
+  approvedShots: number;
+  // AI Prompts (composed text on briefs)
+  briefs: number;
+  composed: number;
+  // Queue
+  queueItems: number;
+  queueBlocked: number;
+  queueReady: number;
+  queueAwaitingReview: number;
+  queueApproved: number;
+  // Trailer
+  trailerGenerated: boolean;
+  // Exports — basic vs full readiness
+  packageBasicAvailable: boolean; // any screenplay export possible (locked draft + something)
+  packageFullReady: boolean;       // all sections present
+}
+
+async function snapshotEpisode(
+  projectId: string,
+  episode: EpisodeRow
+): Promise<ProductionSnapshot> {
+  const script = await resolveCurrentScript(projectId, episode.id);
+
+  const [sb, list, trailer, queue, scriptRow] = await Promise.all([
+    getSoundBible(projectId, episode.id),
+    script ? getShotList(script.id) : Promise.resolve(null),
+    getTrailerPack(projectId, episode.id),
+    loadQueue(projectId, episode.id),
+    script
+      ? supabase
+          .from("scripts")
+          .select("metadata")
+          .eq("id", script.id)
+          .single()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const soundBibleGenerated =
+    sb.version > 0 ||
+    Object.keys(sb.scenes ?? {}).length > 0 ||
+    (sb.episodeSoundIdentity?.sonicPhilosophy ?? "").trim().length > 0;
+  const soundBibleApproved = sb.approvedAt !== null;
+
+  const totalShots = list ? list.scenes.reduce((n, s) => n + s.shots.length, 0) : 0;
+  const approvedShots = list?.approval.shotApprovedCount ?? 0;
+
+  const scriptMeta = j((scriptRow as { data: { metadata?: unknown } | null }).data?.metadata);
+  const { briefs, composed } = script ? countComposedPrompts(scriptMeta) : { briefs: 0, composed: 0 };
+
+  const items = queue?.items ?? [];
+  const queueBlocked = items.filter((it) => it.status === "not_ready").length;
+  const queueReady = items.filter((it) => it.status === "ready").length;
+  const queueAwaitingReview = items.filter((it) => it.status === "needs_review").length;
+  const queueApproved = items.filter(
+    (it) => it.status === "approved" || it.status === "final"
+  ).length;
+
+  // Package readiness:
+  //   • basic: locked draft + at least screenplay text present.
+  //   • full:  every production section (sound approved, shots approved,
+  //            ai prompts composed, queue not empty, trailer generated).
+  const packageBasicAvailable = !!script && script.locked;
+  const packageFullReady =
+    packageBasicAvailable &&
+    soundBibleApproved &&
+    totalShots > 0 &&
+    approvedShots === totalShots &&
+    briefs > 0 &&
+    composed === briefs &&
+    items.length > 0 &&
+    trailer !== null;
+
   return {
-    phase: "development",
-    phaseLabel: "Foundation",
-    status: "In progress",
-    title: step.title,
-    why: step.body,
-    primary: { label: step.ctaLabel, toRel: step.toRel },
-    tone: (step.tone as WayfinderTone | undefined) ?? "primary",
+    episodeId: episode.id,
+    episodeNumber: episode.number,
+    episodeTitle: episode.title,
+    script,
+    soundBibleGenerated,
+    soundBibleApproved,
+    totalShots,
+    approvedShots,
+    briefs,
+    composed,
+    queueItems: items.length,
+    queueBlocked,
+    queueReady,
+    queueAwaitingReview,
+    queueApproved,
+    trailerGenerated: trailer !== null,
+    packageBasicAvailable,
+    packageFullReady,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Step builders
+// ---------------------------------------------------------------------------
 
 function step(
   phase: WayfinderStep["phase"],
@@ -143,36 +242,44 @@ function step(
   };
 }
 
+function fromDevelopment(devStep: NextStep): WayfinderStep {
+  return {
+    phase: "development",
+    phaseLabel: "Foundation",
+    status: "In progress",
+    title: devStep.title,
+    why: devStep.body,
+    primary: { label: devStep.ctaLabel, toRel: devStep.toRel },
+    tone: (devStep.tone as WayfinderTone | undefined) ?? "primary",
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Production resolver
+// Production ladder — picks the next step from a snapshot.
 // ---------------------------------------------------------------------------
 
-async function resolveProductionForEpisode(
-  ctx: ResolveContext & { episodeId: string }
-): Promise<WayfinderStep> {
-  const ep = `/episodes/${ctx.episodeId}`;
+function ladderFromSnapshot(snap: ProductionSnapshot): WayfinderStep {
+  const ep = `/episodes/${snap.episodeId}`;
 
-  const script = await resolveCurrentScript(ctx.projectId, ctx.episodeId);
-  if (!script) {
+  // 1. Screenplay
+  if (!snap.script) {
     return step(
       "screenplay",
       "Screenplay",
       "No current draft",
       "Start the first draft for this episode",
-      "Every production artifact reads from the locked screenplay. Without a current draft for this episode, none of the downstream tools can run.",
-      { label: "Open Drafts", toRel: "/drafts" },
-      { tone: "primary" }
+      "Every production artifact reads from the current screenplay. Without a draft for this episode, none of the downstream tools can run.",
+      { label: "Open Drafts", toRel: "/drafts" }
     );
   }
-
-  if (!script.locked) {
+  if (!snap.script.locked) {
     return step(
       "screenplay",
       "Screenplay",
-      `Draft ${script.draftNumber} — unlocked`,
+      `Draft ${snap.script.draftNumber} — unlocked`,
       "Lock the current draft when it's ready",
-      "Production tools (Sound Bible, Shot List, AI Prompts, Queue) read from the locked screenplay. Locking signals that this draft is canon — you can still produce an unlocked draft, but downstream tools will warn that the source can drift.",
-      { label: "Open Drafts", toRel: `/drafts/${script.id}` },
+      "Locking signals that this draft is canon. The Sound Bible, Shot List, and Generation Queue all warn when their source can drift.",
+      { label: "Open Drafts", toRel: `/drafts/${snap.script.id}` },
       {
         tone: "info",
         secondary: { label: "Skip to Shot List", toRel: `${ep}/shot-list` },
@@ -180,158 +287,129 @@ async function resolveProductionForEpisode(
     );
   }
 
-  // Sound Bible
-  const sb = await getSoundBible(ctx.projectId, ctx.episodeId);
-  const sbHasContent =
-    sb.version > 0 ||
-    Object.keys(sb.scenes ?? {}).length > 0 ||
-    (sb.episodeSoundIdentity?.sonicPhilosophy ?? "").trim().length > 0;
-  if (!sbHasContent) {
+  // 2. Sound Bible
+  if (!snap.soundBibleGenerated) {
     return step(
       "sound_bible",
       "Sound Bible",
       "Not generated",
-      "Generate the Sound Bible",
-      "The Sound Bible defines per-scene sonic canon — ambient bed, music guidance, motifs. Approved scene rows ride into every AI Video Prompt so generated shots have grounded audio direction.",
-      { label: "Open Sound Bible", toRel: `${ep}/sound-bible` },
-      { tone: "primary" }
+      "Generate Sound Bible",
+      "Per-scene sonic canon — ambient bed, music guidance, motifs. Approved scene rows ride into every AI Video Prompt so generated shots have grounded audio direction.",
+      { label: "Open Sound Bible", toRel: `${ep}/sound-bible` }
     );
   }
-  const sbApproved = sb.approvedAt !== null;
-  if (!sbApproved) {
+  if (!snap.soundBibleApproved) {
     return step(
       "sound_bible",
       "Sound Bible",
       "Generated, not approved",
-      "Review and approve the Sound Bible",
+      "Review and approve Sound Bible",
       "Approved sections + scene rows are what the composer reads. Until you approve, the Generation Queue treats the sound canon as missing and flags shots as not-ready.",
       { label: "Review Sound Bible", toRel: `${ep}/sound-bible` },
       { tone: "info" }
     );
   }
 
-  // Shot List
-  const list = await getShotList(script.id);
-  const totalShots = list.scenes.reduce((n, s) => n + s.shots.length, 0);
-  if (totalShots === 0) {
+  // 3. Shot List
+  if (snap.totalShots === 0) {
     return step(
       "shot_list",
       "Shot List",
       "Empty",
-      "Auto-build briefs for all scenes",
+      "Auto-build Shot List",
       "The Shot List reads scene fountain + bibles and emits a Master Shot Brief per shot. The bulk button at the top of the Shot List page runs this for every scene without overwriting any existing briefs.",
-      { label: "Open Shot List", toRel: `${ep}/shot-list` },
-      { tone: "primary" }
+      { label: "Open Shot List", toRel: `${ep}/shot-list` }
     );
   }
-  const unapprovedShots = list.approval.shotTotalCount - list.approval.shotApprovedCount;
+  const unapprovedShots = snap.totalShots - snap.approvedShots;
   if (unapprovedShots > 0) {
     return step(
       "shot_list",
       "Shot List",
-      `${list.approval.shotApprovedCount} / ${list.approval.shotTotalCount} approved`,
-      `Review and approve the ${unapprovedShots} unapproved shot${unapprovedShots === 1 ? "" : "s"}`,
-      "Only approved shots flow into the Generation Queue. The Shot List header has a one-click 'Approve all generated shots' option with a confirm modal.",
+      `${snap.approvedShots} / ${snap.totalShots} approved`,
+      "Approve Shot List",
+      "Only approved shots flow into the Generation Queue. The Shot List header has a one-click 'Approve all generated shots' button.",
       { label: "Open Shot List", toRel: `${ep}/shot-list` },
       { tone: "info" }
     );
   }
 
-  // AI Video Prompts — composedPrompt should be present on every brief.
-  // Pull the script's metadata directly to count.
-  const { data: scriptRow } = await supabase
-    .from("scripts")
-    .select("metadata")
-    .eq("id", script.id)
-    .single();
-  const meta = j((scriptRow as { metadata?: unknown } | null)?.metadata);
-  const { briefs, composed } = countComposedPrompts(meta);
-  if (briefs > 0 && composed < briefs) {
+  // 4. AI Prompts
+  if (snap.briefs > 0 && snap.composed < snap.briefs) {
     return step(
       "ai_prompts",
       "AI Video Prompts",
-      `${composed} / ${briefs} composed`,
-      "Generate AI Video Prompts from approved shots",
+      `${snap.composed} / ${snap.briefs} composed`,
+      "Generate AI Video Prompts",
       "Approved briefs without a composedPrompt are missing the model-ready text. The composer runs from the Shot List page — each shot card has a 'Regenerate prompt' affordance.",
       { label: "Open Shot List", toRel: `${ep}/shot-list` },
       { tone: "info" }
     );
   }
 
-  // Generation Queue
-  const queue = await loadQueue(ctx.projectId, ctx.episodeId);
-  const queueItems = queue?.items ?? [];
-  if (queueItems.length === 0) {
+  // 5. Generation Queue
+  if (snap.queueItems === 0) {
     return step(
       "generation_queue",
       "Generation Queue",
       "Empty",
-      "Sync approved shots into the Generation Queue",
+      "Sync Generation Queue",
       "The queue mirrors approved shots and tracks model assignment, status, outputs, and review notes. Open the planner and the queue will populate from your approvals automatically.",
-      { label: "Open Generation Queue", toRel: `${ep}/generation-queue` },
-      { tone: "primary" }
+      { label: "Open Generation Queue", toRel: `${ep}/generation-queue` }
     );
   }
-  const readyOrBetter = queueItems.filter(
-    (it) => it.status !== "not_ready" && it.status !== "needs_review"
-  );
-  const notReady = queueItems.filter((it) => it.status === "not_ready");
-  if (notReady.length > 0) {
+  if (snap.queueBlocked > 0) {
     return step(
       "generation_queue",
       "Generation Queue",
-      `${notReady.length} blocked`,
-      `Resolve blockers on ${notReady.length} shot${notReady.length === 1 ? "" : "s"}`,
-      "Items show their readiness blockers inline — missing visual bible, prop bible, sound canon, etc. Fix the upstream gap, then resync; the queue auto-promotes to 'ready'.",
+      `${snap.queueBlocked} blocked`,
+      `Resolve blockers on ${snap.queueBlocked} shot${snap.queueBlocked === 1 ? "" : "s"}`,
+      "Items show their readiness blockers inline — missing visual bible, prop bible, sound canon, etc. Fix the upstream gap, then resync.",
       { label: "Open Generation Queue", toRel: `${ep}/generation-queue` },
       { tone: "warning" }
     );
   }
-  const awaitingReview = queueItems.filter((it) => it.status === "needs_review");
-  if (awaitingReview.length > 0) {
+  if (snap.queueAwaitingReview > 0) {
     return step(
       "review",
       "Review",
-      `${awaitingReview.length} awaiting review`,
-      `Review generated outputs on ${awaitingReview.length} shot${awaitingReview.length === 1 ? "" : "s"}`,
+      `${snap.queueAwaitingReview} awaiting review`,
+      `Review outputs on ${snap.queueAwaitingReview} shot${snap.queueAwaitingReview === 1 ? "" : "s"}`,
       "Generated outputs need approve / reject / retry decisions before they count toward the episode's completion %.",
       { label: "Open Generation Queue", toRel: `${ep}/generation-queue` },
       { tone: "info" }
     );
   }
-  const ready = queueItems.filter((it) => it.status === "ready");
-  if (ready.length > 0) {
+  if (snap.queueReady > 0) {
     return step(
       "generation_queue",
       "Generation Queue",
-      `${ready.length} ready · ${readyOrBetter.length - ready.length} downstream`,
+      `${snap.queueReady} ready`,
       "Assign models and begin generation",
-      "Ready shots have everything they need to generate — pick a model on each, copy the prompt block, and paste into Veo / Kling / Runway externally. Paste the output URL back to record it.",
-      { label: "Open Generation Queue", toRel: `${ep}/generation-queue` },
-      { tone: "primary" }
+      "Ready shots have everything they need to generate. Pick a model on each, copy the prompt block, and paste into Veo / Kling / Runway externally. Paste the output URL back to record it.",
+      { label: "Open Generation Queue", toRel: `${ep}/generation-queue` }
     );
   }
 
-  // Trailer
-  const trailer = await getTrailerPack(ctx.projectId, ctx.episodeId);
-  if (!trailer) {
+  // 6. Trailer
+  if (!snap.trailerGenerated) {
     return step(
       "trailer",
       "Trailer",
       "Not generated",
-      "Build a trailer / teaser pack",
+      "Build Trailer",
       "Approved shots + the Sound Bible's trailer music direction unlock the Trailer Builder — 15s / 30s / 60s / social cuts grounded in real canon.",
       { label: "Open Trailer Builder", toRel: `${ep}/trailer-builder` },
       { tone: "info" }
     );
   }
 
-  // All clear — exports.
+  // 7. Exports
   return step(
     "exports",
     "Exports",
     "Ready to ship",
-    "Export the production package or build the trailer",
+    "Export Production Package",
     "Approved screenplay, sound, shots, prompts, queue, and trailer are all in place. The Export Center can download the full production package zip with every approved artifact.",
     { label: "Open Export Center", toRel: "/exports" },
     {
@@ -341,83 +419,276 @@ async function resolveProductionForEpisode(
   );
 }
 
+// Build the path stepper from a snapshot. State per step:
+//   • complete — fully done
+//   • current  — the next-step's phase (in_progress)
+//   • missing  — not started yet
+//   • blocked  — has unresolved blockers from upstream
+function pathFromSnapshot(snap: ProductionSnapshot, currentPhase: WayfinderStep["phase"]): ProductionPathStep[] {
+  const ep = `/episodes/${snap.episodeId}`;
+  const steps: ProductionPathStep[] = [];
+  const isCurrent = (phase: string) => currentPhase === phase;
+
+  // Screenplay
+  const screenplayState: ProductionPathState = !snap.script
+    ? "missing"
+    : !snap.script.locked
+      ? isCurrent("screenplay") ? "current" : "blocked"
+      : "complete";
+  steps.push({
+    key: "screenplay",
+    label: "Locked Script",
+    state: screenplayState,
+    status: !snap.script
+      ? "No current draft"
+      : snap.script.locked
+        ? `Draft ${snap.script.draftNumber} locked`
+        : `Draft ${snap.script.draftNumber} unlocked`,
+    toRel: snap.script ? `/drafts/${snap.script.id}` : "/drafts",
+  });
+
+  // Sound Bible
+  const sbState: ProductionPathState =
+    !snap.soundBibleGenerated
+      ? isCurrent("sound_bible") ? "current" : "missing"
+      : !snap.soundBibleApproved
+        ? isCurrent("sound_bible") ? "current" : "blocked"
+        : "complete";
+  steps.push({
+    key: "sound_bible",
+    label: "Sound Bible",
+    state: sbState,
+    status: !snap.soundBibleGenerated
+      ? "Not generated"
+      : snap.soundBibleApproved
+        ? "Approved"
+        : "Unapproved",
+    toRel: `${ep}/sound-bible`,
+  });
+
+  // Shot List
+  const shotState: ProductionPathState =
+    snap.totalShots === 0
+      ? isCurrent("shot_list") ? "current" : "missing"
+      : snap.approvedShots < snap.totalShots
+        ? isCurrent("shot_list") ? "current" : "blocked"
+        : "complete";
+  steps.push({
+    key: "shot_list",
+    label: "Shot List",
+    state: shotState,
+    status:
+      snap.totalShots === 0
+        ? "Empty"
+        : `${snap.approvedShots} / ${snap.totalShots} approved`,
+    toRel: `${ep}/shot-list`,
+  });
+
+  // AI Prompts
+  const promptState: ProductionPathState =
+    snap.briefs === 0
+      ? snap.approvedShots === 0
+        ? "missing"
+        : isCurrent("ai_prompts") ? "current" : "missing"
+      : snap.composed < snap.briefs
+        ? isCurrent("ai_prompts") ? "current" : "blocked"
+        : "complete";
+  steps.push({
+    key: "ai_prompts",
+    label: "AI Prompts",
+    state: promptState,
+    status:
+      snap.briefs === 0
+        ? "No briefs"
+        : `${snap.composed} / ${snap.briefs} composed`,
+    toRel: `${ep}/shot-list`,
+  });
+
+  // Queue
+  const queueState: ProductionPathState =
+    snap.queueItems === 0
+      ? isCurrent("generation_queue") ? "current" : "missing"
+      : snap.queueBlocked > 0
+        ? isCurrent("generation_queue") ? "current" : "blocked"
+        : snap.queueAwaitingReview > 0
+          ? isCurrent("review") ? "current" : "blocked"
+          : snap.queueReady > 0 || snap.queueApproved < snap.queueItems
+            ? isCurrent("generation_queue") || isCurrent("review") ? "current" : "blocked"
+            : "complete";
+  steps.push({
+    key: "generation_queue",
+    label: "Generation Queue",
+    state: queueState,
+    status:
+      snap.queueItems === 0
+        ? "Empty"
+        : `${snap.queueApproved} approved · ${snap.queueAwaitingReview} review · ${snap.queueBlocked} blocked`,
+    toRel: `${ep}/generation-queue`,
+  });
+
+  // Trailer
+  const trailerState: ProductionPathState = snap.trailerGenerated
+    ? "complete"
+    : isCurrent("trailer")
+      ? "current"
+      : "missing";
+  steps.push({
+    key: "trailer",
+    label: "Trailer",
+    state: trailerState,
+    status: snap.trailerGenerated ? "Generated" : "Not generated",
+    toRel: `${ep}/trailer-builder`,
+  });
+
+  // Exports
+  const exportsState: ProductionPathState = snap.packageFullReady
+    ? "complete"
+    : snap.packageBasicAvailable
+      ? isCurrent("exports") ? "current" : "blocked"
+      : "missing";
+  steps.push({
+    key: "exports",
+    label: "Production Package",
+    state: exportsState,
+    status: snap.packageFullReady
+      ? "Full package ready"
+      : snap.packageBasicAvailable
+        ? "Basic package available — missing sections"
+        : "Not ready",
+    toRel: "/exports",
+  });
+
+  return steps;
+}
+
 // ---------------------------------------------------------------------------
 // Top-level
 // ---------------------------------------------------------------------------
 
-export async function resolveWayfinder(
+async function pickScopeEpisode(
   projectId: string,
   episodeId: string | null
+): Promise<EpisodeRow | null> {
+  if (episodeId) {
+    return loadEpisode(episodeId);
+  }
+  const { data: eps } = await supabase
+    .from("episodes")
+    .select("id, number, title")
+    .eq("project_id", projectId)
+    .order("number", { ascending: true });
+  const first = (eps ?? [])[0];
+  if (!first) return null;
+  return {
+    id: first.id as string,
+    number: (first.number as number | null) ?? null,
+    title: (first.title as string | null) ?? null,
+  };
+}
+
+export async function resolveWayfinder(
+  projectId: string,
+  episodeId: string | null,
+  scope: WayfinderScope = "general"
 ): Promise<WayfinderResponse> {
-  const episode = await loadEpisode(episodeId);
+  if (scope === "production") {
+    return resolveProductionScope({ projectId, episodeId });
+  }
+  return resolveGeneralScope({ projectId, episodeId });
+}
 
-  // Development phase — characters, treatment, arc, episodes, relationships,
-  // pitch, draft 1. Delegated to the existing engine for backward compat.
-  const devStep = await recommendNextStep(projectId);
-
-  // Detect whether the development phase is complete by checking the dev
-  // engine's "all clear" signal (title = "You're in good shape"). If we're
-  // still in development, return that step.
+async function resolveGeneralScope(ctx: ResolveContext): Promise<WayfinderResponse> {
+  const episode = await loadEpisode(ctx.episodeId);
+  const devStep = await recommendNextStep(ctx.projectId);
   const devIsComplete = devStep.title === "You're in good shape";
+
   if (!devIsComplete) {
     return {
-      projectId,
+      projectId: ctx.projectId,
       episodeId: episode?.id ?? null,
       episodeNumber: episode?.number ?? null,
       episodeTitle: episode?.title ?? null,
+      scope: "general",
       step: fromDevelopment(devStep),
     };
   }
 
-  // Production phase. If we have an episode in scope, walk its ladder;
-  // otherwise pick the first episode with a current draft and walk it.
-  let scopeEpisode = episode;
+  // Dev complete — walk the production ladder.
+  const scopeEpisode = episode ?? (await pickScopeEpisode(ctx.projectId, null));
   if (!scopeEpisode) {
-    const { data: eps } = await supabase
-      .from("episodes")
-      .select("id, number, title")
-      .eq("project_id", projectId)
-      .order("number", { ascending: true });
-    const first = (eps ?? [])[0];
-    if (first) {
-      scopeEpisode = {
-        id: first.id as string,
-        number: (first.number as number | null) ?? null,
-        title: (first.title as string | null) ?? null,
-      };
-    }
-  }
-
-  if (!scopeEpisode) {
-    // No episodes yet — bounce back to dev resolver, which would have
-    // surfaced this already, but keep a fallback.
     return {
-      projectId,
+      projectId: ctx.projectId,
       episodeId: null,
       episodeNumber: null,
       episodeTitle: null,
+      scope: "general",
       step: step(
         "complete",
         "Foundation",
         "Ready",
         "Materialize episodes from the season arc",
         "Approve a Season Arc on the Writers Room or Overview page and the OS will create one row per episode.",
-        { label: "Open Episodes", toRel: "/episodes" },
-        { tone: "primary" }
+        { label: "Open Episodes", toRel: "/episodes" }
       ),
     };
   }
 
-  const productionStep = await resolveProductionForEpisode({
-    projectId,
-    episodeId: scopeEpisode.id,
-  });
-
+  const snap = await snapshotEpisode(ctx.projectId, scopeEpisode);
+  const ladderStep = ladderFromSnapshot(snap);
   return {
-    projectId,
+    projectId: ctx.projectId,
     episodeId: scopeEpisode.id,
     episodeNumber: scopeEpisode.number,
     episodeTitle: scopeEpisode.title,
-    step: productionStep,
+    scope: "general",
+    step: ladderStep,
+  };
+}
+
+async function resolveProductionScope(
+  ctx: ResolveContext
+): Promise<WayfinderResponse> {
+  const scopeEpisode = await pickScopeEpisode(ctx.projectId, ctx.episodeId);
+
+  if (!scopeEpisode) {
+    return {
+      projectId: ctx.projectId,
+      episodeId: null,
+      episodeNumber: null,
+      episodeTitle: null,
+      scope: "production",
+      step: step(
+        "complete",
+        "Production",
+        "No episodes yet",
+        "Materialize episodes from the season arc",
+        "Approve a Season Arc on the Writers Room or Overview page. Production tools run per-episode.",
+        { label: "Open Episodes", toRel: "/episodes" }
+      ),
+      productionPath: [],
+      nonProductionWarnings: [],
+    };
+  }
+
+  const snap = await snapshotEpisode(ctx.projectId, scopeEpisode);
+  const ladderStep = ladderFromSnapshot(snap);
+  const productionPath = pathFromSnapshot(snap, ladderStep.phase);
+
+  // Carry dev-phase findings as secondary warnings (not the primary step).
+  const devStep = await recommendNextStep(ctx.projectId);
+  const nonProductionWarnings: string[] = [];
+  if (devStep.title !== "You're in good shape") {
+    nonProductionWarnings.push(`${devStep.title}. ${devStep.body}`);
+  }
+
+  return {
+    projectId: ctx.projectId,
+    episodeId: scopeEpisode.id,
+    episodeNumber: scopeEpisode.number,
+    episodeTitle: scopeEpisode.title,
+    scope: "production",
+    step: ladderStep,
+    productionPath,
+    nonProductionWarnings,
   };
 }

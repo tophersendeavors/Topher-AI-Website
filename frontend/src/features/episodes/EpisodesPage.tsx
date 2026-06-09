@@ -169,7 +169,7 @@ export function EpisodesPage() {
       )}
 
       <div className="px-8">
-        <WayfinderPanel projectId={projectId} />
+        <WayfinderPanel projectId={projectId} scope="production" />
       </div>
 
       <div className="grid grid-cols-1 gap-6 px-8">

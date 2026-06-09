@@ -195,7 +195,7 @@ export function ShotListPage() {
       />
 
       <div className="px-8 space-y-6">
-        <WayfinderPanel projectId={projectId} episodeId={episodeId} />
+        <WayfinderPanel projectId={projectId} episodeId={episodeId} scope="production" />
         {bulkBuild && (
           <BulkBuildProgress
             state={bulkBuild}

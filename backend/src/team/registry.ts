@@ -70,7 +70,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedBriefStyle: "review_notes",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "Coordinates logistics, approvals, and delivery — not a generative video model role.",
+        "The producer coordinates approvals, logistics, and delivery. This is usually a human responsibility.",
     },
   },
   {
@@ -102,7 +102,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "human_brief",
       recommendedBriefStyle: "rewrite_notes",
       allowedModelTargets: MANUAL_ONLY,
-      reason: "Pairs with the writer on the screenplay — not a model-generation role.",
+      reason: "Pairs with the writer on the screenplay — a human or AI creative writing role.",
     },
   },
   {
@@ -139,7 +139,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "director_notes",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "Defines lensing and framing language for the AI shot composer — direction, not final generation.",
+        "Defines lensing and framing — a creative direction role that briefs the shot composer.",
     },
   },
   {
@@ -156,7 +156,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedBriefStyle: "department_note",
       recommendedHandoffFormat: "wardrobe_notes",
       allowedModelTargets: MANUAL_ONLY,
-      reason: "Owns world look + environments — direction guidance, not a final asset.",
+      reason: "Owns the world look and environments — delivered as creative direction.",
     },
   },
   {
@@ -173,7 +173,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "wardrobe_notes",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "Translates Production Design into scene-level direction — creative briefs, not generation.",
+        "Translates Production Design into scene-level direction — a creative briefing role.",
     },
   },
   {
@@ -230,7 +230,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedModelTarget: "manual_external",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "Music role — AI Creative briefs are common; if you go AI, use a music tool via manual_external (not a video model).",
+        "Composes score and themes — a creative-direction role, usually delivered as a music brief.",
     },
   },
   {
@@ -247,7 +247,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedBriefStyle: "department_note",
       recommendedHandoffFormat: "composer_brief",
       allowedModelTargets: MANUAL_ONLY,
-      reason: "Ambient + motifs — a department brief role, not video generation.",
+      reason: "Designs the ambient bed, motifs, and diegetic sound — delivered as a department brief.",
     },
   },
   {
@@ -264,7 +264,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "task_list",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "Assembles approved shots into final cut — review-driven, not generation.",
+        "Assembles approved shots into the final cut — a review-and-assembly role.",
     },
   },
   {
@@ -282,7 +282,7 @@ const CORE_ROLES: CoreRole[] = [
       // Trailer editor can stand up trailer-shot video generation.
       allowedModelTargets: VIDEO_PLUS_MANUAL,
       reason:
-        "Owns teaser / trailer cuts — prompt strategy + review. Video models allowed if you generate trailer shots.",
+        "Cuts the teaser / trailer — a creative-direction role that briefs the rest of the cut.",
     },
   },
   {
@@ -299,7 +299,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedBriefStyle: "review_notes",
       recommendedHandoffFormat: "task_list",
       allowedModelTargets: MANUAL_ONLY,
-      reason: "Continuity + canon checks — review-driven, not generation.",
+      reason: "Runs continuity and canon checks — a review role.",
     },
   },
   {
@@ -335,7 +335,7 @@ const CORE_ROLES: CoreRole[] = [
       recommendedBriefStyle: "prompt_strategy",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "A human operator running external models — not a performer model. Use Actor roles to specify generation targets.",
+        "A human who runs the external video tools and ships the final clips — Actor roles are where you pick the on-camera tool.",
     },
   },
 ];
@@ -413,7 +413,7 @@ export async function derivedTalentDefinitions(
         allowedModelTargets: VIDEO_PLUS_MANUAL,
         recommendedHandoffFormat: "actor_notes",
         reason:
-          `Performs ${c.name} in generated shots. Pair with the character's visual bible. If casting live, switch to Live Person.`,
+          `Plays ${c.name} on camera. Pair with the character's visual bible. Switch to Real Person if you're casting a live actor.`,
       },
     });
     if (isVOPresent(c)) {
@@ -435,7 +435,7 @@ export async function derivedTalentDefinitions(
           allowedModelTargets: MANUAL_ONLY,
           recommendedHandoffFormat: "actor_notes",
           reason:
-            "Voice performance for V.O. / looping. Use a voice tool via manual_external — video models do not apply.",
+            `Provides voice-over and looping lines for ${c.name}. Switch to Real Person if you're casting a live voice actor.`,
         },
       });
     }

@@ -31,6 +31,7 @@ import {
   MODEL_TARGET_LABEL,
   ROLE_CATEGORY_LABEL,
   ROLE_KINDS,
+  ROLE_KIND_DESCRIPTION,
   ROLE_KIND_LABEL,
   type CreativeBriefStyle,
   type HandoffFormat,
@@ -539,6 +540,12 @@ function AssignmentDrawer({
           </button>
         </div>
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+          <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2.5 text-[12px] leading-relaxed text-bone-300">
+            Assign each role to a real person, an AI creative assistant, or an
+            AI generator. Studio OS will create the right handoff materials
+            based on this choice.
+          </div>
+
           {rec && (
             <RecommendationCard
               recommendation={rec}
@@ -554,12 +561,13 @@ function AssignmentDrawer({
           )}
 
           <div>
-            <div className="mb-1.5 text-[10.5px] uppercase tracking-wide text-bone-500">
-              Role kind
+            <div className="mb-1.5 text-[12px] font-medium text-bone-200">
+              Who will do this job?
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="space-y-1.5">
               {ROLE_KINDS.map((k) => {
                 const disabled = !allowedKinds.includes(k);
+                const selected = kind === k;
                 return (
                   <button
                     key={k}
@@ -571,23 +579,37 @@ function AssignmentDrawer({
                         : undefined
                     }
                     className={
-                      "rounded-md border px-2.5 py-1.5 text-[12px] " +
+                      "block w-full rounded-md border px-3 py-2 text-left transition-colors " +
                       (disabled
-                        ? "cursor-not-allowed border-white/5 bg-white/[0.01] text-bone-600 line-through"
-                        : kind === k
+                        ? "cursor-not-allowed border-white/5 bg-white/[0.01] text-bone-600"
+                        : selected
                           ? "border-ember-500/60 bg-ember-500/15 text-ember-100"
-                          : "border-white/10 bg-white/[0.02] text-bone-300 hover:bg-white/[0.05]")
+                          : "border-white/10 bg-white/[0.02] text-bone-200 hover:bg-white/[0.05]")
                     }
                   >
-                    {ROLE_KIND_LABEL[k]}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={
+                          "inline-block h-3 w-3 rounded-full border " +
+                          (selected
+                            ? "border-ember-300 bg-ember-400"
+                            : "border-white/30 bg-transparent")
+                        }
+                      />
+                      <span className="text-[13px] font-medium">
+                        {ROLE_KIND_LABEL[k]}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 pl-5 text-[11.5px] text-bone-400">
+                      {ROLE_KIND_DESCRIPTION[k]}
+                    </div>
                   </button>
                 );
               })}
             </div>
-            <div className="mt-1.5 text-[11px] text-bone-500">{kindHint(kind)}</div>
           </div>
 
-          <Field label="Display label">
+          <Field label="Role name shown in the project">
             <input
               className="input w-full"
               value={label}
@@ -656,7 +678,7 @@ function AssignmentDrawer({
 
           {kind === "live_person" && (
             <>
-              <Field label="Person name">
+              <Field label="Person responsible">
                 <input
                   className="input w-full"
                   value={personName}
@@ -664,7 +686,7 @@ function AssignmentDrawer({
                   placeholder="Jane Doe"
                 />
               </Field>
-              <Field label="Person email">
+              <Field label="Email">
                 <input
                   className="input w-full"
                   type="email"
@@ -673,7 +695,7 @@ function AssignmentDrawer({
                   placeholder="jane@studio.example"
                 />
               </Field>
-              <Field label="Handoff format">
+              <Field label="What should Studio OS prepare for them?">
                 <select
                   className="input w-full"
                   value={handoffFormat}
@@ -694,7 +716,7 @@ function AssignmentDrawer({
               className="input min-h-[80px] w-full"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Optional — context the brief router should propagate."
+              placeholder="Add any instructions this person or AI should follow."
             />
           </Field>
         </div>
@@ -779,7 +801,7 @@ function RecommendationCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-amber-200">
           <Lightbulb className="h-3.5 w-3.5" />
-          Recommended setup
+          Recommended for this role
         </div>
         {isApplied && (
           <span className="chip border-emerald-700/40 bg-emerald-900/15 text-emerald-200">
@@ -976,18 +998,6 @@ function suggestDefaultLabel(slot: RoleSlot, kind: RoleKind): string {
     case "live_person":
     default:
       return base;
-  }
-}
-
-function kindHint(kind: RoleKind): string {
-  switch (kind) {
-    case "ai":
-      return "AI generates the final asset. Pick the model, profile, and avoid list.";
-    case "ai_creative":
-      return "AI acts as a creative department — direction, briefs, reviews. Choose the brief style downstream tools should ship.";
-    case "live_person":
-    default:
-      return "A real human performs the role. Capture their name, email, and preferred handoff format.";
   }
 }
 

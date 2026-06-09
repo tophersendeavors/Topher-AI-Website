@@ -14,9 +14,17 @@ export const ROLE_KINDS: readonly RoleKind[] = [
 ] as const;
 
 export const ROLE_KIND_LABEL: Record<RoleKind, string> = {
-  ai: "AI",
-  ai_creative: "AI Creative",
-  live_person: "Live Person",
+  ai: "AI Generator",
+  ai_creative: "AI Creative Assistant",
+  live_person: "Real Person",
+};
+
+/** Plain-language one-liner shown next to each kind option in the
+ *  Creative Team drawer so the user doesn't have to guess. */
+export const ROLE_KIND_DESCRIPTION: Record<RoleKind, string> = {
+  ai: "AI creates the final asset.",
+  ai_creative: "AI helps plan, direct, review, or brief.",
+  live_person: "A human owns this role.",
 };
 
 export type RoleCategory =
@@ -68,16 +76,18 @@ export const HANDOFF_FORMATS = [
   "wardrobe_notes",
   "composer_brief",
   "director_notes",
+  "review_checklist",
 ] as const;
 export type HandoffFormat = (typeof HANDOFF_FORMATS)[number];
 
 export const HANDOFF_LABEL: Record<HandoffFormat, string> = {
-  human_brief: "Human brief",
+  human_brief: "Creative brief",
   task_list: "Task list",
   actor_notes: "Actor notes",
   wardrobe_notes: "Wardrobe notes",
   composer_brief: "Composer brief",
   director_notes: "Director notes",
+  review_checklist: "Review checklist",
 };
 
 // Reuse the GenerationQueue model registry instead of duplicating it.

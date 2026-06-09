@@ -3871,6 +3871,14 @@ export const api = {
       ? `/api/projects/${projectId}/episodes/${episodeId}/production-package/export`
       : `/api/projects/${projectId}/production-package/export`,
 
+  // --- Wayfinder ---------------------------------------------------------
+  getWayfinder: (projectId: string, episodeId?: string | null) => {
+    const qs = episodeId ? `?episodeId=${encodeURIComponent(episodeId)}` : "";
+    return request<import("@toburt/shared").WayfinderResponse>(
+      `/projects/${projectId}/wayfinder${qs}`
+    );
+  },
+
   // --- Production Hub ----------------------------------------------------
   getProductionHub: (projectId: string) =>
     request<import("@toburt/shared").ProductionHubResponse>(

@@ -13,3 +13,4 @@ export * from "./trailer";
 export * from "./productionPackage";
 export * from "./productionHub";
 export * from "./generationQueue";
+export * from "./wayfinder";

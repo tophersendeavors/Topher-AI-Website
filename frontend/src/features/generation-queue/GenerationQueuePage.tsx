@@ -40,6 +40,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 
 export function GenerationQueuePage() {
   const { projectId, episodeId } = useParams<{
@@ -121,6 +122,7 @@ export function GenerationQueuePage() {
       />
 
       <div className="px-8 space-y-6">
+        <WayfinderPanel projectId={projectId} episodeId={episodeId} />
         <Explainer scriptLocked={resp.scriptIsLocked} />
         {resp.queue.items.length === 0 ? (
           <EmptyQueueGetStarted

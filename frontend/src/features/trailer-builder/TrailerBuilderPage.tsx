@@ -22,6 +22,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Explainer } from "@/components/ui/Explainer";
+import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 import type {
   TrailerBeat,
   TrailerPack,
@@ -121,6 +122,7 @@ export function TrailerBuilderPage() {
       />
 
       <div className="px-8 space-y-6">
+        <WayfinderPanel projectId={projectId} episodeId={episodeId} />
         <SourceBanner source={source} pack={pack} />
         <Explainer>
           The Trailer Builder is purely a derived view. It reads the

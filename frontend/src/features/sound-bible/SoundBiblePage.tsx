@@ -36,6 +36,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Explainer } from "@/components/ui/Explainer";
 import { DraftWritingContext } from "@/components/ui/DraftWritingContext";
+import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 import type {
   MusicAdapter,
   MusicPromptPack,
@@ -137,6 +138,7 @@ export function SoundBiblePage() {
       />
 
       <div className="px-8 space-y-6">
+        <WayfinderPanel projectId={projectId} episodeId={episodeId} />
         <SourceBanner data={data} />
         <Explainer>
           The Sound Bible is its own department. It reads from the current draft (you can read a

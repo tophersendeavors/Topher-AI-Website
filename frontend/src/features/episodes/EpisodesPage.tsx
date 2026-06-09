@@ -22,13 +22,13 @@ import {
   AudioLines,
   Film,
   Package,
-  AlertTriangle,
   Layers,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 function readProjectType(p: { metadata?: unknown } | undefined | null): string {
@@ -167,6 +167,10 @@ export function EpisodesPage() {
       {fromArc.error && (
         <div className="px-8 text-sm text-red-300">{(fromArc.error as Error).message}</div>
       )}
+
+      <div className="px-8">
+        <WayfinderPanel projectId={projectId} />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 px-8">
         <Panel eyebrow="Seasons" title={`${(seasons.data ?? []).length || 0} season(s)`}>

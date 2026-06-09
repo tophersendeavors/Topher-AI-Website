@@ -41,6 +41,7 @@ import { Button } from "@/components/ui/Button";
 import { ApprovalBadge } from "@/components/ui/ApprovalBadge";
 import { AuditCheckPanel } from "@/components/ui/AuditCheckPanel";
 import { DraftPreviewPanel } from "@/components/ui/DraftPreviewPanel";
+import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 
 const STAGE_ORDER: RedevStageKey[] = [
   "r1_brief",
@@ -203,6 +204,10 @@ function RedevContent({ projectId, passId }: { projectId: string; passId?: strin
           </div>
         }
       />
+
+      <div className="px-8">
+        <WayfinderPanel projectId={projectId} />
+      </div>
 
       {!activePassId ? (
         <NoPassYet

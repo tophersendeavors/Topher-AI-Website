@@ -53,6 +53,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 
 const STARTER = `Title: Untitled
 Author: TOBURT Studios
@@ -112,6 +113,10 @@ export function DraftsPage() {
           </Button>
         }
       />
+
+      <div className="px-8">
+        <WayfinderPanel projectId={projectId} />
+      </div>
 
       <div className="px-8">
         <Panel eyebrow="Library" title={`${(list.data ?? []).length} draft(s)`}>

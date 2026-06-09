@@ -26,6 +26,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Explainer } from "@/components/ui/Explainer";
+import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 import type {
   ProductionHubEpisodeRow,
   ProductionHubResponse,
@@ -77,6 +78,7 @@ export function ProductionHubPage() {
       />
 
       <div className="px-8 space-y-6">
+        <WayfinderPanel projectId={projectId} />
         <SummaryCard data={data} projectId={projectId} />
         <Explainer>
           Read-only dashboard. Every cell links to the place where edits actually happen — the

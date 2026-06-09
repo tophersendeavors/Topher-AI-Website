@@ -3916,6 +3916,14 @@ export const api = {
       `/projects/${projectId}/team/approve`,
       { method: "POST", body: JSON.stringify({ approved }) }
     ),
+  setTeamWorkflowMode: (
+    projectId: string,
+    mode: import("@toburt/shared").WorkflowMode
+  ) =>
+    request<import("@toburt/shared").TeamRosterResponse>(
+      `/projects/${projectId}/team/workflow-mode`,
+      { method: "PUT", body: JSON.stringify({ mode }) }
+    ),
   applyTeamRecommendations: (
     projectId: string,
     opts: { overwriteExisting?: boolean; includeOptional?: boolean }

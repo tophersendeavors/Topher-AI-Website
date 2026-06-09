@@ -12,8 +12,10 @@ import {
   HANDOFF_FORMATS,
   MODEL_TARGETS,
   ROLE_KINDS,
+  WORKFLOW_MODES,
   type RoleAssignment,
   type RoleAssignmentPatch,
+  type WorkflowMode,
 } from "@toburt/shared";
 import { buildTeamRoster } from "../team/aggregator.js";
 import { coreRoleByKey } from "../team/registry.js";
@@ -21,6 +23,7 @@ import { supabase } from "../db/client.js";
 import {
   deleteAssignment,
   setRosterApproved,
+  setWorkflowMode,
   upsertAssignment,
 } from "../team/store.js";
 
@@ -127,6 +130,24 @@ export default async function teamRoutes(app: FastifyInstance) {
         return { error: (e as Error).message };
       }
       await deleteAssignment(projectId, roleKey);
+      return buildTeamRoster(projectId);
+    }
+  );
+
+  // PUT workflow mode — controls which set of recommendations the
+  // drawer + bulk-apply use. Solo AI / Hybrid / Human-Led.
+  app.put(
+    "/projects/:projectId/team/workflow-mode",
+    async (req, reply) => {
+      const user = await requireUser(req);
+      const { projectId } = req.params as { projectId: string };
+      await assertProjectMember(user.id, projectId);
+      const body = (req.body ?? {}) as { mode?: string };
+      if (!body.mode || !(WORKFLOW_MODES as readonly string[]).includes(body.mode)) {
+        reply.code(400);
+        return { error: "invalid_workflow_mode" };
+      }
+      await setWorkflowMode(projectId, body.mode as WorkflowMode);
       return buildTeamRoster(projectId);
     }
   );

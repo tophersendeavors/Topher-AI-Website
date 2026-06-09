@@ -11,7 +11,10 @@ import type {
   RoleDefinition,
   RoleKind,
   RoleRecommendation,
+  WorkflowMode,
 } from "@toburt/shared";
+// Suppress unused — keeping the alias for future reuse.
+void (null as unknown as RoleRecommendation);
 
 interface CoreRole {
   key: string;
@@ -23,7 +26,9 @@ interface CoreRole {
   departmentKey?: string;
   exampleAssignments?: string[];
   recommendation: RoleRecommendation;
+  recommendationsByMode?: Partial<Record<WorkflowMode, RoleRecommendation>>;
 }
+
 
 // Convenience model lists used by recommendations below.
 const ALL_VIDEO_MODELS: ModelTarget[] = [
@@ -61,16 +66,36 @@ const CORE_ROLES: CoreRole[] = [
     label: "Producer",
     description: "Coordinates production logistics and delivery dates.",
     category: "leadership",
-    defaultKind: "live_person",
+    defaultKind: "ai_creative",
     required: true,
     recommendation: {
-      recommendedKind: "live_person",
+      recommendedKind: "ai_creative",
       allowedKinds: ["live_person", "ai_creative"],
-      recommendedHandoffFormat: "task_list",
       recommendedBriefStyle: "review_notes",
+      recommendedHandoffFormat: "task_list",
       allowedModelTargets: MANUAL_ONLY,
       reason:
-        "The producer coordinates approvals, logistics, and delivery. This is usually a human responsibility.",
+        "In a solo-AI studio, an AI Creative producer keeps approvals, logistics, and delivery on track without needing a human producer on payroll.",
+    },
+    recommendationsByMode: {
+      hybrid: {
+        recommendedKind: "live_person",
+        allowedKinds: ["live_person", "ai_creative"],
+        recommendedHandoffFormat: "task_list",
+        recommendedBriefStyle: "review_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "In a hybrid studio the producer is usually a human; AI Creative is fine if you'd rather automate this role.",
+      },
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["live_person", "ai_creative"],
+        recommendedHandoffFormat: "task_list",
+        recommendedBriefStyle: "review_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "The producer coordinates approvals, logistics, and delivery. In a human-led production this is a human role.",
+      },
     },
   },
   {
@@ -94,15 +119,36 @@ const CORE_ROLES: CoreRole[] = [
     label: "Co-Writer",
     description: "Collaborates on the screenplay alongside the writer.",
     category: "writing",
-    defaultKind: "live_person",
+    defaultKind: "ai_creative",
     required: false,
     recommendation: {
-      recommendedKind: "live_person",
+      recommendedKind: "ai_creative",
       allowedKinds: ["live_person", "ai_creative"],
-      recommendedHandoffFormat: "human_brief",
       recommendedBriefStyle: "rewrite_notes",
+      recommendedHandoffFormat: "human_brief",
       allowedModelTargets: MANUAL_ONLY,
-      reason: "Pairs with the writer on the screenplay — a human or AI creative writing role.",
+      reason:
+        "In a solo-AI studio, an AI Creative co-writer pairs with you on rewrites and structure passes.",
+    },
+    recommendationsByMode: {
+      hybrid: {
+        recommendedKind: "ai_creative",
+        allowedKinds: ["live_person", "ai_creative"],
+        recommendedBriefStyle: "rewrite_notes",
+        recommendedHandoffFormat: "human_brief",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Pairs with the writer — either a human co-writer or an AI Creative assistant works well.",
+      },
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["live_person", "ai_creative"],
+        recommendedBriefStyle: "rewrite_notes",
+        recommendedHandoffFormat: "human_brief",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Pairs with the writer on the screenplay — a human collaborator in a human-led production.",
+      },
     },
   },
   {
@@ -123,6 +169,17 @@ const CORE_ROLES: CoreRole[] = [
       reason:
         "Produces shot intent and staging direction — a creative-direction role, not the final generated asset.",
     },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "shot_plan",
+        recommendedHandoffFormat: "director_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Directs staging and performance — a human director in a human-led production.",
+      },
+    },
   },
   {
     key: "cinematographer",
@@ -141,6 +198,17 @@ const CORE_ROLES: CoreRole[] = [
       reason:
         "Defines lensing and framing — a creative direction role that briefs the shot composer.",
     },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "shot_plan",
+        recommendedHandoffFormat: "director_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Owns lensing, lighting, and framing — a human DP in a human-led production.",
+      },
+    },
   },
   {
     key: "production_designer",
@@ -157,6 +225,17 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "wardrobe_notes",
       allowedModelTargets: MANUAL_ONLY,
       reason: "Owns the world look and environments — delivered as creative direction.",
+    },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "department_note",
+        recommendedHandoffFormat: "wardrobe_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Owns the world look and environments — a human production designer in a human-led production.",
+      },
     },
   },
   {
@@ -175,6 +254,17 @@ const CORE_ROLES: CoreRole[] = [
       reason:
         "Translates Production Design into scene-level direction — a creative briefing role.",
     },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "department_note",
+        recommendedHandoffFormat: "wardrobe_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Translates Production Design into per-scene direction — a human art director.",
+      },
+    },
   },
   {
     key: "prop_master",
@@ -191,6 +281,17 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "wardrobe_notes",
       allowedModelTargets: MANUAL_ONLY,
       reason: "Owns prop continuity — a department brief role.",
+    },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "department_note",
+        recommendedHandoffFormat: "wardrobe_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Owns the prop bibles and continuity-critical objects — a human prop master.",
+      },
     },
   },
   {
@@ -209,6 +310,17 @@ const CORE_ROLES: CoreRole[] = [
       allowedModelTargets: MANUAL_ONLY,
       reason:
         "Owns wardrobe / HMU continuity — a continuity-driven department brief.",
+    },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "department_note",
+        recommendedHandoffFormat: "wardrobe_notes",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Wardrobe / HMU continuity — a human department head in a human-led production.",
+      },
     },
   },
   {
@@ -232,6 +344,18 @@ const CORE_ROLES: CoreRole[] = [
       reason:
         "Composes score and themes — a creative-direction role, usually delivered as a music brief.",
     },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person", "ai"],
+        recommendedBriefStyle: "department_note",
+        recommendedHandoffFormat: "composer_brief",
+        recommendedModelTarget: "manual_external",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Composes score and themes — a human composer in a human-led production.",
+      },
+    },
   },
   {
     key: "sound_designer",
@@ -249,6 +373,17 @@ const CORE_ROLES: CoreRole[] = [
       allowedModelTargets: MANUAL_ONLY,
       reason: "Designs the ambient bed, motifs, and diegetic sound — delivered as a department brief.",
     },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "department_note",
+        recommendedHandoffFormat: "composer_brief",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Sound design — a human sound designer in a human-led production.",
+      },
+    },
   },
   {
     key: "editor",
@@ -265,6 +400,17 @@ const CORE_ROLES: CoreRole[] = [
       allowedModelTargets: MANUAL_ONLY,
       reason:
         "Assembles approved shots into the final cut — a review-and-assembly role.",
+    },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "review_notes",
+        recommendedHandoffFormat: "task_list",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Assembles the final cut — a human editor in a human-led production.",
+      },
     },
   },
   {
@@ -284,6 +430,17 @@ const CORE_ROLES: CoreRole[] = [
       reason:
         "Cuts the teaser / trailer — a creative-direction role that briefs the rest of the cut.",
     },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "prompt_strategy",
+        recommendedHandoffFormat: "task_list",
+        allowedModelTargets: VIDEO_PLUS_MANUAL,
+        reason:
+          "Cuts the teaser / trailer — a human editor in a human-led production.",
+      },
+    },
   },
   {
     key: "script_supervisor",
@@ -301,6 +458,17 @@ const CORE_ROLES: CoreRole[] = [
       allowedModelTargets: MANUAL_ONLY,
       reason: "Runs continuity and canon checks — a review role.",
     },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "review_notes",
+        recommendedHandoffFormat: "task_list",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Continuity passes and canon checks — a human script supervisor in a human-led production.",
+      },
+    },
   },
   {
     key: "prompt_supervisor",
@@ -317,6 +485,17 @@ const CORE_ROLES: CoreRole[] = [
       recommendedHandoffFormat: "task_list",
       allowedModelTargets: MANUAL_ONLY,
       reason: "Owns prompt strategy + QA — a creative-direction role.",
+    },
+    recommendationsByMode: {
+      human_led: {
+        recommendedKind: "live_person",
+        allowedKinds: ["ai_creative", "live_person"],
+        recommendedBriefStyle: "prompt_strategy",
+        recommendedHandoffFormat: "task_list",
+        allowedModelTargets: MANUAL_ONLY,
+        reason:
+          "Owns prompt strategy and QA across departments — a human supervisor in a human-led production.",
+      },
     },
   },
   {
@@ -351,6 +530,7 @@ function definitionFromCore(c: CoreRole): RoleDefinition {
     departmentKey: c.departmentKey,
     exampleAssignments: c.exampleAssignments,
     recommendation: c.recommendation,
+    recommendationsByMode: c.recommendationsByMode,
   };
 }
 
@@ -396,6 +576,22 @@ export async function derivedTalentDefinitions(
   const characters = await loadCharacters(projectId);
   const out: RoleDefinition[] = [];
   for (const c of characters) {
+    const actorAiRec = {
+      recommendedKind: "ai" as const,
+      allowedKinds: ["ai", "live_person"] as RoleKind[],
+      recommendedModelTarget: "veo" as const,
+      allowedModelTargets: VIDEO_PLUS_MANUAL,
+      recommendedHandoffFormat: "actor_notes" as const,
+      reason: `Plays ${c.name} on camera. Pair with the character's visual bible. Switch to Real Person if you're casting a live actor.`,
+    };
+    const actorHumanRec = {
+      recommendedKind: "live_person" as const,
+      allowedKinds: ["ai", "live_person"] as RoleKind[],
+      recommendedModelTarget: "veo" as const,
+      allowedModelTargets: VIDEO_PLUS_MANUAL,
+      recommendedHandoffFormat: "actor_notes" as const,
+      reason: `Plays ${c.name} on camera. In a human-led production this is a live actor.`,
+    };
     out.push({
       key: `actor:${c.id}`,
       label: `Actor — ${c.name}`,
@@ -404,19 +600,30 @@ export async function derivedTalentDefinitions(
       defaultKind: "ai",
       required: false,
       derivedFromCharacterId: c.id,
-      recommendation: {
-        recommendedKind: "ai",
-        allowedKinds: ["ai", "live_person"],
-        recommendedModelTarget: "veo",
-        // Actor performance shots — video models are fair game. Manual
-        // stays available for tools we don't model directly.
-        allowedModelTargets: VIDEO_PLUS_MANUAL,
-        recommendedHandoffFormat: "actor_notes",
-        reason:
-          `Plays ${c.name} on camera. Pair with the character's visual bible. Switch to Real Person if you're casting a live actor.`,
+      recommendation: actorAiRec,
+      recommendationsByMode: {
+        solo_ai: actorAiRec,
+        hybrid: actorAiRec,
+        human_led: actorHumanRec,
       },
     });
     if (isVOPresent(c)) {
+      const voiceAiRec = {
+        recommendedKind: "ai" as const,
+        allowedKinds: ["ai", "live_person"] as RoleKind[],
+        recommendedModelTarget: "manual_external" as const,
+        allowedModelTargets: MANUAL_ONLY,
+        recommendedHandoffFormat: "actor_notes" as const,
+        reason: `Provides voice-over and looping lines for ${c.name}. Switch to Real Person if you're casting a live voice actor.`,
+      };
+      const voiceHumanRec = {
+        recommendedKind: "live_person" as const,
+        allowedKinds: ["ai", "live_person"] as RoleKind[],
+        recommendedModelTarget: "manual_external" as const,
+        allowedModelTargets: MANUAL_ONLY,
+        recommendedHandoffFormat: "actor_notes" as const,
+        reason: `Provides voice-over and looping lines for ${c.name}. In a human-led production this is a live voice actor.`,
+      };
       out.push({
         key: `voice:${c.id}`,
         label: `Voice — ${c.name}`,
@@ -425,17 +632,11 @@ export async function derivedTalentDefinitions(
         defaultKind: "ai",
         required: false,
         derivedFromCharacterId: c.id,
-        recommendation: {
-          recommendedKind: "ai",
-          allowedKinds: ["ai", "live_person"],
-          // Voice generation — no video models. We don't have a
-          // first-class voice model target, so manual_external is used
-          // with a profile id pointing at the chosen voice tool.
-          recommendedModelTarget: "manual_external",
-          allowedModelTargets: MANUAL_ONLY,
-          recommendedHandoffFormat: "actor_notes",
-          reason:
-            `Provides voice-over and looping lines for ${c.name}. Switch to Real Person if you're casting a live voice actor.`,
+        recommendation: voiceAiRec,
+        recommendationsByMode: {
+          solo_ai: voiceAiRec,
+          hybrid: voiceAiRec,
+          human_led: voiceHumanRec,
         },
       });
     }

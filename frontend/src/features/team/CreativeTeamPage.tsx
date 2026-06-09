@@ -33,6 +33,9 @@ import {
   ROLE_KINDS,
   ROLE_KIND_DESCRIPTION,
   ROLE_KIND_LABEL,
+  WORKFLOW_MODES,
+  WORKFLOW_MODE_DESCRIPTION,
+  WORKFLOW_MODE_LABEL,
   type CreativeBriefStyle,
   type HandoffFormat,
   type ModelTarget,
@@ -44,6 +47,7 @@ import {
   type RoleRecommendation,
   type RoleSlot,
   type TeamRosterResponse,
+  type WorkflowMode,
 } from "@toburt/shared";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -81,6 +85,11 @@ export function CreativeTeamPage() {
       setBulkResult({ assigned: data.assigned, skipped: data.skipped });
       setBulkOpen(false);
     },
+  });
+
+  const setModeM = useMutation({
+    mutationFn: (mode: WorkflowMode) => api.setTeamWorkflowMode(projectId, mode),
+    onSuccess: (data) => qc.setQueryData(["team-roster", projectId], data),
   });
 
   if (rosterQ.isLoading) return <div className="p-8 text-bone-300">Loading creative team…</div>;
@@ -147,6 +156,12 @@ export function CreativeTeamPage() {
 
       <div className="px-8 space-y-6">
         <WayfinderPanel projectId={projectId} scope="production" />
+
+        <WorkflowModeSelector
+          current={roster.workflowMode}
+          pending={setModeM.isPending}
+          onChange={(mode) => setModeM.mutate(mode)}
+        />
 
         <SummaryStrip roster={roster} />
         <FilterBar filter={filter} setFilter={setFilter} byKind={summary.byKind} />
@@ -257,6 +272,66 @@ function groupByCategory(
 // ---------------------------------------------------------------------------
 // Summary strip
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Workflow mode selector — Solo AI / Hybrid / Human-Led
+// ---------------------------------------------------------------------------
+
+function WorkflowModeSelector({
+  current,
+  pending,
+  onChange,
+}: {
+  current: WorkflowMode;
+  pending: boolean;
+  onChange: (mode: WorkflowMode) => void;
+}) {
+  return (
+    <Panel eyebrow="Studio Phase · Team" title="How will this project be produced?">
+      <div className="space-y-3">
+        <p className="text-[12.5px] leading-relaxed text-bone-400">
+          Choose how this project will be produced. You can still override
+          every role. Recommendations update as you switch modes.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {WORKFLOW_MODES.map((mode) => {
+            const selected = current === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => !selected && !pending && onChange(mode)}
+                disabled={pending}
+                className={
+                  "rounded-lg border px-3 py-3 text-left transition-colors " +
+                  (selected
+                    ? "border-ember-500/60 bg-ember-500/15 text-ember-100"
+                    : "border-white/10 bg-white/[0.02] text-bone-200 hover:bg-white/[0.05]")
+                }
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={
+                      "inline-block h-3 w-3 rounded-full border " +
+                      (selected
+                        ? "border-ember-300 bg-ember-400"
+                        : "border-white/30 bg-transparent")
+                    }
+                  />
+                  <span className="text-[13.5px] font-medium">
+                    {WORKFLOW_MODE_LABEL[mode]}
+                  </span>
+                </div>
+                <div className="mt-1 pl-5 text-[11.5px] leading-snug text-bone-400">
+                  {WORKFLOW_MODE_DESCRIPTION[mode]}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Panel>
+  );
+}
 
 function SummaryStrip({ roster }: { roster: TeamRosterResponse }) {
   const s = roster.summary;
@@ -541,9 +616,8 @@ function AssignmentDrawer({
         </div>
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
           <div className="rounded-md border border-white/8 bg-white/[0.02] px-3 py-2.5 text-[12px] leading-relaxed text-bone-300">
-            Assign each role to a real person, an AI creative assistant, or an
-            AI generator. Studio OS will create the right handoff materials
-            based on this choice.
+            AI Generator creates the final asset. AI Creative helps
+            plan/direct/review. Real Person owns the role.
           </div>
 
           {rec && (

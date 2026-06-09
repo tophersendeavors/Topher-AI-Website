@@ -17,10 +17,18 @@ export async function buildTeamRoster(
   const state = await loadTeamState(projectId);
   if (!state) return null;
   const definitions = await allRoleDefinitions(projectId);
-  const slots: RoleSlot[] = definitions.map((definition) => ({
-    definition,
-    assignment: state.assignments[definition.key] ?? null,
-  }));
+  const slots: RoleSlot[] = definitions.map((definition) => {
+    // Overlay the active workflow mode's recommendation (if any) onto
+    // the base. The frontend always reads `definition.recommendation`.
+    const modeRec = definition.recommendationsByMode?.[state.workflowMode];
+    const resolved = modeRec
+      ? { ...definition, recommendation: modeRec }
+      : definition;
+    return {
+      definition: resolved,
+      assignment: state.assignments[definition.key] ?? null,
+    };
+  });
 
   const byKind = ROLE_KINDS.reduce<Record<RoleKind, number>>(
     (acc, k) => {
@@ -52,6 +60,7 @@ export async function buildTeamRoster(
   return {
     projectId: state.projectId,
     projectTitle: state.projectTitle,
+    workflowMode: state.workflowMode,
     slots,
     summary,
   };

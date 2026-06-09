@@ -4,7 +4,12 @@
 // timestamp (when set) lives at projects.metadata.teamRosterApprovedAt.
 
 import { supabase } from "../db/client.js";
-import type { RoleAssignment } from "@toburt/shared";
+import {
+  DEFAULT_WORKFLOW_MODE,
+  WORKFLOW_MODES,
+  type RoleAssignment,
+  type WorkflowMode,
+} from "@toburt/shared";
 
 type Json = Record<string, unknown>;
 const j = (v: unknown): Json => ((v ?? {}) as Json);
@@ -42,6 +47,15 @@ export interface TeamState {
   projectTitle: string | null;
   assignments: Record<string, RoleAssignment>;
   rosterApprovedAt: string | null;
+  workflowMode: WorkflowMode;
+}
+
+function readWorkflowMode(metadata: Json): WorkflowMode {
+  const raw = metadata.workflowMode;
+  if (typeof raw === "string" && (WORKFLOW_MODES as readonly string[]).includes(raw)) {
+    return raw as WorkflowMode;
+  }
+  return DEFAULT_WORKFLOW_MODE;
 }
 
 export async function loadTeamState(projectId: string): Promise<TeamState | null> {
@@ -61,7 +75,21 @@ export async function loadTeamState(projectId: string): Promise<TeamState | null
     projectTitle: project.title,
     assignments,
     rosterApprovedAt,
+    workflowMode: readWorkflowMode(project.metadata),
   };
+}
+
+export async function setWorkflowMode(
+  projectId: string,
+  mode: WorkflowMode
+): Promise<WorkflowMode> {
+  const project = await loadProject(projectId);
+  if (!project) throw new Error("project_not_found");
+  await saveProjectMetadata(projectId, {
+    ...project.metadata,
+    workflowMode: mode,
+  });
+  return mode;
 }
 
 export async function upsertAssignment(

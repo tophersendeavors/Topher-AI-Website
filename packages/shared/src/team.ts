@@ -5,6 +5,31 @@
 //   • "actor:<characterId>"   — on-camera performer
 //   • "voice:<characterId>"   — voice performance (V.O., looping)
 
+// ---------------------------------------------------------------------------
+// Workflow mode — which style of studio is producing this project.
+// Recommendations adapt per mode, but the user can always override.
+// ---------------------------------------------------------------------------
+
+export const WORKFLOW_MODES = ["solo_ai", "hybrid", "human_led"] as const;
+export type WorkflowMode = (typeof WORKFLOW_MODES)[number];
+
+export const DEFAULT_WORKFLOW_MODE: WorkflowMode = "solo_ai";
+
+export const WORKFLOW_MODE_LABEL: Record<WorkflowMode, string> = {
+  solo_ai: "Solo AI Studio",
+  hybrid: "Hybrid Creative Studio",
+  human_led: "Human-Led Production",
+};
+
+export const WORKFLOW_MODE_DESCRIPTION: Record<WorkflowMode, string> = {
+  solo_ai:
+    "One person uses AI to fill most or all roles.",
+  hybrid:
+    "Some roles are live people, some AI Creative, some AI generators.",
+  human_led:
+    "Live people own most roles; AI supports with briefs, prompts, and reviews.",
+};
+
 export type RoleKind = "ai" | "ai_creative" | "live_person";
 
 export const ROLE_KINDS: readonly RoleKind[] = [
@@ -142,8 +167,14 @@ export interface RoleDefinition {
   /** Convenience label suggestions for the UI. */
   exampleAssignments?: string[];
   /** Smart defaults + filtering rules — what the OS recommends for this
-   *  role and what model targets the picker should show. */
+   *  role and what model targets the picker should show. Reflects the
+   *  project's current workflow mode (the aggregator picks from
+   *  `recommendationsByMode` before returning). */
   recommendation?: RoleRecommendation;
+  /** Per-mode recommendations. Aggregator overlays the entry matching
+   *  the project's current `workflowMode` onto `recommendation`. When a
+   *  mode is missing, the base `recommendation` is used. */
+  recommendationsByMode?: Partial<Record<WorkflowMode, RoleRecommendation>>;
 }
 
 /** Per-role recommendation surfaced in the assignment drawer. */
@@ -234,6 +265,7 @@ export interface TeamRosterSummary {
 export interface TeamRosterResponse {
   projectId: string;
   projectTitle: string | null;
+  workflowMode: WorkflowMode;
   slots: RoleSlot[];
   summary: TeamRosterSummary;
 }

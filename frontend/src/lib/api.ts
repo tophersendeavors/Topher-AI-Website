@@ -14,6 +14,10 @@ import type {
   SceneEmotionalState,
   Script,
   Season,
+  MusicAdapter,
+  MusicPackResponse,
+  MusicPromptPack,
+  MusicSlot,
   SoundAuditResult,
   SoundBible,
   SoundBibleResponse,
@@ -3676,6 +3680,47 @@ export const api = {
     format: "markdown" | "json"
   ) =>
     `/api/projects/${projectId}/episodes/${episodeId}/sound-bible/export?format=${format}`,
+
+  // --- Music prompt pack — derived view, Suno / Udio / Composer Brief adapters
+  getMusicPack: (projectId: string, episodeId: string) =>
+    request<MusicPackResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/music`
+    ),
+  generateMusicPack: (projectId: string, episodeId: string) =>
+    request<{ pack: MusicPromptPack }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/music/generate`,
+      { method: "POST" }
+    ),
+  generateMusicSlot: (
+    projectId: string,
+    episodeId: string,
+    slot: MusicSlot,
+    notes?: string
+  ) =>
+    request<{ pack: MusicPromptPack }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/music/slot/${slot}/generate`,
+      { method: "POST", body: JSON.stringify({ notes }) }
+    ),
+  approveMusicPack: (projectId: string, episodeId: string) =>
+    request<{ pack: MusicPromptPack | null }>(
+      `/projects/${projectId}/episodes/${episodeId}/sound-bible/music/approve`,
+      { method: "POST" }
+    ),
+  exportMusicPack: async (
+    projectId: string,
+    episodeId: string,
+    adapter: MusicAdapter,
+    scope: string
+  ): Promise<string> => {
+    // request<T> JSON-parses; we want plain text. Bypass.
+    const path = `/projects/${projectId}/episodes/${episodeId}/sound-bible/music/export?adapter=${adapter}&scope=${encodeURIComponent(scope)}`;
+    const headers = await authHeader();
+    const res = await fetch(`${BASE}/api${path}`, { headers });
+    if (!res.ok) throw new Error(`export ${adapter}/${scope}: ${res.status}`);
+    return res.text();
+  },
+  musicPackJsonUrl: (projectId: string, episodeId: string) =>
+    `/api/projects/${projectId}/episodes/${episodeId}/sound-bible/music/export.json`,
 };
 
 // --- Series Redevelopment types --------------------------------------

@@ -140,3 +140,81 @@ export interface SoundBibleResponse {
   bible: SoundBible;
   source: SoundBibleSourceInfo;
 }
+
+// ---------------------------------------------------------------------------
+// Music prompt pack — derived view of the Sound Bible canon. Tool-agnostic.
+// ---------------------------------------------------------------------------
+
+export interface MusicDerivationSource {
+  kind: "episode_identity" | "scene_row" | "music_guidance" | "motif_registry";
+  ref?: string | number;
+}
+
+export interface MusicPrompt {
+  intent: string;
+  mood: string[];
+  tempoRange: string | null;
+  instrumentation: string[];
+  texture: string[];
+  intensity: string;
+  durationTargetSec: number | null;
+  loopability: "loopable" | "one-shot" | null;
+  noMusic: boolean;
+  isInstrumental: boolean;
+  includesVocals: boolean;
+  description: string;
+  derivedFrom: MusicDerivationSource;
+  approvedAt: string | null;
+  approvedBy: string | null;
+}
+
+export interface TrailerMusicPrompts {
+  variant15: MusicPrompt;
+  variant30: MusicPrompt;
+  variant60: MusicPrompt;
+  buildStructure: {
+    start: string;
+    rise: string;
+    break: string;
+    finalHit: string;
+  };
+}
+
+export interface MusicMotifFragment {
+  motifId: string;
+  motifLabel: string;
+  prompt: string;
+  mood: string[];
+  instrumentation: string[];
+  texture: string[];
+  approvedAt: string | null;
+  approvedBy: string | null;
+}
+
+export interface MusicPromptPack {
+  version: number;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  derivedFromApprovedCanon: boolean;
+  updatedAt: string;
+  episodeSoundtrack: MusicPrompt | null;
+  scenePrompts: Record<string, MusicPrompt>;
+  trailer: TrailerMusicPrompts | null;
+  motifFragments: MusicMotifFragment[];
+}
+
+export const MUSIC_ADAPTERS = ["suno", "udio", "composer_brief"] as const;
+export type MusicAdapter = (typeof MUSIC_ADAPTERS)[number];
+
+export type MusicSlot = "episode" | "scenes" | "trailer" | "motifs";
+
+export interface MusicPackResponse {
+  pack: MusicPromptPack | null;
+  canonReadiness: {
+    episodeIdentityApproved: boolean;
+    musicGuidanceApproved: boolean;
+    approvedSceneCount: number;
+    totalSceneCount: number;
+    motifCount: number;
+  };
+}

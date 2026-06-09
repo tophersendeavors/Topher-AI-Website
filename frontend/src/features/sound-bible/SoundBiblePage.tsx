@@ -37,6 +37,8 @@ import { Button } from "@/components/ui/Button";
 import { Explainer } from "@/components/ui/Explainer";
 import { DraftWritingContext } from "@/components/ui/DraftWritingContext";
 import type {
+  MusicAdapter,
+  MusicPromptPack,
   SoundBible,
   SoundBibleResponse,
   SoundSceneBreakdown,
@@ -172,6 +174,7 @@ export function SoundBiblePage() {
           bible={bible}
           onChange={() => qc.invalidateQueries({ queryKey: ["sound-bible", projectId, episodeId] })}
         />
+        <MusicGenerationSection projectId={projectId} episodeId={episodeId} bible={bible} />
       </div>
     </div>
   );
@@ -730,6 +733,297 @@ function ChipList({ label, items, mono = false }: { label: string; items: string
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Music Generation / Export — Suno + Udio + Composer Brief adapters
+// ---------------------------------------------------------------------------
+
+function MusicGenerationSection({
+  projectId,
+  episodeId,
+  bible,
+}: {
+  projectId: string;
+  episodeId: string;
+  bible: SoundBible;
+}) {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["music-pack", projectId, episodeId],
+    queryFn: () => api.getMusicPack(projectId, episodeId),
+  });
+  const generate = useMutation({
+    mutationFn: () => api.generateMusicPack(projectId, episodeId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["music-pack", projectId, episodeId] }),
+  });
+  const regen = useMutation({
+    mutationFn: (slot: "episode" | "scenes" | "trailer" | "motifs") =>
+      api.generateMusicSlot(projectId, episodeId, slot),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["music-pack", projectId, episodeId] }),
+  });
+  const approve = useMutation({
+    mutationFn: () => api.approveMusicPack(projectId, episodeId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["music-pack", projectId, episodeId] }),
+  });
+
+  const pack = q.data?.pack ?? null;
+  const readiness = q.data?.canonReadiness;
+  const ready = readiness
+    ? readiness.episodeIdentityApproved || readiness.musicGuidanceApproved || readiness.approvedSceneCount > 0
+    : false;
+
+  return (
+    <Panel eyebrow="§7" title="Music Generation — Suno · Udio · Composer Brief">
+      <div className="flex items-start gap-2">
+        <Music className="mt-0.5 h-4 w-4 text-bone-200" />
+        <div className="flex-1 text-sm text-bone-300">
+          Derived view of the Sound Bible canon. Generates tool-agnostic music prompts and
+          renders them through Suno, Udio, or Composer Brief adapters at copy time. <strong>Only
+          approved Sound Bible canon flows in</strong> — drafts are skipped. No copyrighted
+          composer / score / song references. Default: instrumental only, no vocals.
+        </div>
+      </div>
+
+      {readiness && (
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
+          <ReadinessTile label="Episode identity" ok={readiness.episodeIdentityApproved} />
+          <ReadinessTile label="Music guidance" ok={readiness.musicGuidanceApproved} />
+          <ReadinessTile
+            label={`Scenes approved`}
+            ok={readiness.approvedSceneCount === readiness.totalSceneCount && readiness.totalSceneCount > 0}
+            note={`${readiness.approvedSceneCount}/${readiness.totalSceneCount}`}
+          />
+          <ReadinessTile label={`Motifs`} ok={readiness.motifCount > 0} note={`${readiness.motifCount}`} />
+          <ReadinessTile
+            label="Pack approved"
+            ok={!!pack?.approvedAt}
+            note={pack?.derivedFromApprovedCanon ? "from approved canon" : "from draft canon"}
+          />
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button onClick={() => generate.mutate()} disabled={!ready || generate.isPending}>
+          {generate.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {pack ? "Regenerate full pack" : "Generate music pack"}
+        </Button>
+        {pack && !pack.approvedAt && (
+          <Button onClick={() => approve.mutate()} disabled={approve.isPending}>
+            {approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            Approve pack
+          </Button>
+        )}
+        <a href={api.musicPackJsonUrl(projectId, episodeId)} download>
+          <Button variant="outline">
+            <Download className="h-4 w-4" /> Export JSON
+          </Button>
+        </a>
+      </div>
+
+      {!ready && (
+        <div className="mt-3 rounded-md border border-amber-700/50 bg-amber-950/30 p-3 text-xs text-amber-200">
+          Approve at least one Sound Bible section first — Episode Identity, Music Guidance, or
+          a per-scene row. Music prompts are derived ONLY from approved canon.
+        </div>
+      )}
+
+      {pack && (
+        <div className="mt-4 space-y-4">
+          {/* Episode soundtrack */}
+          {pack.episodeSoundtrack && (
+            <MusicPromptCard
+              title="Episode soundtrack"
+              projectId={projectId}
+              episodeId={episodeId}
+              scope="episode"
+              onRegen={() => regen.mutate("episode")}
+              regenLabel="Regenerate episode soundtrack"
+              prompt={pack.episodeSoundtrack}
+            />
+          )}
+          {/* Trailer */}
+          {pack.trailer && (
+            <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-serif text-bone-50">Trailer music</div>
+                <Button variant="outline" onClick={() => regen.mutate("trailer")} disabled={regen.isPending}>
+                  <RefreshCw className="h-3.5 w-3.5" /> Regenerate trailer
+                </Button>
+              </div>
+              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                {(["15", "30", "60"] as const).map((v) => (
+                  <div key={v} className="rounded border border-white/8 bg-white/[0.02] p-2 text-xs">
+                    <div className="text-bone-200">Trailer · {v}s</div>
+                    <CopyRow
+                      projectId={projectId}
+                      episodeId={episodeId}
+                      scope={`trailer:${v}`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-bone-300 md:grid-cols-4">
+                <div><span className="text-bone-500">Start.</span> {pack.trailer.buildStructure.start}</div>
+                <div><span className="text-bone-500">Rise.</span> {pack.trailer.buildStructure.rise}</div>
+                <div><span className="text-bone-500">Break.</span> {pack.trailer.buildStructure.break}</div>
+                <div><span className="text-bone-500">Final hit.</span> {pack.trailer.buildStructure.finalHit}</div>
+              </div>
+            </div>
+          )}
+          {/* Scenes */}
+          {Object.keys(pack.scenePrompts).length > 0 && (
+            <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-serif text-bone-50">
+                  Per-scene music prompts ({Object.keys(pack.scenePrompts).length})
+                </div>
+                <Button variant="outline" onClick={() => regen.mutate("scenes")} disabled={regen.isPending}>
+                  <RefreshCw className="h-3.5 w-3.5" /> Regenerate scenes
+                </Button>
+              </div>
+              <ul className="mt-2 space-y-2">
+                {Object.entries(pack.scenePrompts)
+                  .sort(([a], [b]) => Number(a) - Number(b))
+                  .map(([ord, p]) => (
+                    <li key={ord} className="rounded border border-white/8 bg-white/[0.02] p-2 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-bone-100">
+                          Scene {ord}
+                          {p.noMusic && (
+                            <span className="ml-2 chip border-red-700/40 bg-red-900/20 text-red-200">no music</span>
+                          )}
+                        </div>
+                        <CopyRow projectId={projectId} episodeId={episodeId} scope={`scene:${ord}`} />
+                      </div>
+                      <div className="mt-1 text-bone-300">{p.description}</div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+          {/* Motifs */}
+          {pack.motifFragments.length > 0 && (
+            <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-serif text-bone-50">Motif fragments ({pack.motifFragments.length})</div>
+                <Button variant="outline" onClick={() => regen.mutate("motifs")} disabled={regen.isPending}>
+                  <RefreshCw className="h-3.5 w-3.5" /> Regenerate motifs
+                </Button>
+              </div>
+              <ul className="mt-2 grid gap-2 md:grid-cols-2">
+                {pack.motifFragments.map((f) => (
+                  <li key={f.motifId} className="rounded border border-white/8 bg-white/[0.02] p-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-bone-100">
+                        <span className="font-serif">{f.motifLabel}</span>{" "}
+                        <span className="font-mono text-bone-500">{f.motifId}</span>
+                      </div>
+                      <CopyRow projectId={projectId} episodeId={episodeId} scope={`motif:${f.motifId}`} />
+                    </div>
+                    <div className="mt-1 text-bone-300">{f.prompt}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ReadinessTile({ label, ok, note }: { label: string; ok: boolean; note?: string }) {
+  return (
+    <div
+      className={`rounded border p-2 text-center ${
+        ok
+          ? "border-emerald-700/40 bg-emerald-900/20 text-emerald-100"
+          : "border-amber-700/40 bg-amber-900/15 text-amber-100"
+      }`}
+    >
+      <div className="text-bone-500">{label}</div>
+      <div>
+        {ok ? "approved" : "draft"}
+        {note ? ` · ${note}` : ""}
+      </div>
+    </div>
+  );
+}
+
+function MusicPromptCard({
+  title,
+  projectId,
+  episodeId,
+  scope,
+  onRegen,
+  regenLabel,
+  prompt,
+}: {
+  title: string;
+  projectId: string;
+  episodeId: string;
+  scope: string;
+  onRegen: () => void;
+  regenLabel: string;
+  prompt: MusicPromptPack["episodeSoundtrack"];
+}) {
+  if (!prompt) return null;
+  return (
+    <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-serif text-bone-50">{title}</div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onRegen}>
+            <RefreshCw className="h-3.5 w-3.5" /> {regenLabel}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-2 text-sm text-bone-200">{prompt.description}</div>
+      <div className="mt-2">
+        <CopyRow projectId={projectId} episodeId={episodeId} scope={scope} />
+      </div>
+    </div>
+  );
+}
+
+function CopyRow({
+  projectId,
+  episodeId,
+  scope,
+}: {
+  projectId: string;
+  episodeId: string;
+  scope: string;
+}) {
+  const [copied, setCopied] = useState<MusicAdapter | null>(null);
+  async function copy(adapter: MusicAdapter) {
+    try {
+      const text = await api.exportMusicPack(projectId, episodeId, adapter, scope);
+      await navigator.clipboard.writeText(text);
+      setCopied(adapter);
+      setTimeout(() => setCopied(null), 1400);
+    } catch (e) {
+      // surface a simple inline failure
+      alert(`Copy failed: ${(e as Error).message}`);
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Button variant="outline" onClick={() => copy("suno")}>
+        {copied === "suno" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        Suno
+      </Button>
+      <Button variant="outline" onClick={() => copy("udio")}>
+        {copied === "udio" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        Udio
+      </Button>
+      <Button variant="outline" onClick={() => copy("composer_brief")}>
+        {copied === "composer_brief" ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        Composer Brief
+      </Button>
     </div>
   );
 }

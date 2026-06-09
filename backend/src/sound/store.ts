@@ -13,6 +13,7 @@ import {
   type SoundSection,
   type SoundSceneBreakdown,
 } from "./types.js";
+import type { MusicPromptPack } from "./musicTypes.js";
 
 /** Read a project's full metadata.soundBibles map. */
 async function loadProjectSoundBibles(
@@ -209,4 +210,52 @@ export async function approveSoundBible(
     approvedBy: userId,
   };
   return putSoundBible(projectId, next);
+}
+
+// ---------------------------------------------------------------------------
+// Music pack — stored at projects.metadata.soundBibles[ep].musicPack
+// ---------------------------------------------------------------------------
+
+/** SoundBible carrier type that also includes the optional musicPack
+ *  field. Keeps it out of the canonical SoundBible type so existing
+ *  consumers don't need to know about the music layer. */
+type SoundBibleWithMusic = SoundBible & { musicPack?: MusicPromptPack };
+
+export async function getMusicPromptPack(
+  projectId: string,
+  episodeId: string
+): Promise<MusicPromptPack | null> {
+  const bible = (await getSoundBible(projectId, episodeId)) as SoundBibleWithMusic;
+  return bible.musicPack ?? null;
+}
+
+export async function putMusicPromptPack(
+  projectId: string,
+  episodeId: string,
+  pack: MusicPromptPack
+): Promise<MusicPromptPack> {
+  const bible = (await getSoundBible(projectId, episodeId)) as SoundBibleWithMusic;
+  const next: MusicPromptPack = {
+    ...pack,
+    version: ((bible.musicPack?.version ?? 0) as number) + 1,
+    updatedAt: new Date().toISOString(),
+  };
+  const carrier: SoundBibleWithMusic = { ...bible, musicPack: next };
+  await putSoundBible(projectId, carrier as SoundBible);
+  return next;
+}
+
+export async function approveMusicPromptPack(
+  projectId: string,
+  episodeId: string,
+  userId: string
+): Promise<MusicPromptPack | null> {
+  const pack = await getMusicPromptPack(projectId, episodeId);
+  if (!pack) return null;
+  const next: MusicPromptPack = {
+    ...pack,
+    approvedAt: new Date().toISOString(),
+    approvedBy: userId,
+  };
+  return putMusicPromptPack(projectId, episodeId, next);
 }

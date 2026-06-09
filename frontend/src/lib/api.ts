@@ -869,15 +869,25 @@ export const api = {
   // Projects
   listProjects: () => request<Project[]>("/projects"),
   getProject: (id: string) => request<Project>(`/projects/${id}`),
-  createProject: (body: Partial<Project>) =>
-    request<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
+  createProject: (
+    body: Partial<Project> & { projectType?: string; redevTemplateId?: string }
+  ) => request<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
   updateProject: (id: string, body: Partial<Project>) =>
     request<Project>(`/projects/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  listRedevTemplates: () =>
+    request<
+      Array<{
+        templateId: string;
+        templateName: string;
+        templateTagline?: string;
+        projectFormat?: string;
+      }>
+    >("/redevelopment/templates"),
   // --- Project Type + Micro Drama Bible ---------------------------------
-  setProjectType: (id: string, projectType: "prestige_series" | "mini_series" | "micro_drama") =>
+  setProjectType: (id: string, projectType: string) =>
     request<Project>(`/projects/${id}/project-type`, {
       method: "PATCH",
       body: JSON.stringify({ projectType }),

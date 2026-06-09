@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { AlertTriangle, Film, Plus, Smartphone } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { AlertTriangle, ArrowLeft, ArrowRight, Film, Loader2, Plus, Smartphone } from "lucide-react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Project } from "@toburt/shared";
-import { PROJECT_TYPES, PROJECT_TYPE_LABEL, PROJECT_TYPE_DESCRIPTION, type ProjectType } from "@toburt/shared";
+import {
+  PROJECT_TYPES,
+  PROJECT_TYPE_LABEL,
+  PROJECT_TYPE_DESCRIPTION,
+  PROJECT_TYPE_CONFIGS,
+  type ProjectType,
+} from "@toburt/shared";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -30,11 +36,17 @@ export function ProjectsPage() {
   const [filter, setFilter] = useState<"all" | ProjectType>("all");
 
   // Count by tier for the filter chips + the Micro Dramas dashboard card.
+  // Initialised from PROJECT_TYPES so new types (feature, anthology) get
+  // a slot automatically. Pre-Phase-A this object hardcoded 3 keys and
+  // threw at runtime when a feature/anthology project existed.
   const counts = (() => {
-    const out: Record<ProjectType, number> = {
-      prestige_series: 0, mini_series: 0, micro_drama: 0,
-    };
-    for (const p of projects ?? []) out[readProjectType(p)]++;
+    const out = Object.fromEntries(
+      (PROJECT_TYPES as readonly ProjectType[]).map((t) => [t, 0])
+    ) as Record<ProjectType, number>;
+    for (const p of projects ?? []) {
+      const t = readProjectType(p);
+      out[t] = (out[t] ?? 0) + 1;
+    }
     return out;
   })();
   const visible = (projects ?? []).filter(
@@ -243,34 +255,70 @@ function ProjectCard({ project }: { project: Project }) {
   );
 }
 
+/** Default Kind per project type — matches what each format expects in
+ *  the existing schema, so the user doesn't have to think about Kind. */
+const KIND_BY_TYPE: Record<ProjectType, Project["kind"]> = {
+  micro_drama: "series",
+  prestige_series: "pilot",
+  mini_series: "miniseries",
+  feature: "feature",
+  anthology: "series",
+};
+
+/** Where to land the user after creation. Routes by project type so they
+ *  arrive at the surface that actually moves their work forward. */
+function postCreateRoute(
+  projectId: string,
+  projectType: ProjectType,
+  redevTemplateId: string | null
+): string {
+  // SELVAJE template → straight into Redevelopment (R1 is waiting).
+  if (redevTemplateId === "selvaje") {
+    return `/projects/${projectId}/redevelopment`;
+  }
+  // Micro-drama bible lives on the project overview as a top card.
+  if (projectType === "micro_drama") {
+    return `/projects/${projectId}`;
+  }
+  // Prestige / mini / feature / anthology all start at project overview;
+  // the recommended-next-step engine then routes them appropriately.
+  return `/projects/${projectId}`;
+}
+
 function CreateProjectDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<Project["kind"]>("feature");
+  const navigate = useNavigate();
+  const [step, setStep] = useState<1 | 2>(1);
   const [projectType, setProjectType] = useState<ProjectType>("prestige_series");
+  const [redevTemplateId, setRedevTemplateId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
   const [logline, setLogline] = useState("");
   const [genre, setGenre] = useState("");
 
-  // Two-step create: project, then set its projectType in metadata. This
-  // keeps the existing createProject contract unchanged.
+  const templates = useQuery({
+    queryKey: ["redev-templates"],
+    queryFn: api.listRedevTemplates,
+    enabled: step === 2,
+  });
+
   const create = useMutation({
     mutationFn: async () => {
       const created = await api.createProject({
         title,
-        kind,
+        kind: KIND_BY_TYPE[projectType],
         logline: logline || undefined,
         genre: genre
           ? genre.split(",").map((g) => g.trim()).filter(Boolean)
           : undefined,
+        projectType,
+        redevTemplateId: redevTemplateId ?? undefined,
       });
-      if (projectType !== "prestige_series") {
-        await api.setProjectType(created.id, projectType);
-      }
       return created;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       onClose();
+      navigate(postCreateRoute(created.id, projectType, redevTemplateId));
     },
   });
 
@@ -280,105 +328,315 @@ function CreateProjectDialog({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="panel-strong w-full max-w-lg p-6"
+        className="panel-strong w-full max-w-2xl p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="font-serif text-xl text-bone-50">New project</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-serif text-xl text-bone-50">
+            {step === 1 ? "New project — choose format" : "New project — choose template"}
+          </h2>
+          <StepDots step={step} />
+        </div>
         <p className="mt-1 text-sm text-bone-300">
-          A project is one creative entity — a film, a pilot, a series.
+          {step === 1
+            ? "Pick the format. This drives the shot policy, workflow, and the surfaces you land on after creation."
+            : "Templates seed the redevelopment passes with starting canon. Blank is a fresh start; SELVAJE pre-loads the prestige-thriller story spine."}
         </p>
-        <div className="mt-5 space-y-3">
-          <div>
-            <label className="label-eyebrow mb-1 block">Title</label>
-            <input
-              className="input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-            />
+
+        {step === 1 && (
+          <ProjectTypeStep
+            projectType={projectType}
+            onChange={setProjectType}
+          />
+        )}
+
+        {step === 2 && (
+          <TemplateStep
+            projectType={projectType}
+            templates={templates.data ?? null}
+            templatesLoading={templates.isLoading}
+            redevTemplateId={redevTemplateId}
+            onTemplate={setRedevTemplateId}
+            title={title}
+            setTitle={setTitle}
+            logline={logline}
+            setLogline={setLogline}
+            genre={genre}
+            setGenre={setGenre}
+          />
+        )}
+
+        {create.error && (
+          <div className="mt-3 rounded-md border border-red-700/50 bg-red-950/30 p-2 text-sm text-red-200">
+            {(create.error as Error).message}
           </div>
-          <div>
-            <label className="label-eyebrow mb-1 block">Project Type</label>
-            <div className="grid grid-cols-1 gap-1.5">
-              {(PROJECT_TYPES as readonly ProjectType[]).map((t) => (
-                <label
-                  key={t}
-                  className={
-                    "flex cursor-pointer gap-3 rounded-md border p-2.5 text-sm transition-colors " +
-                    (projectType === t
-                      ? "border-ember-700/60 bg-ember-900/15"
-                      : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]")
-                  }
-                >
-                  <input
-                    type="radio"
-                    checked={projectType === t}
-                    onChange={() => setProjectType(t)}
-                    className="mt-1"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-bone-100">{PROJECT_TYPE_LABEL[t]}</div>
-                    <div className="text-[11px] text-bone-400">
-                      {PROJECT_TYPE_DESCRIPTION[t]}
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="label-eyebrow mb-1 block">Kind</label>
-            <select
-              className="input"
-              value={kind}
-              onChange={(e) => setKind(e.target.value as Project["kind"])}
-            >
-              <option value="feature">Feature</option>
-              <option value="pilot">TV Pilot</option>
-              <option value="miniseries">Miniseries</option>
-              <option value="series">Series</option>
-              <option value="short">Short</option>
-            </select>
-          </div>
-          <div>
-            <label className="label-eyebrow mb-1 block">Logline (optional)</label>
-            <textarea
-              className="input min-h-[80px]"
-              value={logline}
-              onChange={(e) => setLogline(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="label-eyebrow mb-1 block">
-              Genre (comma separated)
-            </label>
-            <input
-              className="input"
-              value={genre}
-              onChange={(e) => setGenre(e.target.value)}
-              placeholder="thriller, sci-fi, drama"
-            />
-          </div>
-          {create.error && (
-            <div className="rounded-md border border-red-700/50 bg-red-950/30 p-2 text-sm text-red-200">
-              {(create.error as Error).message}
-            </div>
-          )}
-          <div className="flex items-center justify-end gap-2 pt-2">
+        )}
+
+        <div className="mt-5 flex items-center justify-between gap-2">
+          {step === 1 ? (
             <Button variant="ghost" onClick={onClose}>
               Cancel
             </Button>
+          ) : (
+            <Button variant="ghost" onClick={() => setStep(1)}>
+              <ArrowLeft className="h-4 w-4" /> Back
+            </Button>
+          )}
+          {step === 1 ? (
+            <Button onClick={() => setStep(2)}>
+              Continue <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
             <Button
               disabled={!title || create.isPending}
               onClick={() => create.mutate()}
             >
+              {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Create project
             </Button>
-          </div>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function StepDots({ step }: { step: 1 | 2 }) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-bone-400">
+      <span className={step === 1 ? "text-ember-300" : ""}>Step 1</span>
+      <span>·</span>
+      <span className={step === 2 ? "text-ember-300" : ""}>Step 2</span>
+    </div>
+  );
+}
+
+function ProjectTypeStep({
+  projectType,
+  onChange,
+}: {
+  projectType: ProjectType;
+  onChange: (t: ProjectType) => void;
+}) {
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-1.5">
+      {(PROJECT_TYPES as readonly ProjectType[]).map((t) => {
+        const cfg = PROJECT_TYPE_CONFIGS[t];
+        const policy = cfg.shotPolicy;
+        const active = projectType === t;
+        return (
+          <label
+            key={t}
+            className={
+              "flex cursor-pointer gap-3 rounded-md border p-3 text-sm transition-colors " +
+              (active
+                ? "border-ember-700/60 bg-ember-900/15"
+                : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]")
+            }
+          >
+            <input
+              type="radio"
+              checked={active}
+              onChange={() => onChange(t)}
+              className="mt-1"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-bone-100">{PROJECT_TYPE_LABEL[t]}</span>
+                <span className="chip border-white/10 bg-white/[0.04] text-bone-300">
+                  {policy.defaultAspectRatio}
+                </span>
+                <span className="chip border-white/10 bg-white/[0.04] text-bone-300">
+                  {policy.minDurationSec}–{policy.maxDurationSec}s shots
+                </span>
+                <span className="chip border-white/10 bg-white/[0.04] text-bone-300">
+                  {policy.coverageDensity} coverage
+                </span>
+                {policy.isMicroDramaTier && (
+                  <span className="chip border-amber-700/40 bg-amber-900/20 text-amber-200">
+                    vertical · retention-first
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 text-[12px] text-bone-400">
+                {PROJECT_TYPE_DESCRIPTION[t]}
+              </div>
+              <div className="mt-1 text-[11px] text-bone-500">
+                Best for: {bestForLabel(t)}
+              </div>
+            </div>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function bestForLabel(t: ProjectType): string {
+  switch (t) {
+    case "micro_drama":
+      return "TikTok / Reels / Shorts. 30-120s vertical episodes. Hook-first.";
+    case "prestige_series":
+      return "Cinematic episodic TV. 30-60 minute episodes. Restrained coverage.";
+    case "mini_series":
+      return "Limited series. 4-12 episodes. Simpler production canon than prestige.";
+    case "feature":
+      return "Single film. 90-180 minutes. Theatrical pacing.";
+    case "anthology":
+      return "Standalone episodes sharing a world / tone. Each is its own creative pass.";
+    default:
+      return "";
+  }
+}
+
+function TemplateStep({
+  projectType,
+  templates,
+  templatesLoading,
+  redevTemplateId,
+  onTemplate,
+  title,
+  setTitle,
+  logline,
+  setLogline,
+  genre,
+  setGenre,
+}: {
+  projectType: ProjectType;
+  templates: Array<{ templateId: string; templateName: string; templateTagline?: string; projectFormat?: string }> | null;
+  templatesLoading: boolean;
+  redevTemplateId: string | null;
+  onTemplate: (id: string | null) => void;
+  title: string;
+  setTitle: (s: string) => void;
+  logline: string;
+  setLogline: (s: string) => void;
+  genre: string;
+  setGenre: (s: string) => void;
+}) {
+  return (
+    <div className="mt-4 space-y-4">
+      <div>
+        <label className="label-eyebrow mb-1 block">Template</label>
+        <div className="grid grid-cols-1 gap-1.5">
+          {/* Blank — always available. */}
+          <label
+            className={
+              "flex cursor-pointer gap-3 rounded-md border p-3 text-sm transition-colors " +
+              (redevTemplateId === null || redevTemplateId === "blank"
+                ? "border-ember-700/60 bg-ember-900/15"
+                : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]")
+            }
+          >
+            <input
+              type="radio"
+              checked={redevTemplateId === null || redevTemplateId === "blank"}
+              onChange={() => onTemplate(null)}
+              className="mt-1"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-bone-100">Blank</div>
+              <div className="mt-0.5 text-[12px] text-bone-400">
+                Fresh start. No brief defaults, no character seeds — you author everything.
+              </div>
+              <div className="mt-1 text-[11px] text-bone-500">
+                Compatible with: every project type
+              </div>
+            </div>
+          </label>
+          {/* Backend-registered templates (BLANK + SELVAJE today; more later). */}
+          {templatesLoading ? (
+            <div className="text-xs text-bone-400 px-3 py-2">Loading templates…</div>
+          ) : (
+            (templates ?? [])
+              .filter((t) => t.templateId !== "blank") // shown above
+              .map((t) => {
+                const active = redevTemplateId === t.templateId;
+                const compatible = templateCompatibleWith(t, projectType);
+                return (
+                  <label
+                    key={t.templateId}
+                    className={
+                      "flex cursor-pointer gap-3 rounded-md border p-3 text-sm transition-colors " +
+                      (active
+                        ? "border-ember-700/60 bg-ember-900/15"
+                        : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04]") +
+                      (compatible ? "" : " opacity-60")
+                    }
+                    title={compatible ? "" : `Designed for ${t.projectFormat ?? "another format"}`}
+                  >
+                    <input
+                      type="radio"
+                      checked={active}
+                      onChange={() => onTemplate(t.templateId)}
+                      className="mt-1"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-bone-100">{t.templateName}</span>
+                        {t.projectFormat && (
+                          <span className="chip border-white/10 bg-white/[0.04] text-bone-300">
+                            {t.projectFormat}
+                          </span>
+                        )}
+                        {!compatible && (
+                          <span className="chip border-amber-700/40 bg-amber-900/20 text-amber-200">
+                            cross-format
+                          </span>
+                        )}
+                      </div>
+                      {t.templateTagline && (
+                        <div className="mt-0.5 text-[12px] text-bone-400">{t.templateTagline}</div>
+                      )}
+                      <div className="mt-1 text-[11px] text-bone-500">
+                        Includes: brief defaults · cast seeds · story engine · forbidden moves · R6 character contracts (when applicable)
+                      </div>
+                    </div>
+                  </label>
+                );
+              })
+          )}
+        </div>
+      </div>
+      <div>
+        <label className="label-eyebrow mb-1 block">Title</label>
+        <input
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          autoFocus
+        />
+      </div>
+      <div>
+        <label className="label-eyebrow mb-1 block">Logline (optional)</label>
+        <textarea
+          className="input min-h-[80px]"
+          value={logline}
+          onChange={(e) => setLogline(e.target.value)}
+        />
+      </div>
+      <div>
+        <label className="label-eyebrow mb-1 block">Genre (comma separated)</label>
+        <input
+          className="input"
+          value={genre}
+          onChange={(e) => setGenre(e.target.value)}
+          placeholder="thriller, sci-fi, drama"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Templates may carry a `projectFormat` field naming the format they
+ *  were authored for. We still allow the user to pick a cross-format
+ *  template, but flag it visually. */
+function templateCompatibleWith(
+  t: { projectFormat?: string },
+  projectType: ProjectType
+): boolean {
+  if (!t.projectFormat) return true;
+  return t.projectFormat === projectType;
 }
 
 // MicroDramaViralFlag — surfaces the count of failing-viral-test episodes

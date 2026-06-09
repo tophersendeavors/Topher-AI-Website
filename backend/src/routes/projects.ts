@@ -27,6 +27,12 @@ const Create = z.object({
   tone: z.array(z.string()).optional(),
   inspirations: z.array(z.string()).optional(),
   showrunner_notes: z.string().optional(),
+  /** Optional — when set, stored at projects.metadata.projectType.
+   *  Defaults to "prestige_series" when missing. */
+  projectType: z.enum(PROJECT_TYPES as unknown as [string, ...string[]]).optional(),
+  /** Optional — when set, stored at projects.metadata.redevTemplateId.
+   *  Drives the default template that R1-R9 passes resolve under. */
+  redevTemplateId: z.string().optional(),
 });
 
 const Update = Create.partial();
@@ -53,9 +59,19 @@ export default async function projectsRoutes(app: FastifyInstance) {
   app.post("/projects", async (req) => {
     const user = await requireUser(req);
     const body = Create.parse(req.body);
+    // Fold projectType + redevTemplateId into the jsonb metadata column
+    // so the existing read paths (resolveProjectTypeConfig, etc.) pick
+    // them up. Strip them from the top-level insert (projects table has
+    // no `projectType` column).
+    const { projectType, redevTemplateId, ...top } = body;
+    const metadata: Record<string, unknown> = {};
+    if (projectType) metadata.projectType = projectType;
+    if (redevTemplateId) metadata.redevTemplateId = redevTemplateId;
+    const insertRow: Record<string, unknown> = { ...top, owner_id: user.id };
+    if (Object.keys(metadata).length > 0) insertRow.metadata = metadata;
     const { data, error } = await supabase
       .from("projects")
-      .insert({ ...body, owner_id: user.id })
+      .insert(insertRow)
       .select("*")
       .single();
     if (error) throw error;

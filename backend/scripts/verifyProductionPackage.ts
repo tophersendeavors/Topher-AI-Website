@@ -35,6 +35,42 @@ async function main() {
   assert(manifest.includedSections.includes("screenplay.pdf"), "PDF included");
   assert(manifest.includedSections.includes("productionBible.markdown"), "master bible included");
   assert(manifest.scope === "episode", "scope is episode");
+
+  // Role-routed briefs (Phase D follow-up). When SELVAJE has zero role
+  // assignments — its current state — the bundle correctly omits the
+  // role-briefs/ folder and flags it as a warning.
+  assert(typeof manifest.roleBriefsIncluded === "boolean", "manifest carries roleBriefsIncluded flag");
+  assert(typeof manifest.roleAssignmentCount === "number", "manifest carries roleAssignmentCount");
+  assert(typeof manifest.roleSkippedCount === "number", "manifest carries roleSkippedCount");
+  if ((manifest.roleAssignmentCount ?? 0) === 0) {
+    assert(
+      manifest.roleBriefsIncluded === false,
+      "no role assignments → roleBriefsIncluded false"
+    );
+    assert(
+      !manifest.includedSections.includes("roleBriefs.json"),
+      "no role assignments → roleBriefs.json absent from includedSections"
+    );
+    const warn = manifest.warnings.find((w) => w.section === "roleBriefs");
+    assert(
+      !!warn && /not included|not assigned/i.test(warn.message),
+      "warning surfaces unassigned roles"
+    );
+  } else {
+    assert(
+      manifest.roleBriefsIncluded === true,
+      "assignments exist → roleBriefsIncluded true"
+    );
+    assert(
+      manifest.includedSections.includes("roleBriefs.json"),
+      "roleBriefs.json listed in includedSections"
+    );
+    assert(
+      manifest.includedSections.includes("roleBriefs.markdown"),
+      "roleBriefs.markdown listed in includedSections"
+    );
+  }
+
   console.log("\nAll assertions PASSED.");
 }
 

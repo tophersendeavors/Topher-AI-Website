@@ -26,4 +26,10 @@ export interface ProductionPackageManifest {
   warnings: ProductionPackageWarning[];
   /** Optional GIT_COMMIT_HASH env var — null when not present. */
   sourceCommitHash: string | null;
+  /** Phase D — role-routed briefs included in the bundle. Episode-only. */
+  roleBriefsIncluded?: boolean;
+  /** Number of role assignments at export time. */
+  roleAssignmentCount?: number;
+  /** Distinct unassigned role keys surfaced across all shots. */
+  roleSkippedCount?: number;
 }

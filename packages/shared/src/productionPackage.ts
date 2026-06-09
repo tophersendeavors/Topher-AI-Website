@@ -24,4 +24,12 @@ export interface ProductionPackageManifest {
   includedSections: string[];
   warnings: ProductionPackageWarning[];
   sourceCommitHash: string | null;
+  /** Role-routed briefs (Phase D). Optional — present on episode-scoped
+   *  bundles when role assignments exist. */
+  roleBriefsIncluded?: boolean;
+  /** Number of role assignments at export time (covers both required
+   *  and optional roles). */
+  roleAssignmentCount?: number;
+  /** Number of distinct unassigned roles surfaced across all shots. */
+  roleSkippedCount?: number;
 }

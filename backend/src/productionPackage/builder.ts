@@ -41,6 +41,12 @@ import {
   exportTrailerPackMarkdown,
 } from "../trailer/exporter.js";
 import { buildZip } from "./zip.js";
+import { routeEpisodeBriefs } from "../brief/router.js";
+import {
+  exportRoleBriefsJson,
+  exportRoleBriefsMarkdown,
+} from "../brief/exporters.js";
+import { loadTeamState } from "../team/store.js";
 import type {
   ProductionPackageManifest,
   ProductionPackageScope,
@@ -68,6 +74,10 @@ export async function buildProductionPackage(args: BuildArgs): Promise<BuildResu
   const files: Array<{ name: string; data: Buffer }> = [];
   const warnings: ProductionPackageWarning[] = [];
   const includedSections: string[] = [];
+  // Phase D — role-routed briefs tallies surfaced on the manifest.
+  let roleBriefsIncluded = false;
+  let roleAssignmentCount = 0;
+  let roleSkippedCount = 0;
 
   // ---- Project + episode + script resolution ----
   const { data: project } = await supabase
@@ -370,6 +380,85 @@ export async function buildProductionPackage(args: BuildArgs): Promise<BuildResu
     }
   }
 
+  // ---- 5b. Role-routed briefs (Phase D) ----
+  // Per-episode only — the brief router walks the episode's shot list.
+  // Writes role-briefs/role-briefs.{json,md} and surfaces three manifest
+  // counters: roleBriefsIncluded, roleAssignmentCount, roleSkippedCount.
+  if (episode) {
+    try {
+      const team = await loadTeamState(args.projectId);
+      roleAssignmentCount = team ? Object.keys(team.assignments).length : 0;
+      if (roleAssignmentCount === 0) {
+        warnings.push({
+          section: "roleBriefs",
+          level: "warning",
+          message:
+            "Role briefs not included — creative roles are not assigned.",
+        });
+      } else {
+        const resp = await routeEpisodeBriefs(args.projectId, episode.id, {});
+        if (!resp) {
+          warnings.push({
+            section: "roleBriefs",
+            level: "info",
+            message: "Role briefs unavailable — router returned no response.",
+          });
+        } else {
+          // Count distinct unassigned role keys across all shots.
+          const skippedKeys = new Set<string>();
+          for (const s of resp.shots) {
+            for (const sk of s.skipped) skippedKeys.add(sk.roleKey);
+          }
+          roleSkippedCount = skippedKeys.size;
+
+          files.push({
+            name: "role-briefs/role-briefs.json",
+            data: Buffer.from(exportRoleBriefsJson(resp), "utf8"),
+          });
+          files.push({
+            name: "role-briefs/role-briefs.md",
+            data: Buffer.from(exportRoleBriefsMarkdown(resp), "utf8"),
+          });
+          includedSections.push("roleBriefs.json", "roleBriefs.markdown");
+          roleBriefsIncluded = true;
+
+          // Useful info-level signals so the writer knows what's in the bundle.
+          const totalArtifacts = resp.shots.reduce(
+            (n, s) => n + s.artifacts.length,
+            0
+          );
+          if (totalArtifacts === 0) {
+            warnings.push({
+              section: "roleBriefs",
+              level: "info",
+              message:
+                "Role briefs included but contain no artifacts — no shots match assigned roles yet.",
+            });
+          }
+          if (roleSkippedCount > 0) {
+            warnings.push({
+              section: "roleBriefs",
+              level: "info",
+              message: `Role briefs reference ${roleSkippedCount} unassigned role${roleSkippedCount === 1 ? "" : "s"} — assign on Creative Team to fill the gaps.`,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      warnings.push({
+        section: "roleBriefs",
+        level: "warning",
+        message: `Role briefs export failed: ${(e as Error).message}`,
+      });
+    }
+  } else {
+    warnings.push({
+      section: "roleBriefs",
+      level: "info",
+      message: "Role briefs are per-episode — included only on episode-scoped bundles.",
+    });
+  }
+
   // ---- 6. Pitch materials ----
   const pitch = projectMeta.pitch as Record<string, unknown> | undefined;
   if (pitch && Object.keys(pitch).length > 0) {
@@ -432,6 +521,9 @@ export async function buildProductionPackage(args: BuildArgs): Promise<BuildResu
     includedSections,
     warnings,
     sourceCommitHash: process.env.GIT_COMMIT_HASH ?? null,
+    roleBriefsIncluded,
+    roleAssignmentCount,
+    roleSkippedCount,
   };
   files.push({
     name: "manifest.json",

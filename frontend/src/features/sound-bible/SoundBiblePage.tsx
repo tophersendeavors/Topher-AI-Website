@@ -85,6 +85,17 @@ export function SoundBiblePage() {
     ? `Episode ${source.episodeNumber}`
     : "Episode";
 
+  // v0 with no content means the bible has never been generated. The
+  // server returns an emptySoundBible() default, but treating that as a
+  // real bible misleads the user. Show a "not generated yet" state with a
+  // Generate CTA instead of the empty editor.
+  const hasContent =
+    bible.version > 0 ||
+    Object.keys(bible.scenes ?? {}).length > 0 ||
+    (bible.episodeSoundIdentity?.sonicPhilosophy ?? "").trim().length > 0 ||
+    (bible.musicGuidance?.scorePhilosophy ?? "").trim().length > 0 ||
+    (bible.motifs ?? []).length > 0;
+
   return (
     <div className="space-y-6 pb-10">
       <PageHeader
@@ -136,6 +147,13 @@ export function SoundBiblePage() {
           language only.
         </Explainer>
 
+        {!hasContent && (
+          <NotGeneratedYet
+            busy={generateFull.isPending}
+            onGenerate={() => generateFull.mutate()}
+          />
+        )}
+
         <AuditSummary audit={audit.data?.audit} />
 
         <EpisodeIdentitySection
@@ -175,6 +193,49 @@ export function SoundBiblePage() {
           onChange={() => qc.invalidateQueries({ queryKey: ["sound-bible", projectId, episodeId] })}
         />
         <MusicGenerationSection projectId={projectId} episodeId={episodeId} bible={bible} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Not-generated-yet state — shown when bible is the emptySoundBible default
+// ---------------------------------------------------------------------------
+
+function NotGeneratedYet({
+  busy,
+  onGenerate,
+}: {
+  busy: boolean;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-amber-700/40 bg-amber-900/10 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-serif text-lg text-bone-50">
+            Sound Bible not generated yet
+          </h3>
+          <p className="mt-1 text-[12.5px] text-bone-300">
+            Nothing here is real canon — the empty editor below is a template.
+            Generate the full Sound Bible to populate identity, music guidance,
+            motifs, and per-scene rows from the current draft. You'll review
+            and approve each section before the composer reads it.
+          </p>
+          <ul className="mt-2 space-y-0.5 text-[11.5px] text-bone-400">
+            <li>· Reads the current draft; never modifies it</li>
+            <li>· Writes only to <code>projects.metadata.soundBibles[ep]</code></li>
+            <li>· Composer reads only <strong>approved</strong> sections + scene rows</li>
+          </ul>
+        </div>
+        <Button onClick={onGenerate} disabled={busy}>
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          Generate Sound Bible
+        </Button>
       </div>
     </div>
   );

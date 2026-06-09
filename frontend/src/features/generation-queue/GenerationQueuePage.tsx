@@ -122,15 +122,28 @@ export function GenerationQueuePage() {
 
       <div className="px-8 space-y-6">
         <Explainer scriptLocked={resp.scriptIsLocked} />
-        <SummaryStrip resp={resp} />
-        <ExportStrip projectId={projectId} episodeId={episodeId} />
-        <SceneCompletionTable resp={resp} />
-        <BatchSummary resp={resp} />
-        <QueueTable
-          resp={resp}
-          projectId={projectId}
-          episodeId={episodeId}
-        />
+        {resp.queue.items.length === 0 ? (
+          <EmptyQueueGetStarted
+            projectId={projectId}
+            episodeId={episodeId}
+          />
+        ) : (
+          <>
+            <SummaryStrip resp={resp} />
+            <ExportStrip
+              projectId={projectId}
+              episodeId={episodeId}
+              empty={false}
+            />
+            <SceneCompletionTable resp={resp} />
+            <BatchSummary resp={resp} />
+            <QueueTable
+              resp={resp}
+              projectId={projectId}
+              episodeId={episodeId}
+            />
+          </>
+        )}
       </div>
     </div>
   );
@@ -199,7 +212,15 @@ function SummaryStrip({ resp }: { resp: GenerationQueueResponse }) {
   );
 }
 
-function ExportStrip({ projectId, episodeId }: { projectId: string; episodeId: string }) {
+function ExportStrip({
+  projectId,
+  episodeId,
+  empty,
+}: {
+  projectId: string;
+  episodeId: string;
+  empty: boolean;
+}) {
   const [model, setModel] = useState<ModelTarget>("veo");
   const links: Array<{
     format: (typeof GENERATION_QUEUE_EXPORTS)[number];
@@ -213,6 +234,11 @@ function ExportStrip({ projectId, episodeId }: { projectId: string; episodeId: s
   ];
   return (
     <Panel eyebrow="Exports" title="Hand off the queue">
+      {empty && (
+        <div className="mb-3 rounded-md border border-amber-700/40 bg-amber-900/15 px-3 py-2 text-[12px] text-amber-100">
+          Nothing to export yet — approve shots upstream and resync the queue first.
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {links.map((l) => (
           <a
@@ -862,12 +888,43 @@ function OutputRow({
       : output.status === "rejected"
         ? "border-red-700/40 bg-red-900/15"
         : "border-white/10 bg-white/[0.02]";
+  const media = detectOutputMedia(output.url);
   return (
     <li className={"rounded border px-2.5 py-2 text-[12px] " + tone}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-bone-100">
-            <PlayCircle className="h-3.5 w-3.5 text-bone-300" />
+          <div className="flex items-start gap-2 text-bone-100">
+            {media.kind === "image" ? (
+              <a
+                href={output.url}
+                target="_blank"
+                rel="noreferrer"
+                title="Open full size"
+                className="block shrink-0"
+              >
+                <img
+                  src={output.url}
+                  alt=""
+                  className="h-12 w-12 rounded border border-white/10 object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              </a>
+            ) : media.kind === "video" ? (
+              <a
+                href={output.url}
+                target="_blank"
+                rel="noreferrer"
+                title="Open video"
+                className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded border border-white/10 bg-black/40"
+              >
+                <PlayCircle className="h-5 w-5 text-bone-200" />
+              </a>
+            ) : (
+              <PlayCircle className="h-3.5 w-3.5 mt-1 text-bone-300" />
+            )}
             <a
               className="truncate underline decoration-bone-700 hover:decoration-bone-300"
               href={output.url}
@@ -952,4 +1009,84 @@ function StatusChip({ status }: { status: GenerationQueueStatus }) {
 
 function prettyStatus(s: GenerationQueueStatus): string {
   return s.replace(/_/g, " ");
+}
+
+function detectOutputMedia(url: string): { kind: "image" | "video" | "other" } {
+  const u = url.toLowerCase().split("?")[0].split("#")[0];
+  if (/\.(jpe?g|png|webp|gif|avif)$/i.test(u)) return { kind: "image" };
+  if (/\.(mp4|mov|webm|m4v|mkv)$/i.test(u)) return { kind: "video" };
+  return { kind: "other" };
+}
+
+// Get-started card shown when items.length === 0. Replaces the empty
+// summary tiles + scene completion table + queue table so the user lands
+// on a clear next-step path instead of a wall of zeros.
+function EmptyQueueGetStarted({
+  projectId,
+  episodeId,
+}: {
+  projectId: string;
+  episodeId: string;
+}) {
+  return (
+    <Panel
+      eyebrow="Get started"
+      title="Nothing in the queue yet"
+    >
+      <div className="space-y-4">
+        <div className="text-[13px] text-bone-300">
+          Generate and approve shot briefs first. The queue mirrors approved
+          shots — once you have any, click <strong>Resync from artifacts</strong>{" "}
+          (top right) and the items will populate here automatically.
+        </div>
+        <ol className="space-y-2 text-[12.5px] text-bone-200">
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[11px] text-bone-300">
+              1
+            </span>
+            <span>
+              On <strong>Shot List</strong>, run{" "}
+              <em>Auto-build briefs for all scenes</em>, then{" "}
+              <em>Approve all generated shots</em>.
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[11px] text-bone-300">
+              2
+            </span>
+            <span>
+              On <strong>Sound Bible</strong>, generate the bible and approve
+              identity / music / scene rows. Sound prompts ride into each
+              queue item.
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-[11px] text-bone-300">
+              3
+            </span>
+            <span>
+              Come back and <strong>Resync</strong> — your shots will appear
+              with readiness checks, model assignment, and prompt handoff.
+            </span>
+          </li>
+        </ol>
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          <Link to={`/projects/${projectId}/episodes/${episodeId}/shot-list`}>
+            <Button variant="primary">
+              <Camera className="h-3.5 w-3.5" />
+              Open Shot List
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
+          <Link to={`/projects/${projectId}/episodes/${episodeId}/sound-bible`}>
+            <Button variant="outline">
+              <Clapperboard className="h-3.5 w-3.5" />
+              Open Sound Bible
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </Panel>
+  );
 }

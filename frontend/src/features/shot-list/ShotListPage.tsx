@@ -22,6 +22,8 @@ import {
   Sparkles,
   Trash2,
   Volume2,
+  Wand2,
+  X,
 } from "lucide-react";
 
 import { api } from "@/lib/api";
@@ -64,6 +66,39 @@ export function ShotListPage() {
     mutationFn: () => api.approveShotList(targetScript!.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["shot-list", targetScript?.id] }),
   });
+
+  // Bulk auto-build — loops scenes and calls autoBuildBriefs with
+  // mode "fill-empty" so existing briefs aren't overwritten. Writes
+  // only to scripts.metadata.aiPrompts.briefs; never touches fountain
+  // or script_scenes. Progress is rendered inline.
+  const [bulkBuild, setBulkBuild] = useState<{
+    running: boolean;
+    done: number;
+    total: number;
+    errors: Array<{ ord: number; msg: string }>;
+  } | null>(null);
+  const runBulkBuild = async () => {
+    if (!shotList.data || !targetScript) return;
+    const ords = shotList.data.scenes.map((s) => s.sceneOrd);
+    setBulkBuild({ running: true, done: 0, total: ords.length, errors: [] });
+    let done = 0;
+    const errors: Array<{ ord: number; msg: string }> = [];
+    for (const ord of ords) {
+      try {
+        await api.autoBuildBriefs(targetScript.id, ord, { mode: "fill-empty" });
+      } catch (e) {
+        errors.push({ ord, msg: (e as Error).message });
+      }
+      done += 1;
+      setBulkBuild({ running: true, done, total: ords.length, errors });
+    }
+    setBulkBuild({ running: false, done, total: ords.length, errors });
+    qc.invalidateQueries({ queryKey: ["shot-list", targetScript.id] });
+  };
+
+  // Bulk approval — uses the existing episode-approval endpoint behind
+  // a confirmation modal.
+  const [confirmApprove, setConfirmApprove] = useState(false);
 
   if (scripts.isLoading || (!!targetScript && shotList.isLoading)) {
     return <div className="p-8 text-bone-300">Loading shot list…</div>;
@@ -128,9 +163,22 @@ export function ShotListPage() {
                 <Download className="h-4 w-4" /> JSON
               </Button>
             </a>
+            <Button
+              variant="outline"
+              onClick={runBulkBuild}
+              disabled={!!bulkBuild?.running || list.scenes.length === 0}
+              title="Run Auto-build for every scene (mode: fill-empty — won't overwrite existing briefs)"
+            >
+              {bulkBuild?.running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              Auto-build briefs for all scenes
+            </Button>
             {!list.approval.episodeApprovedAt && (
               <Button
-                onClick={() => approveEpisode.mutate()}
+                onClick={() => setConfirmApprove(true)}
                 disabled={approveEpisode.isPending || list.approval.shotTotalCount === 0}
               >
                 {approveEpisode.isPending ? (
@@ -138,7 +186,7 @@ export function ShotListPage() {
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                Approve full episode
+                Approve all generated shots
               </Button>
             )}
           </div>
@@ -146,6 +194,26 @@ export function ShotListPage() {
       />
 
       <div className="px-8 space-y-6">
+        {bulkBuild && (
+          <BulkBuildProgress
+            state={bulkBuild}
+            onDismiss={() => setBulkBuild(null)}
+          />
+        )}
+        {confirmApprove && (
+          <ApproveConfirmModal
+            shotTotal={list.approval.shotTotalCount}
+            sceneTotal={list.approval.sceneTotalCount}
+            shotsAlreadyApproved={list.approval.shotApprovedCount}
+            busy={approveEpisode.isPending}
+            onCancel={() => setConfirmApprove(false)}
+            onConfirm={() =>
+              approveEpisode.mutate(undefined, {
+                onSuccess: () => setConfirmApprove(false),
+              })
+            }
+          />
+        )}
         <PolicyBanner list={list} />
         <Explainer>
           The Curated Shot List is the human-facing view over the AI shot briefs.
@@ -634,6 +702,131 @@ function EditField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
+    </div>
+  );
+}
+
+function BulkBuildProgress({
+  state,
+  onDismiss,
+}: {
+  state: {
+    running: boolean;
+    done: number;
+    total: number;
+    errors: Array<{ ord: number; msg: string }>;
+  };
+  onDismiss: () => void;
+}) {
+  const pct = state.total === 0 ? 0 : Math.round((state.done / state.total) * 100);
+  return (
+    <div className="rounded-lg border border-white/8 bg-white/[0.02] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-[13px] text-bone-100">
+          {state.running ? (
+            <>
+              <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />
+              Auto-building briefs — scene {state.done} of {state.total}…
+            </>
+          ) : (
+            <>
+              <Check className="mr-1.5 inline h-3.5 w-3.5 text-emerald-300" />
+              Auto-build finished: {state.done}/{state.total} scenes processed
+              {state.errors.length > 0
+                ? `, ${state.errors.length} error${state.errors.length === 1 ? "" : "s"}`
+                : ""}
+              .
+            </>
+          )}
+        </div>
+        {!state.running && (
+          <button className="btn-outline" onClick={onDismiss}>
+            <X className="h-3.5 w-3.5" /> Dismiss
+          </button>
+        )}
+      </div>
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className="h-full bg-ember-500/80 transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {state.errors.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-[11px] text-red-300">
+          {state.errors.slice(0, 5).map((e, i) => (
+            <li key={i}>
+              Scene {e.ord}: {e.msg.slice(0, 200)}
+            </li>
+          ))}
+          {state.errors.length > 5 && (
+            <li>…+{state.errors.length - 5} more</li>
+          )}
+        </ul>
+      )}
+      <div className="mt-2 text-[11px] text-bone-500">
+        Mode: <strong>fill-empty</strong> — existing briefs are preserved.
+        Writes go to <code>scripts.metadata.aiPrompts.briefs</code>;
+        screenplay text and scene rows are untouched.
+      </div>
+    </div>
+  );
+}
+
+function ApproveConfirmModal({
+  shotTotal,
+  sceneTotal,
+  shotsAlreadyApproved,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  shotTotal: number;
+  sceneTotal: number;
+  shotsAlreadyApproved: number;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const newlyApproving = Math.max(0, shotTotal - shotsAlreadyApproved);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-lg border border-white/10 bg-graphite-900 p-5 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-900/20 text-emerald-200">
+            <Check className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-serif text-lg text-bone-50">
+              Approve all generated shots
+            </h3>
+            <p className="mt-1 text-[12.5px] text-bone-300">
+              Episode-level approval. Marks all {shotTotal} shot
+              {shotTotal === 1 ? "" : "s"} across {sceneTotal} scene
+              {sceneTotal === 1 ? "" : "s"} as approved canon. The composer
+              treats approved briefs as the source of truth for AI Video
+              Prompts and the production package.
+            </p>
+            <ul className="mt-2 space-y-0.5 text-[11.5px] text-bone-400">
+              <li>· {newlyApproving} shot{newlyApproving === 1 ? "" : "s"} newly approved</li>
+              <li>· {shotsAlreadyApproved} already approved (unchanged)</li>
+              <li>· No screenplay or scene mutation</li>
+            </ul>
+          </div>
+        </div>
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={busy || shotTotal === 0}>
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="h-4 w-4" />
+            )}
+            Approve all
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

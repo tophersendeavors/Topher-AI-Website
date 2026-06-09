@@ -1000,9 +1000,9 @@ function EpisodeAIVideoPrompts({
   projectId: string;
   row: ProductionHubEpisodeRow;
 }) {
-  // AI Video Prompt packs are per-shot model-ready prompts that already ride
-  // inside the JSON shot list export + the production package. We point the
-  // user to where they're edited rather than offering a duplicate download.
+  // AI Video Prompt packs ride inside the shot list .json + the production
+  // package. When the shot list is empty, that's a lie — clearly say so.
+  const shotsExist = row.sections.shotList.totalCount > 0;
   return (
     <ExportRow
       icon={<Sparkles className="h-4 w-4" />}
@@ -1011,12 +1011,16 @@ function EpisodeAIVideoPrompts({
       helpLink={`/projects/${projectId}/episodes/${row.episodeId}/shot-list`}
       helpLabel="Open AI Prompts"
       detail={
-        row.sections.aiVideoPrompts.detail +
-        " Per-shot prompts ship inside the shot list (.json) and production package."
+        shotsExist
+          ? row.sections.aiVideoPrompts.detail +
+            " Per-shot prompts ship inside the shot list (.json) and production package."
+          : "Missing — generate shot briefs first. The shot list has 0 shots, so the prompt pack is empty."
       }
     >
       <span className="text-[11px] text-bone-400">
-        Included in shot list (.json) + package
+        {shotsExist
+          ? "Included in shot list (.json) + package"
+          : "Nothing to download — empty pack"}
       </span>
     </ExportRow>
   );

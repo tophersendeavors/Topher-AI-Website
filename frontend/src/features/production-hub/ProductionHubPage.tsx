@@ -244,6 +244,7 @@ function EpisodeRow({
         {row.episodeTitle && (
           <div className="text-[11px] text-bone-400 line-clamp-1">{row.episodeTitle}</div>
         )}
+        <MissingHint row={row} />
       </td>
       <Cell
         status={row.sections.screenplay.status}
@@ -388,6 +389,61 @@ function StatusChip({ status }: { status: ProductionHubSectionStatus }) {
       ) : null}
       {label}
     </span>
+  );
+}
+
+// Show the top 2–3 sections that are blocking this episode's readiness.
+// Pulls labels + status from the same row data the cells render, so the
+// text matches what the user sees in the row.
+const SECTION_LABEL: Record<keyof ProductionHubEpisodeRow["sections"], string> = {
+  screenplay: "Screenplay",
+  characters: "Characters",
+  locations: "Locations",
+  props: "Props",
+  soundBible: "Sound Bible",
+  shotList: "Shot List",
+  aiVideoPrompts: "AI Prompts",
+  trailerPack: "Trailer",
+  packageReady: "Package",
+};
+
+function MissingHint({ row }: { row: ProductionHubEpisodeRow }) {
+  // Rank: missing first, then partial. Cap at 3.
+  const entries = (Object.entries(row.sections) as Array<
+    [keyof ProductionHubEpisodeRow["sections"], { status: ProductionHubSectionStatus }]
+  >).filter(([, s]) => s.status === "missing" || s.status === "partial");
+  if (entries.length === 0) return null;
+  entries.sort((a, b) => {
+    const rank = (s: ProductionHubSectionStatus) => (s === "missing" ? 0 : 1);
+    return rank(a[1].status) - rank(b[1].status);
+  });
+  const missingOnly = entries.filter(([, s]) => s.status === "missing");
+  const partialOnly = entries.filter(([, s]) => s.status === "partial");
+  const labelMissing = missingOnly
+    .slice(0, 3)
+    .map(([k]) => SECTION_LABEL[k])
+    .join(", ");
+  const labelPartial = partialOnly
+    .slice(0, 3)
+    .map(([k]) => SECTION_LABEL[k])
+    .join(", ");
+  return (
+    <div className="mt-0.5 space-y-0.5 text-[10.5px] text-bone-400">
+      {labelMissing && (
+        <div>
+          <span className="text-bone-500">Missing:</span>{" "}
+          <span className="text-amber-200/90">{labelMissing}</span>
+          {missingOnly.length > 3 ? ` +${missingOnly.length - 3} more` : ""}
+        </div>
+      )}
+      {labelPartial && (
+        <div>
+          <span className="text-bone-500">Needs approval:</span>{" "}
+          <span className="text-bone-300">{labelPartial}</span>
+          {partialOnly.length > 3 ? ` +${partialOnly.length - 3} more` : ""}
+        </div>
+      )}
+    </div>
   );
 }
 

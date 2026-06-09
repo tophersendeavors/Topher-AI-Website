@@ -3845,6 +3845,21 @@ export const api = {
     if (opts.kind) qs.set("kind", opts.kind);
     return `/api/projects/${projectId}/episodes/${episodeId}/trailer-builder/export?${qs.toString()}`;
   },
+
+  // --- Production Package -----------------------------------------------
+  previewProductionPackage: (projectId: string, episodeId: string | null) =>
+    request<{
+      manifest: import("@toburt/shared").ProductionPackageManifest;
+      filename: string;
+    }>(
+      episodeId
+        ? `/projects/${projectId}/episodes/${episodeId}/production-package/preview`
+        : `/projects/${projectId}/production-package/preview`
+    ),
+  productionPackageUrl: (projectId: string, episodeId: string | null) =>
+    episodeId
+      ? `/api/projects/${projectId}/episodes/${episodeId}/production-package/export`
+      : `/api/projects/${projectId}/production-package/export`,
 };
 
 // --- Series Redevelopment types --------------------------------------

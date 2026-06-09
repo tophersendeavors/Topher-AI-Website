@@ -21,6 +21,8 @@ import {
   Check,
   AudioLines,
   Film,
+  Package,
+  AlertTriangle,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -491,6 +493,10 @@ function EpisodeCard({
           <Film className="h-4 w-4" />
           Trailer Builder
         </Link>
+        <ProductionPackageButton
+          projectId={projectId!}
+          episodeId={episode.id}
+        />
         <p className="mt-2 text-[11px] text-bone-500 text-center">
           The 12-stage guided workflow — script → canon → blocking → DP → continuity → prompts → final.
         </p>
@@ -1955,6 +1961,156 @@ function NewEpisodeDialog({
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Production Package button — preview manifest, then download ZIP.
+// ---------------------------------------------------------------------------
+
+function ProductionPackageButton({
+  projectId,
+  episodeId,
+}: {
+  projectId: string;
+  episodeId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const preview = useQuery({
+    queryKey: ["production-package", projectId, episodeId],
+    queryFn: () => api.previewProductionPackage(projectId, episodeId),
+    enabled: open,
+  });
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="os-btn os-btn-outline w-full justify-center"
+        style={{ width: "100%", justifyContent: "center" }}
+        title="Production Package — ZIP with screenplay (PDF / Fountain / FDX / Markdown), redev passes, bibles, shot list, trailer plans, pitch, manifest"
+      >
+        <Package className="h-4 w-4" />
+        Production Package
+      </button>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setOpen(false)}
+        >
+          <div className="panel-strong w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-serif text-xl">Production Package — preview</h2>
+            <p className="mt-1 text-xs text-bone-400">
+              Read-only export of every approved canon source for this episode. Downloads as a
+              single ZIP with a manifest.json. Draft 5 is read-only — locked drafts stay
+              byte-identical.
+            </p>
+            {preview.isLoading ? (
+              <div className="mt-4 text-sm text-bone-300">Building manifest…</div>
+            ) : preview.error ? (
+              <div className="mt-4 text-sm text-red-300">
+                {(preview.error as Error).message}
+              </div>
+            ) : preview.data ? (
+              <ProductionPackagePreview
+                manifest={preview.data.manifest}
+                filename={preview.data.filename}
+                projectId={projectId}
+                episodeId={episodeId}
+                onClose={() => setOpen(false)}
+              />
+            ) : null}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function ProductionPackagePreview({
+  manifest,
+  filename,
+  projectId,
+  episodeId,
+  onClose,
+}: {
+  manifest: import("@toburt/shared").ProductionPackageManifest;
+  filename: string;
+  projectId: string;
+  episodeId: string;
+  onClose: () => void;
+}) {
+  const fails = manifest.warnings.filter((w) => w.level === "warning");
+  const infos = manifest.warnings.filter((w) => w.level === "info");
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="rounded-md border border-white/8 bg-white/[0.02] p-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="chip border-white/10 bg-white/[0.04] text-bone-200">
+            {manifest.projectTitle ?? "Untitled"}
+          </span>
+          {manifest.episodeNumber != null && (
+            <span className="chip border-white/10 bg-white/[0.04] text-bone-200">
+              Episode {manifest.episodeNumber}
+            </span>
+          )}
+          <span className="chip border-white/10 bg-white/[0.04] text-bone-200">
+            Draft {manifest.draftNumber ?? "?"}
+            {manifest.lockedWritingDraft && " · locked"}
+          </span>
+          <span className="chip border-white/10 bg-white/[0.04] text-bone-200">
+            {manifest.scope}
+          </span>
+          <span className="chip border-white/10 bg-white/[0.04] text-bone-300">
+            {manifest.includedSections.length} sections
+          </span>
+        </div>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2">
+        <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+          <div className="text-xs uppercase tracking-wide text-bone-500">Included</div>
+          <ul className="mt-1 space-y-0.5 text-xs text-bone-200">
+            {manifest.includedSections.map((s) => (
+              <li key={s} className="font-mono">
+                <Check className="mr-1 inline h-3 w-3 text-emerald-400" /> {s}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-md border border-white/8 bg-white/[0.02] p-3">
+          <div className="text-xs uppercase tracking-wide text-bone-500">Warnings</div>
+          {fails.length === 0 && infos.length === 0 ? (
+            <div className="mt-1 text-xs text-bone-400">None.</div>
+          ) : (
+            <ul className="mt-1 space-y-0.5 text-xs">
+              {fails.map((w, i) => (
+                <li key={`f${i}`} className="text-amber-200">
+                  <AlertTriangle className="mr-1 inline h-3 w-3" /> {w.section}: {w.message}
+                </li>
+              ))}
+              {infos.map((w, i) => (
+                <li key={`i${i}`} className="text-bone-400">
+                  · {w.section}: {w.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+      <div className="text-xs text-bone-400">
+        Filename: <span className="font-mono text-bone-200">{filename}</span>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>Close</Button>
+        <a
+          href={api.productionPackageUrl(projectId, episodeId)}
+          download={filename}
+        >
+          <Button>
+            <Package className="h-4 w-4" /> Download ZIP
+          </Button>
+        </a>
       </div>
     </div>
   );

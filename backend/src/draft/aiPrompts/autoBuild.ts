@@ -18,6 +18,7 @@ import { supabase } from "../../db/client.js";
 import { callLLM, extractJSON } from "../../llm/provider.js";
 import { config } from "../../config.js";
 import { getProductionRules } from "./productionRules.js";
+import { resolveShotPolicy } from "@toburt/shared";
 import {
   classifyBriefFields,
   strictCleanBrief,
@@ -238,20 +239,12 @@ async function callShotlistAgent(args: {
           "",
         ].join("\n")
       : "",
-    args.projectType === "micro_drama"
-      ? [
-          "MICRO-DRAMA MODE — retention-first rules:",
-          "• Vertical format. aspectRatio defaults to 9:16.",
-          "• Prioritize faces, eyes, hands, phones, text messages, voice notes,",
-          "  objects, doors, photographs. Tag these shots INSERT / BEH / CHAR.",
-          "• AVOID wide establishing shots, large crowds, long exposition,",
-          "  expensive environments, complex dialogue.",
-          "• Clip length 3–5 seconds. Single beat per shot. No multi-action takes.",
-          "• Every scene must contribute to the episode's HOOK / TWIST /",
-          "  CLIFFHANGER pull — if a shot doesn't move retention, cut it.",
-          "",
-        ].join("\n")
-      : "",
+    // Per-project-type shotlist directive block. Lives on
+    // shotPolicy.shotlistDirectives in projectTypeConfig — micro-drama
+    // gets its retention-first rules, prestige gets cinematic restraint,
+    // feature/anthology get their own. Empty string when no extra
+    // steering applies. See packages/shared/src/projectTypeConfig.ts.
+    resolveShotPolicy(args.projectType ?? null).shotlistDirectives,
     "Return ONLY JSON: { \"shots\": [ { ...one shot object per element... } ] }",
   ]
     .filter(Boolean)

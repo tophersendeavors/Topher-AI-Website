@@ -17,6 +17,7 @@
 //  12. All clear            → ship-ready message
 
 import { supabase } from "../db/client.js";
+import { isMicroDramaProject } from "@toburt/shared";
 
 export interface NextStep {
   title: string;
@@ -42,7 +43,10 @@ export async function recommendNextStep(projectId: string): Promise<NextStep> {
   const projectMeta = j(projectRow?.metadata);
   const projectType = (projectMeta.projectType as string) ?? "prestige_series";
 
-  if (projectType === "micro_drama") {
+  // Config-driven branch — replaces `projectType === "micro_drama"` bare
+  // string compare. `isMicroDramaProject` reads
+  // shotPolicy.isMicroDramaTier on the resolved config.
+  if (isMicroDramaProject(projectType)) {
     const microStep = await recommendNextStepMicroDrama(projectId, projectMeta);
     if (microStep) return microStep;
     // Fall through to the prestige branch's "all clear" tail if everything is

@@ -6,6 +6,7 @@ import { assertProjectMember, listProjectsForUser } from "../db/queries.js";
 import { PROTOCOL_PRESETS, mergePreset } from "../draft/protocolPresets.js";
 import { recommendNextStep } from "../draft/recommendedStep.js";
 import { generateEpisodeChain } from "../microDrama/episodeChainAgent.js";
+import { isMicroDramaProject } from "@toburt/shared";
 import {
   PROJECT_TYPES,
   MICRO_DRAMA_EMOTIONS,
@@ -197,7 +198,7 @@ export default async function projectsRoutes(app: FastifyInstance) {
       .eq("id", projectId)
       .single();
     const meta = (row?.metadata as Record<string, unknown> | null) ?? {};
-    if (meta.projectType !== "micro_drama") {
+    if (!isMicroDramaProject(meta.projectType as string | undefined)) {
       throw new Error(
         "Episode Chain generation is only available for micro_drama projects."
       );

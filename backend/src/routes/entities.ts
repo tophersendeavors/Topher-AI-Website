@@ -16,6 +16,7 @@ import {
 import { ALL_GEN_FIELDS } from "../draft/relationships/generator.js";
 import { suggestSpineCandidates } from "../draft/relationships/spine.js";
 import { qualityCheckRelationship } from "../draft/relationships/qualityCheck.js";
+import { isMicroDramaProject } from "@toburt/shared";
 import { computeBingeMomentum, viralTest } from "../microDrama/scoring.js";
 
 const CharacterCreate = z.object({
@@ -832,7 +833,7 @@ export default async function entitiesRoutes(app: FastifyInstance) {
       .eq("id", ep.project_id)
       .maybeSingle();
     const projMeta = (proj?.metadata as Record<string, unknown> | null) ?? {};
-    if (projMeta.projectType !== "micro_drama") {
+    if (!isMicroDramaProject(projMeta.projectType as string | undefined)) {
       reply.code(400).send({
         error:
           "This endpoint is only for micro_drama projects. Use the standard develop-episode flow for prestige/mini series.",
@@ -1183,7 +1184,7 @@ export default async function entitiesRoutes(app: FastifyInstance) {
       .eq("id", ep.project_id)
       .maybeSingle();
     const projMeta = (proj?.metadata as Record<string, unknown> | null) ?? {};
-    if (projMeta.projectType !== "micro_drama") {
+    if (!isMicroDramaProject(projMeta.projectType as string | undefined)) {
       reply.code(400).send({
         error:
           "Production pipeline is only available for micro_drama projects.",

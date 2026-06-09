@@ -141,13 +141,21 @@ export type ProjectKind = (typeof PROJECT_KINDS)[number];
 // system reading projectType should guard for all three.
 // ---------------------------------------------------------------------------
 
-export const PROJECT_TYPES = ["prestige_series", "mini_series", "micro_drama"] as const;
+export const PROJECT_TYPES = [
+  "prestige_series",
+  "mini_series",
+  "micro_drama",
+  "feature",
+  "anthology",
+] as const;
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 
 export const PROJECT_TYPE_LABEL: Record<ProjectType, string> = {
   prestige_series: "Prestige Series",
   mini_series: "Mini Series",
   micro_drama: "Micro Drama",
+  feature: "Feature Film",
+  anthology: "Anthology",
 };
 
 export const PROJECT_TYPE_DESCRIPTION: Record<ProjectType, string> = {
@@ -157,6 +165,10 @@ export const PROJECT_TYPE_DESCRIPTION: Record<ProjectType, string> = {
     "5–20 minute episodes. 4–12 episodes. Simplified production pipeline. Character DNA available.",
   micro_drama:
     "Vertical-first. 30–120 second episodes. 20–100 episodes per season. Built around cliffhangers. TikTok / Shorts / Reels native.",
+  feature:
+    "90–180 minute feature film. One screenplay, one workflow. Cinematic widescreen defaults, longer shots.",
+  anthology:
+    "Self-contained episodes that share a tonal/world premise. Each episode is its own full creative pass.",
 };
 
 // ---------------------------------------------------------------------------

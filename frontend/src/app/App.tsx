@@ -23,6 +23,7 @@ import { DepartmentWorkspacePage } from "@/features/departments/DepartmentWorksp
 import { WorkflowPage } from "@/features/workflow/WorkflowPage";
 import { RedevelopmentPage } from "@/features/redevelopment/RedevelopmentPage";
 import { SoundBiblePage } from "@/features/sound-bible/SoundBiblePage";
+import { AudienceReadPage } from "@/features/audience-read/AudienceReadPage";
 import { ShotListPage } from "@/features/shot-list/ShotListPage";
 import { TrailerBuilderPage } from "@/features/trailer-builder/TrailerBuilderPage";
 import { ProductionHubPage } from "@/features/production-hub/ProductionHubPage";
@@ -77,6 +78,10 @@ function AppRoutes() {
             <Route
               path="projects/:projectId/episodes/:episodeId/sound-bible"
               element={<SoundBiblePage />}
+            />
+            <Route
+              path="projects/:projectId/episodes/:episodeId/audience-read"
+              element={<AudienceReadPage />}
             />
             <Route
               path="projects/:projectId/episodes/:episodeId/shot-list"

@@ -1,6 +1,7 @@
 import type {
   AgentRole,
   Approval,
+  AudienceReadResponse,
   Character,
   CharacterBibleSummaryResponse,
   CharacterWound,
@@ -1257,6 +1258,22 @@ export const api = {
   // Entities
   listCharacters: (projectId: string) =>
     request<Character[]>(`/projects/${projectId}/characters`),
+
+  // Audience Read — post-final-draft bingeability stage (per episode)
+  getAudienceRead: (projectId: string, episodeId: string) =>
+    request<AudienceReadResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/audience-read`
+    ),
+  generateAudienceRead: (projectId: string, episodeId: string) =>
+    request<AudienceReadResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/audience-read/generate`,
+      { method: "POST" }
+    ),
+  approveAudienceRead: (projectId: string, episodeId: string) =>
+    request<AudienceReadResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/audience-read/approve`,
+      { method: "POST" }
+    ),
 
   // Character Bible executive summary (project-level)
   getCharacterBibleSummary: (projectId: string) =>

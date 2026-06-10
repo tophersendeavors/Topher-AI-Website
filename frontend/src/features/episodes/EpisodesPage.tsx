@@ -20,6 +20,7 @@ import {
   Copy,
   Check,
   AudioLines,
+  Gauge,
   Film,
   Package,
   Layers,
@@ -482,6 +483,15 @@ function EpisodeCard({
         >
           <AudioLines className="h-4 w-4" />
           Sound Bible
+        </Link>
+        <Link
+          to={`/projects/${projectId}/episodes/${episode.id}/audience-read`}
+          className="os-btn os-btn-outline w-full justify-center"
+          style={{ width: "100%", justifyContent: "center" }}
+          title="Audience Read — reads the final draft as a binge viewer and scores bingeability against comparable shows"
+        >
+          <Gauge className="h-4 w-4" />
+          Audience Read
         </Link>
         <Link
           to={`/projects/${projectId}/episodes/${episode.id}/shot-list`}

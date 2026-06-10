@@ -8,6 +8,7 @@ export * from "./turnDetection";
 export * from "./naming";
 export * from "./projectTypeConfig";
 export * from "./sound";
+export * from "./audienceRead";
 export * from "./shotList";
 export * from "./trailer";
 export * from "./productionPackage";

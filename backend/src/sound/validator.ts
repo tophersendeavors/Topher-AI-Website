@@ -88,6 +88,44 @@ const COPYRIGHTED_SCORE_OR_SONG_TITLES: string[] = [
 const STYLE_OF_RE = /\b(?:in the style of|sounds? like|à la|reminiscent of|inspired by)\s+[A-Z][\w'.\- ]+/i;
 const COPYRIGHT_C_MARK_RE = /[©℗]\s*\d{2,}/;
 
+/** Film / score / song titles that are also common English words. We
+ *  only flag these when they appear in an unambiguous reference
+ *  context — quoted, italicised, or paired with "score" / "soundtrack"
+ *  / "(film)" / "(score)" / a year-in-parens. Bare prose use is fine
+ *  (a guest's "arrival", a "drive" home, etc). */
+const COMMON_WORD_TITLES = new Set<string>([
+  "Arrival",
+  "Drive",
+  "Mandy",
+  "Suspiria",
+  "Midsommar",
+  "Hereditary",
+  "Annihilation",
+  "Severance",
+  "The Witch",
+  "Sicario",
+]);
+
+function isCommonWordTitle(t: string): boolean {
+  return COMMON_WORD_TITLES.has(t);
+}
+
+/** Build a denylist matcher for a single title. Common-word titles
+ *  require a disambiguating cue so they don't catch ordinary prose. */
+function denylistRegexFor(title: string): RegExp {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!isCommonWordTitle(title)) {
+    return new RegExp(`\\b${escaped}\\b`, "i");
+  }
+  // Disambiguators: quotation marks, italic markdown wrappers, a
+  // following "score"/"soundtrack"/"OST"/"theme"/"(film)"/"(YYYY)",
+  // or being preceded by reference verbs.
+  const followingCue = `(?:\\s*[\\u2014\\-:]?\\s*(?:score|soundtrack|OST|main\\s+theme|theme|\\(film\\)|\\(\\d{4}\\)))`;
+  const quoted = `(?:["“‘]${escaped}["”’]|\\*${escaped}\\*|_${escaped}_)`;
+  const styleCued = `(?:(?:in\\s+the\\s+style\\s+of|sounds?\\s+like|à\\s+la|reminiscent\\s+of|inspired\\s+by|like\\s+the)\\s+${escaped}\\b)`;
+  return new RegExp(`${quoted}|\\b${escaped}${followingCue}|${styleCued}`, "i");
+}
+
 /** True iff any denylisted reference appears in `text`. */
 function findCopyrightedReferences(text: string): string[] {
   if (!text) return [];
@@ -97,8 +135,7 @@ function findCopyrightedReferences(text: string): string[] {
     if (re.test(text)) hits.push(name);
   }
   for (const title of COPYRIGHTED_SCORE_OR_SONG_TITLES) {
-    const re = new RegExp(`\\b${title.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\b`, "i");
-    if (re.test(text)) hits.push(title);
+    if (denylistRegexFor(title).test(text)) hits.push(title);
   }
   const styleOf = text.match(STYLE_OF_RE);
   if (styleOf) hits.push(styleOf[0]);

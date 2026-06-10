@@ -35,8 +35,6 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Explainer } from "@/components/ui/Explainer";
-import { DraftWritingContext } from "@/components/ui/DraftWritingContext";
-import { WayfinderPanel } from "@/components/ui/WayfinderPanel";
 import type {
   MusicAdapter,
   MusicPromptPack,
@@ -108,23 +106,7 @@ export function SoundBiblePage() {
             <Link to={`/projects/${projectId}/episodes`}>
               <Button variant="outline">All episodes</Button>
             </Link>
-            <a
-              href={api.exportSoundBibleUrl(projectId, episodeId, "markdown")}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Button variant="outline">
-                <Copy className="h-4 w-4" /> Copy markdown
-              </Button>
-            </a>
-            <a
-              href={api.exportSoundBibleUrl(projectId, episodeId, "json")}
-              download={`sound-bible-${episodeLabel.replace(/\s+/g, "_")}.json`}
-            >
-              <Button variant="outline">
-                <Download className="h-4 w-4" /> Export JSON
-              </Button>
-            </a>
+            <ExportButtons projectId={projectId} episodeId={episodeId} episodeLabel={episodeLabel} />
             <Button onClick={() => generateFull.mutate()} disabled={generateFull.isPending}>
               {generateFull.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -138,7 +120,6 @@ export function SoundBiblePage() {
       />
 
       <div className="px-8 space-y-6">
-        <WayfinderPanel projectId={projectId} episodeId={episodeId} scope="production" />
         <SourceBanner data={data} />
         <CoverageBanner data={data} />
         <Explainer>
@@ -245,29 +226,113 @@ function NotGeneratedYet({
 }
 
 // ---------------------------------------------------------------------------
+// Export buttons — fetch with auth then clipboard / download. The bare
+// /api/.../export URL can't be opened as a tab navigation because the
+// endpoint requires a Bearer token.
+// ---------------------------------------------------------------------------
+
+function ExportButtons({
+  projectId,
+  episodeId,
+  episodeLabel,
+}: {
+  projectId: string;
+  episodeId: string;
+  episodeLabel: string;
+}) {
+  const [busy, setBusy] = useState<"markdown" | "json" | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function copyMarkdown() {
+    setBusy("markdown");
+    try {
+      const text = await api.fetchSoundBibleExport(projectId, episodeId, "markdown");
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (e) {
+      window.alert(`Copy failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadJson() {
+    setBusy("json");
+    try {
+      const text = await api.fetchSoundBibleExport(projectId, episodeId, "json");
+      const blob = new Blob([text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sound-bible-${episodeLabel.replace(/\s+/g, "_")}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      window.alert(`Download failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="outline" onClick={copyMarkdown} disabled={busy !== null}>
+        {busy === "markdown" ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : copied ? (
+          <Check className="h-4 w-4" />
+        ) : (
+          <Copy className="h-4 w-4" />
+        )}
+        {copied ? "Copied" : "Copy markdown"}
+      </Button>
+      <Button variant="outline" onClick={downloadJson} disabled={busy !== null}>
+        {busy === "json" ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
+        Export JSON
+      </Button>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Source draft banner — requirement #2 from the build approval
 // ---------------------------------------------------------------------------
 
 function SourceBanner({ data }: { data: SoundBibleResponse }) {
-  const { source } = data;
-  const draftLabel = source.scriptDraftNumber
-    ? `Draft ${source.scriptDraftNumber}`
-    : "(no current draft)";
+  const { source, bible } = data;
+  const draftLabel = bible.sourceDraftLabel
+    ? bible.sourceDraftLabel
+    : source.scriptDraftNumber
+      ? `Draft ${source.scriptDraftNumber}`
+      : "(no current draft)";
   return (
-    <DraftWritingContext
-      current={{
-        draftNumber: source.scriptDraftNumber,
-        title: draftLabel,
-        isLocked: source.scriptIsLocked,
-        sourceLabel: source.scriptIsLocked ? "locked writing draft" : null,
-      }}
-      // We always READ from this draft and WRITE to project metadata, so
-      // the relationship is non-mutating — render the outline_only mode
-      // which already says "creates / writes elsewhere, doesn't mutate
-      // the source." That's exactly the Sound Bible contract.
-      mode="outline_only"
-      outlineKind="scene_list"
-    />
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-white/8 bg-white/[0.02] px-3 py-2 text-[12px] text-bone-300">
+      <div className="flex items-center gap-1.5">
+        <FileText className="h-3.5 w-3.5 text-bone-400" />
+        <span className="text-bone-400">Source:</span>
+        <span className="text-bone-100">{draftLabel}</span>
+        {source.scriptIsLocked && (
+          <span className="inline-flex items-center gap-1 rounded-md border border-amber-700/40 bg-amber-900/15 px-1.5 py-0.5 text-[10.5px] text-amber-200">
+            <Lock className="h-3 w-3" />
+            locked
+          </span>
+        )}
+      </div>
+      <div className="text-bone-400">
+        Target:{" "}
+        <span className="text-bone-100">Sound Bible metadata</span>{" "}
+        <span className="text-bone-500">
+          (project metadata · does not modify the draft)
+        </span>
+      </div>
+    </div>
   );
 }
 

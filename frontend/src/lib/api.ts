@@ -3697,6 +3697,24 @@ export const api = {
     format: "markdown" | "json"
   ) =>
     `/api/projects/${projectId}/episodes/${episodeId}/sound-bible/export?format=${format}`,
+  /** Fetch the Sound Bible export with auth, return the raw body. The
+   *  bare exportSoundBibleUrl is unsuitable for navigation because the
+   *  endpoint requires a Bearer token. */
+  fetchSoundBibleExport: async (
+    projectId: string,
+    episodeId: string,
+    format: "markdown" | "json"
+  ): Promise<string> => {
+    const headers = await authHeader();
+    const res = await fetch(
+      `/api/projects/${projectId}/episodes/${episodeId}/sound-bible/export?format=${format}`,
+      { headers }
+    );
+    if (!res.ok) {
+      throw new Error(`Export failed: ${res.status} ${res.statusText}`);
+    }
+    return res.text();
+  },
 
   // --- Music prompt pack — derived view, Suno / Udio / Composer Brief adapters
   getMusicPack: (projectId: string, episodeId: string) =>

@@ -156,6 +156,23 @@ export interface CharacterSoundSignature {
 // §5 — Location sound signature (per-episode)
 // ---------------------------------------------------------------------------
 
+/** A scene-scoped exception to a location's music prohibition. Approved
+ *  moments where a tightly-constrained near-musical texture is permitted
+ *  despite the location's general `musicProhibited` rule. When absent or
+ *  empty, the prohibition is absolute. */
+export interface LocationMusicException {
+  /** Scene ords this exception applies to. Matched by ord so it survives
+   *  slugline/time-of-day key variants (e.g. "...POINT" vs "...POINT_DUSK"). */
+  sceneOrds: number[];
+  /** The trigger condition — when, within the scene, the cue is permitted. */
+  condition: string;
+  /** The permitted texture — descriptive style language only, no melody. */
+  permittedTexture: string;
+  /** Hard rules constraining the cue (no vibrato, no swell, duration bound,
+   *  must not carry into the next scene, …). */
+  rules: string[];
+}
+
 export interface LocationSoundSignature {
   /** Display name as written in screenplay sluglines. */
   locationName: string;
@@ -163,8 +180,12 @@ export interface LocationSoundSignature {
   locationKey: string;
   ambientBed: string;
   keyDiegeticPresent: string[];
-  /** True when score must NEVER play in this location. */
+  /** True when score is the general rule-out for this location. A scene in
+   *  `musicExceptions` may still carry an approved, constrained cue. */
   musicProhibited: boolean;
+  /** Approved, scene-scoped exceptions to `musicProhibited`. Absent/empty ⇒
+   *  the prohibition holds without exception. */
+  musicExceptions?: LocationMusicException[];
   /** Motif IDs anchored to this location (refs into motifs[]). */
   anchoredMotifIds: string[];
   notes: string;

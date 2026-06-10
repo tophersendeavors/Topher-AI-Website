@@ -5,7 +5,23 @@
 import { callLLM, extractJSON } from "../llm/provider.js";
 import { containsCopyrightedReference } from "./validator.js";
 import { emptyMusicPromptPack, type MusicMotifFragment, type MusicPrompt, type MusicPromptPack, type TrailerMusicPrompts } from "./musicTypes.js";
-import type { SoundBible } from "./types.js";
+import type { LocationMusicException, SoundBible } from "./types.js";
+
+/** Resolve any approved location-level music exception that covers this
+ *  scene ord. Matched by `sceneOrds` (not location key) so it survives
+ *  slugline/time-of-day key variants. Returns null when no exception
+ *  applies — the scene then follows its own row + location prohibition. */
+export function resolveSceneMusicException(
+  bible: SoundBible,
+  ord: number
+): LocationMusicException | null {
+  for (const sig of Object.values(bible.locationSignatures)) {
+    for (const ex of sig.musicExceptions ?? []) {
+      if (ex.sceneOrds.includes(ord)) return ex;
+    }
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Shared rules — both episode and scene generators receive these
@@ -146,8 +162,20 @@ export async function generateScenePrompts(
     const user = [
       "APPROVED SCENE CANON:",
       batch
-        .map((s) =>
-          [
+        .map((s) => {
+          const ex = resolveSceneMusicException(bible, s.ord);
+          const exceptionBlock = ex
+            ? [
+                "MUSIC EXCEPTION (approved — overrides any 'no score' note on this row):",
+                `  This scene IS permitted a constrained near-musical cue. Set noMusic=false.`,
+                `  Condition: ${ex.condition}`,
+                `  Permitted texture (render ONLY this, descriptive style language): ${ex.permittedTexture}`,
+                ex.rules.length ? `  Hard rules: ${ex.rules.join("; ")}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n")
+            : "";
+          return [
             `--- ord ${s.ord} ---`,
             `heading: ${s.sceneHeading}`,
             `ambient bed: ${s.ambientBed}`,
@@ -155,10 +183,11 @@ export async function generateScenePrompts(
             s.silenceNotes ? `silence: ${s.silenceNotes}` : "",
             s.motifIds.length ? `motifs: ${s.motifIds.join(", ")}` : "",
             s.transitionSound ? `transition: ${s.transitionSound}` : "",
+            exceptionBlock,
           ]
             .filter(Boolean)
-            .join("\n")
-        )
+            .join("\n");
+        })
         .join("\n\n"),
     ].join("\n");
     const res = await callLLM({

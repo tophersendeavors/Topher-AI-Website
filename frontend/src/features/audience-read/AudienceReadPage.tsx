@@ -16,6 +16,7 @@ import type {
   AudienceSceneBeat,
 } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { ApprovalBoard } from "./ApprovalBoard";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -116,6 +117,9 @@ export function AudienceReadPage() {
             approving={approve.isPending}
           />
         )}
+
+        {/* Standing approval layer between the read and any rewrite. */}
+        <ApprovalBoard projectId={projectId} episodeId={episodeId} hasReport={!!report} />
       </div>
     </div>
   );

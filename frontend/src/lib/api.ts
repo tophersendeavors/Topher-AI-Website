@@ -1,9 +1,12 @@
 import type {
   AgentRole,
   Approval,
+  ApprovalStatus,
+  ApprovedChangeSet,
   AudienceReadResponse,
   Character,
   CharacterBibleSummaryResponse,
+  HumanReadPipelineResponse,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -1272,6 +1275,32 @@ export const api = {
   approveAudienceRead: (projectId: string, episodeId: string) =>
     request<AudienceReadResponse>(
       `/projects/${projectId}/episodes/${episodeId}/audience-read/approve`,
+      { method: "POST" }
+    ),
+
+  // Human Read Approval Pipeline (per episode)
+  getChangeProposals: (projectId: string, episodeId: string) =>
+    request<HumanReadPipelineResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/change-proposals`
+    ),
+  generateChangeProposals: (projectId: string, episodeId: string) =>
+    request<HumanReadPipelineResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/change-proposals/generate`,
+      { method: "POST" }
+    ),
+  patchChangeProposal: (
+    projectId: string,
+    episodeId: string,
+    proposalId: string,
+    body: { approvalStatus?: ApprovalStatus; creatorDecisionNotes?: string }
+  ) =>
+    request<HumanReadPipelineResponse>(
+      `/projects/${projectId}/episodes/${episodeId}/change-proposals/${proposalId}`,
+      { method: "PATCH", body: JSON.stringify(body) }
+    ),
+  buildApprovedChangeSet: (projectId: string, episodeId: string) =>
+    request<HumanReadPipelineResponse & { changeSet: ApprovedChangeSet }>(
+      `/projects/${projectId}/episodes/${episodeId}/change-proposals/approved-set`,
       { method: "POST" }
     ),
 

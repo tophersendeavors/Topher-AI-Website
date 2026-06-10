@@ -166,6 +166,172 @@ async function main() {
     `No "pending" silence patterns on character signatures · gaps=[${characterSilenceGaps.join(", ")}]`
   );
 
+  // Truncation detection. Catches three failure modes:
+  //   (a) fields ending on a dangling word ("heavily", "the", "and"…)
+  //   (b) descriptive fields with no terminal punctuation
+  //   (c) fields under a hard minimum or far below their peer median
+  const DANGLING_WORDS = new Set<string>([
+    // articles + determiners
+    "a", "an", "the", "this", "that", "these", "those",
+    // copulas + auxiliaries
+    "is", "are", "was", "were", "be", "been", "being",
+    "has", "have", "had", "do", "does", "did", "will", "would",
+    "can", "could", "should", "may", "might", "must",
+    // conjunctions
+    "and", "or", "but", "nor", "yet", "so", "for", "if", "because", "when", "while",
+    // prepositions
+    "of", "in", "on", "at", "by", "from", "to", "with", "without",
+    "than", "as", "into", "onto", "over", "under", "through", "between",
+    // adverbs / intensifiers that demand a follow-on
+    "heavily", "slightly", "barely", "extremely", "very", "deeply",
+    "quietly", "softly", "somewhat", "mostly", "partially", "completely",
+    "nearly", "almost", "just", "fairly", "rather", "quite", "intensely",
+    "gently", "faintly", "strongly", "lightly", "marginally", "notably",
+    "distinctly", "particularly", "especially", "increasingly", "gradually",
+    "suddenly", "immediately", "eventually", "finally", "deliberately",
+    "carefully", "delicately", "abruptly", "sharply", "subtly", "tightly",
+    "loosely", "primarily", "mainly", "actively",
+  ]);
+  const ACCEPTABLE_SHORT = new Set<string>(["no score", "none", "n/a", "silence", "—", "-", "(none)"]);
+
+  function endsTruncated(s: string): { truncated: boolean; reason?: string } {
+    const trimmed = s.trim();
+    if (!trimmed) return { truncated: false };
+    if (ACCEPTABLE_SHORT.has(trimmed.toLowerCase())) return { truncated: false };
+
+    const lastChar = trimmed[trimmed.length - 1];
+    const TERMINAL = ".!?\"”’)]";
+    const hasTerminal = TERMINAL.includes(lastChar);
+
+    if (!hasTerminal && trimmed.length > 20) {
+      // The strongest signal: a long descriptive value that doesn't end in
+      // a sentence-ending mark. This catches mid-sentence truncations
+      // regardless of what the last word happens to be.
+      return { truncated: true, reason: `no terminal punctuation (ends with "${lastChar}")` };
+    }
+    if (!hasTerminal) {
+      // Short value with no terminal punctuation — check whether it ends
+      // on a dangling word. Many short legitimate values are non-sentence
+      // fragments (a noun phrase), so we don't auto-fail without a
+      // dangling-word cue.
+      const m = trimmed.match(/(\S+)$/);
+      const lastWord = (m ? m[1] : "").toLowerCase();
+      if (DANGLING_WORDS.has(lastWord)) {
+        return {
+          truncated: true,
+          reason: `ends on dangling word "${lastWord}" with no terminal punctuation`,
+        };
+      }
+    }
+    // If terminal punctuation is present we trust the writer — adverbial
+    // / phrasal endings ("it holds, barely." / "lets it in.") are fine.
+    return { truncated: false };
+  }
+
+  function median(nums: number[]): number {
+    if (nums.length === 0) return 0;
+    const sorted = [...nums].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+      : sorted[mid];
+  }
+
+  /** Inspect a per-field collection across all scenes and emit any
+   *  truncated entries. Returns the list of failures so they can be
+   *  surfaced individually in the verifier output. */
+  function findTruncationsAcrossField(
+    fieldName: string,
+    rows: Array<{ key: string; value: string | null }>,
+    opts: { minLen?: number; peerRatio?: number }
+  ): string[] {
+    const present = rows
+      .map((r) => ({ key: r.key, val: (r.value ?? "").trim() }))
+      .filter((r) => r.val.length > 0 && !ACCEPTABLE_SHORT.has(r.val.toLowerCase()));
+    if (present.length === 0) return [];
+    const peerMedian = median(present.map((r) => r.val.length));
+    const minLen = opts.minLen ?? 50;
+    const ratio = opts.peerRatio ?? 0.3;
+    const fails: string[] = [];
+    for (const r of present) {
+      const end = endsTruncated(r.val);
+      if (end.truncated) {
+        fails.push(`${fieldName}[${r.key}] · ${end.reason} · "${r.val.slice(-40)}"`);
+        continue;
+      }
+      if (r.val.length < minLen) {
+        fails.push(
+          `${fieldName}[${r.key}] · length ${r.val.length} < min ${minLen}`
+        );
+        continue;
+      }
+      if (peerMedian >= 80 && r.val.length < Math.max(minLen, peerMedian * ratio)) {
+        fails.push(
+          `${fieldName}[${r.key}] · length ${r.val.length} far below peer median ${peerMedian}`
+        );
+      }
+    }
+    return fails;
+  }
+
+  const sceneKeys = Object.keys(bible.scenes).sort(
+    (a, b) => Number(a) - Number(b)
+  );
+  const truncFails: string[] = [
+    ...findTruncationsAcrossField(
+      "scenes.ambientBed",
+      sceneKeys.map((k) => ({ key: k, value: bible.scenes[k].ambientBed })),
+      { minLen: 60 }
+    ),
+    ...findTruncationsAcrossField(
+      "scenes.nonDiegeticMusic",
+      sceneKeys.map((k) => ({ key: k, value: bible.scenes[k].nonDiegeticMusic })),
+      { minLen: 0 } // "no score" is fine; peer median catches truncation
+    ),
+    ...findTruncationsAcrossField(
+      "scenes.silenceNotes",
+      sceneKeys.map((k) => ({ key: k, value: bible.scenes[k].silenceNotes })),
+      { minLen: 40 }
+    ),
+    ...findTruncationsAcrossField(
+      "scenes.transitionSound",
+      sceneKeys.map((k) => ({ key: k, value: bible.scenes[k].transitionSound })),
+      { minLen: 30 }
+    ),
+    ...findTruncationsAcrossField(
+      "scenes.aiVideoPromptAudioNotes",
+      sceneKeys.map((k) => ({
+        key: k,
+        value: bible.scenes[k].aiVideoPromptAudioNotes,
+      })),
+      { minLen: 60 }
+    ),
+    ...findTruncationsAcrossField(
+      "locationSignatures.ambientBed",
+      Object.entries(bible.locationSignatures).map(([k, v]) => ({
+        key: k,
+        value: v.ambientBed,
+      })),
+      { minLen: 80 }
+    ),
+    ...findTruncationsAcrossField(
+      "characterSignatures.silencePattern",
+      Object.entries(bible.characterSignatures).map(([k, v]) => ({
+        key: k,
+        value: v.silencePattern,
+      })),
+      { minLen: 60 }
+    ),
+  ];
+  if (truncFails.length > 0) {
+    console.log("\nTruncation report:");
+    for (const f of truncFails) console.log(`  · ${f}`);
+  }
+  assert(
+    truncFails.length === 0,
+    `No truncated / suspiciously-short fields detected (checked ${sceneKeys.length} scene rows across 5 fields + location ambient beds + character silence patterns)`
+  );
+
   // Re-snapshot Draft 5 to confirm read-only.
   const after = await loadDraft5Snapshot();
   assert(after.fountainHash === before.fountainHash, "Draft 5 fountain unchanged");

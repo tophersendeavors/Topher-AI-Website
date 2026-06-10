@@ -97,6 +97,10 @@ export function CharacterBiblePage() {
       />
 
       <div className="px-8">
+        <ExecutiveSummaryPanel projectId={projectId} />
+      </div>
+
+      <div className="px-8">
         <nav className="mb-4 flex gap-1 border-b border-white/8">
           <TabButton active={tab === "characters"} onClick={() => setTab("characters")}>
             <Users className="h-3.5 w-3.5" /> Characters
@@ -321,6 +325,133 @@ function TabButton({
     >
       {children}
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Executive summary — project-level, 2-3 sentence pitch blurb of the cast.
+// AI-generated, then showrunner-editable + approvable. Sits above the tabs.
+// ---------------------------------------------------------------------------
+
+function ExecutiveSummaryPanel({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const q = useQuery({
+    queryKey: ["character-bible-summary", projectId],
+    queryFn: () => api.getCharacterBibleSummary(projectId),
+  });
+  const summary = q.data?.summary ?? null;
+
+  const [draft, setDraft] = useState("");
+  // Refresh the editor whenever the server text changes (keyed on updatedAt
+  // so a generate/save/approve re-seeds it, but typing doesn't clobber).
+  useEffect(() => {
+    setDraft(summary?.text ?? "");
+  }, [summary?.updatedAt, summary?.text]);
+
+  const seed = (r: { summary: typeof summary }) =>
+    qc.setQueryData(["character-bible-summary", projectId], r);
+  const generate = useMutation({
+    mutationFn: () => api.generateCharacterBibleSummary(projectId),
+    onSuccess: seed,
+  });
+  const save = useMutation({
+    mutationFn: () => api.saveCharacterBibleSummary(projectId, draft.trim()),
+    onSuccess: seed,
+  });
+  const approve = useMutation({
+    mutationFn: () => api.approveCharacterBibleSummary(projectId),
+    onSuccess: seed,
+  });
+
+  const busy = generate.isPending || save.isPending || approve.isPending;
+  const savedText = (summary?.text ?? "").trim();
+  const dirty = draft.trim() !== savedText;
+  const hasText = draft.trim().length > 0;
+  const approved = !!summary?.approvedAt && !dirty;
+  const err =
+    (generate.error as Error | null)?.message ??
+    (save.error as Error | null)?.message ??
+    (approve.error as Error | null)?.message ??
+    null;
+
+  return (
+    <div className="rounded-xl border border-white/8 bg-white/[0.02] p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="font-serif text-bone-50">Executive summary</div>
+          {summary &&
+            (approved ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-700/40 bg-emerald-900/20 px-2 py-0.5 text-[10.5px] text-emerald-100">
+                <Check className="h-3 w-3" /> Approved
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-md border border-amber-700/40 bg-amber-900/15 px-2 py-0.5 text-[10.5px] text-amber-100">
+                Draft
+              </span>
+            ))}
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => generate.mutate()}
+          disabled={busy}
+          title="Write a 2-3 sentence summary from your cast and approved relationships"
+        >
+          {generate.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {savedText ? "Regenerate" : "Generate"}
+        </Button>
+      </div>
+
+      <p className="mt-1 text-[11.5px] text-bone-400">
+        A 2-3 sentence pitch-ready blurb of the ensemble, drawn from your cast and approved
+        relationships. AI proposes — you edit and approve.
+      </p>
+
+      {q.isLoading ? (
+        <div className="mt-3 text-[12.5px] text-bone-400">Loading…</div>
+      ) : (
+        <>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
+            placeholder="No executive summary yet. Generate one from your cast, or write it here."
+            className="mt-3 w-full resize-y rounded-md border border-white/10 bg-black/20 px-3 py-2 text-[13.5px] leading-relaxed text-bone-100 placeholder:text-bone-500 focus:border-ember-500/60 focus:outline-none"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Button onClick={() => save.mutate()} disabled={busy || !dirty || !hasText}>
+              {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save edits
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => approve.mutate()}
+              disabled={busy || !hasText || dirty || approved}
+              title={dirty ? "Save your edits before approving" : "Approve this summary as canon"}
+            >
+              {approve.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              {approved ? "Approved" : "Approve"}
+            </Button>
+            {dirty && hasText && (
+              <span className="text-[11px] text-amber-200">Unsaved edits</span>
+            )}
+            {summary?.generatedAt && !dirty && (
+              <span className="text-[11px] text-bone-500">
+                Generated {new Date(summary.generatedAt).toLocaleDateString()}
+              </span>
+            )}
+            {err && <span className="text-[11px] text-red-300">{err.slice(0, 80)}</span>}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

@@ -53,6 +53,24 @@ export interface Relationship {
   created_at: string;
 }
 
+/** Project-level executive summary for the Character Bible — a short
+ *  (2-3 sentence) pitch-ready blurb of the ensemble. AI-generated, then
+ *  showrunner-editable and approvable. Stored at
+ *  projects.metadata.characterBibleSummary. */
+export interface CharacterBibleSummary {
+  text: string;
+  /** When the LLM last wrote this text. Null if only hand-edited. */
+  generatedAt: string | null;
+  /** Last write of any kind (generate or manual save). */
+  updatedAt: string | null;
+  approvedAt: string | null;
+  approvedBy: string | null;
+}
+
+export interface CharacterBibleSummaryResponse {
+  summary: CharacterBibleSummary | null;
+}
+
 export interface Location {
   id: string;
   project_id: string;

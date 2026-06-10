@@ -1,8 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { Character, Relationship } from "@toburt/shared";
 import { requireUser } from "../auth/verifyJwt.js";
 import { assertProjectMember } from "../db/queries.js";
 import { supabase } from "../db/client.js";
+import {
+  getCharacterBibleSummary,
+  saveCharacterBibleSummaryText,
+  approveCharacterBibleSummary,
+} from "../characterBible/summaryStore.js";
+import { generateCharacterBibleExecutiveSummary } from "../characterBible/summaryGenerator.js";
 import {
   suggestEpisodeTitle,
   approveEpisodeTitle,
@@ -1887,6 +1894,58 @@ export default async function entitiesRoutes(app: FastifyInstance) {
       .eq("project_id", projectId);
     if (error) throw error;
     return data ?? [];
+  });
+
+  // --- Character Bible executive summary (project-level) -----------------
+  // A 2-3 sentence pitch-ready blurb of the ensemble. AI-generated, then
+  // showrunner-editable and approvable. Stored at
+  // projects.metadata.characterBibleSummary.
+
+  app.get("/projects/:projectId/character-bible/summary", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const summary = await getCharacterBibleSummary(projectId);
+    return { summary };
+  });
+
+  app.post("/projects/:projectId/character-bible/summary/generate", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+
+    const [{ data: project }, { data: characters }, { data: relationships }] = await Promise.all([
+      supabase.from("projects").select("title").eq("id", projectId).single(),
+      supabase.from("characters").select("*").eq("project_id", projectId).order("name"),
+      supabase.from("relationships").select("*").eq("project_id", projectId),
+    ]);
+
+    const text = await generateCharacterBibleExecutiveSummary({
+      projectTitle: (project?.title as string) ?? "Untitled",
+      characters: (characters ?? []) as Character[],
+      relationships: (relationships ?? []) as Relationship[],
+    });
+    const summary = await saveCharacterBibleSummaryText(projectId, text, { fromGenerate: true });
+    return { summary };
+  });
+
+  app.put("/projects/:projectId/character-bible/summary", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const body = z.object({ text: z.string().max(2000) }).parse(req.body);
+    const summary = await saveCharacterBibleSummaryText(projectId, body.text.trim(), {
+      fromGenerate: false,
+    });
+    return { summary };
+  });
+
+  app.post("/projects/:projectId/character-bible/summary/approve", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const summary = await approveCharacterBibleSummary(projectId, user.id);
+    return { summary };
   });
 
   app.post("/relationships", async (req) => {

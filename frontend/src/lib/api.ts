@@ -2,6 +2,7 @@ import type {
   AgentRole,
   Approval,
   Character,
+  CharacterBibleSummaryResponse,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -1256,6 +1257,25 @@ export const api = {
   // Entities
   listCharacters: (projectId: string) =>
     request<Character[]>(`/projects/${projectId}/characters`),
+
+  // Character Bible executive summary (project-level)
+  getCharacterBibleSummary: (projectId: string) =>
+    request<CharacterBibleSummaryResponse>(`/projects/${projectId}/character-bible/summary`),
+  generateCharacterBibleSummary: (projectId: string) =>
+    request<CharacterBibleSummaryResponse>(
+      `/projects/${projectId}/character-bible/summary/generate`,
+      { method: "POST" }
+    ),
+  saveCharacterBibleSummary: (projectId: string, text: string) =>
+    request<CharacterBibleSummaryResponse>(`/projects/${projectId}/character-bible/summary`, {
+      method: "PUT",
+      body: JSON.stringify({ text }),
+    }),
+  approveCharacterBibleSummary: (projectId: string) =>
+    request<CharacterBibleSummaryResponse>(
+      `/projects/${projectId}/character-bible/summary/approve`,
+      { method: "POST" }
+    ),
   createCharacter: (body: Partial<Character> & { projectId: string; name: string }) =>
     request<Character>(`/characters`, {
       method: "POST",

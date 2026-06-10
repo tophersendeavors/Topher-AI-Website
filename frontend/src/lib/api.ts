@@ -3754,8 +3754,18 @@ export const api = {
     if (!res.ok) throw new Error(`export ${adapter}/${scope}: ${res.status}`);
     return res.text();
   },
-  musicPackJsonUrl: (projectId: string, episodeId: string) =>
-    `/api/projects/${projectId}/episodes/${episodeId}/sound-bible/music/export.json`,
+  // Authed JSON export. The raw export.json route requires a Bearer token, so
+  // it can't be opened as a plain <a download> navigation — fetch then Blob.
+  fetchMusicPackJson: async (
+    projectId: string,
+    episodeId: string
+  ): Promise<string> => {
+    const path = `/projects/${projectId}/episodes/${episodeId}/sound-bible/music/export.json`;
+    const headers = await authHeader();
+    const res = await fetch(`${BASE}/api${path}`, { headers });
+    if (!res.ok) throw new Error(`Export failed: ${res.status} ${res.statusText}`);
+    return res.text();
+  },
 
   // --- Curated Shot List -------------------------------------------------
   getShotList: (scriptId: string) =>

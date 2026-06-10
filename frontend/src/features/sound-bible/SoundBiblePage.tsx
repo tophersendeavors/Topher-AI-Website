@@ -1010,6 +1010,26 @@ function MusicGenerationSection({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["music-pack", projectId, episodeId] }),
   });
 
+  const [jsonBusy, setJsonBusy] = useState(false);
+  async function downloadJson() {
+    setJsonBusy(true);
+    try {
+      const text = await api.fetchMusicPackJson(projectId, episodeId);
+      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `music-pack-${episodeId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      window.alert(`Download failed: ${(e as Error).message}`);
+    } finally {
+      setJsonBusy(false);
+    }
+  }
+
   const pack = q.data?.pack ?? null;
   const readiness = q.data?.canonReadiness;
   const ready = readiness
@@ -1057,11 +1077,10 @@ function MusicGenerationSection({
             Approve pack
           </Button>
         )}
-        <a href={api.musicPackJsonUrl(projectId, episodeId)} download>
-          <Button variant="outline">
-            <Download className="h-4 w-4" /> Export JSON
-          </Button>
-        </a>
+        <Button variant="outline" onClick={downloadJson} disabled={jsonBusy || !pack}>
+          {jsonBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Export JSON
+        </Button>
       </div>
 
       {!ready && (

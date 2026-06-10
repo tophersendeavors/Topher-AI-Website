@@ -925,16 +925,12 @@ function EpisodeMusicPack({
           : "Approve the Sound Bible to unlock the music prompt pack."
       }
     >
-      <a
-        className={"btn-outline " + (ready ? "" : "pointer-events-none opacity-60")}
-        href={api.musicPackJsonUrl(projectId, row.episodeId)}
-        download={`${epSlug}_music_pack.json`}
-        target="_blank"
-        rel="noreferrer"
-      >
-        <Download className="h-3.5 w-3.5" />
-        .json pack
-      </a>
+      <DownloadMusicJsonButton
+        projectId={projectId}
+        episodeId={row.episodeId}
+        fileName={`${epSlug}_music_pack.json`}
+        ready={ready}
+      />
       {MUSIC_ADAPTERS.map((a) => (
         <CopyMusicButton
           key={a}
@@ -945,6 +941,55 @@ function EpisodeMusicPack({
         />
       ))}
     </ExportRow>
+  );
+}
+
+// The export.json route requires a Bearer token, so a plain <a download>
+// navigation comes back 401 and silently produces nothing. Fetch with auth
+// then download a Blob.
+function DownloadMusicJsonButton({
+  projectId,
+  episodeId,
+  fileName,
+  ready,
+}: {
+  projectId: string;
+  episodeId: string;
+  fileName: string;
+  ready: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const onClick = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const text = await api.fetchMusicPackJson(projectId, episodeId);
+      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      className="btn-outline disabled:opacity-50"
+      disabled={!ready || busy}
+      onClick={onClick}
+      title={ready ? "Download .json music pack" : "Approve the Sound Bible to enable"}
+    >
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+      .json pack
+      {err && <span className="ml-2 text-[10px] text-red-300">{err.slice(0, 40)}</span>}
+    </button>
   );
 }
 

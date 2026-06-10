@@ -129,6 +129,43 @@ async function main() {
     "approvedSceneCount matches independent count"
   );
 
+  // No "pending"/empty placeholders in approval-critical sections. The
+  // UI renders blank ambient beds as "pending"; we treat any whitespace-
+  // only or literally "pending" string as a placeholder that blocks
+  // whole-bible approval.
+  const PLACEHOLDER_RE = /^(?:|pending|tbd|todo|\(pending\)|\(tbd\))$/i;
+  function isPlaceholder(s: string | null | undefined): boolean {
+    return PLACEHOLDER_RE.test((s ?? "").trim());
+  }
+  const sceneAmbientGaps: string[] = [];
+  for (const [ord, row] of Object.entries(bible.scenes)) {
+    if (isPlaceholder(row.ambientBed)) sceneAmbientGaps.push(ord);
+  }
+  assert(
+    sceneAmbientGaps.length === 0,
+    `No "pending"/empty ambient beds on scene rows · gaps=[${sceneAmbientGaps.join(", ")}]`
+  );
+
+  const locationAmbientGaps: string[] = [];
+  for (const [key, sig] of Object.entries(bible.locationSignatures)) {
+    if (isPlaceholder(sig.ambientBed)) locationAmbientGaps.push(key);
+  }
+  assert(
+    locationAmbientGaps.length === 0,
+    `No "pending"/empty ambient beds on location signatures · gaps=[${locationAmbientGaps.join(", ")}]`
+  );
+
+  const characterSilenceGaps: string[] = [];
+  for (const [name, sig] of Object.entries(bible.characterSignatures)) {
+    // Character signatures don't have an ambientBed; check the cluster
+    // of must-be-set fields the composer reads.
+    if (isPlaceholder(sig.silencePattern)) characterSilenceGaps.push(name);
+  }
+  assert(
+    characterSilenceGaps.length === 0,
+    `No "pending" silence patterns on character signatures · gaps=[${characterSilenceGaps.join(", ")}]`
+  );
+
   // Re-snapshot Draft 5 to confirm read-only.
   const after = await loadDraft5Snapshot();
   assert(after.fountainHash === before.fountainHash, "Draft 5 fountain unchanged");

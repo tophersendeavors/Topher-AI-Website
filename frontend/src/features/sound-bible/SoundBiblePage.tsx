@@ -163,6 +163,9 @@ export function SoundBiblePage() {
       <div className="px-8 space-y-6">
         <SourceBanner data={data} />
         <CoverageBanner data={data} />
+        {hasContent && (
+          <WholeBibleApproval projectId={projectId} episodeId={episodeId} data={data} />
+        )}
         <Explainer>
           The Sound Bible is its own department. It reads from the current draft (you can read a
           locked draft — you just can't modify it). All sound canon writes to project metadata.
@@ -426,6 +429,147 @@ function CoverageBanner({ data }: { data: SoundBibleResponse }) {
         row{coverage.extraOrds.length === 1 ? "" : "s"} if scenes have been
         removed from the script.
       </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Whole-bible approval — the FINAL seal. This is the only thing the
+// Production Hub / Studio Timeline read (bible.approvedAt); approving the
+// individual sections is not enough. The server gates this on full scene
+// coverage only, so the button mirrors that. When sealed, the page shows a
+// confirmation + a hand-off to what the approval unlocks.
+// ---------------------------------------------------------------------------
+
+function WholeBibleApproval({
+  projectId,
+  episodeId,
+  data,
+}: {
+  projectId: string;
+  episodeId: string;
+  data: SoundBibleResponse;
+}) {
+  const qc = useQueryClient();
+  const { bible, coverage } = data;
+  const approve = useMutation({
+    mutationFn: () => api.approveSoundBible(projectId, episodeId),
+    onSuccess: () => {
+      // Flip this page's chip and every surface that reads bible.approvedAt.
+      qc.invalidateQueries({ queryKey: ["sound-bible", projectId, episodeId] });
+      qc.invalidateQueries({ queryKey: ["production-hub", projectId] });
+      qc.invalidateQueries({ queryKey: ["studio-timeline"] });
+      qc.invalidateQueries({ queryKey: ["wayfinder"] });
+    },
+  });
+
+  if (bible.version === 0) return null;
+
+  // Section readiness — informational. The server only blocks on coverage,
+  // but surfacing per-section state tells the user what's still in draft.
+  const sceneVals = Object.values(bible.scenes ?? {});
+  const locVals = Object.values(bible.locationSignatures ?? {});
+  const charVals = Object.values(bible.characterSignatures ?? {});
+  const checklist: Array<{ label: string; ok: boolean; note?: string }> = [
+    { label: "Episode Identity", ok: !!bible.episodeSoundIdentity?.sectionApprovedAt },
+    { label: "Music Guidance", ok: !!bible.musicGuidance?.sectionApprovedAt },
+    {
+      label: "Scenes",
+      ok: !!coverage?.isFullyCovered && sceneVals.length > 0 && sceneVals.every((s) => s.approvedAt),
+      note: `${sceneVals.filter((s) => s.approvedAt).length}/${sceneVals.length}`,
+    },
+    {
+      label: "Locations",
+      ok: locVals.length > 0 && locVals.every((l) => l.sectionApprovedAt),
+      note: `${locVals.filter((l) => l.sectionApprovedAt).length}/${locVals.length}`,
+    },
+    {
+      label: "Characters",
+      ok: charVals.length > 0 && charVals.every((c) => c.sectionApprovedAt),
+      note: `${charVals.filter((c) => c.sectionApprovedAt).length}/${charVals.length}`,
+    },
+  ];
+
+  // Already sealed → confirmation + hand-off.
+  if (bible.approvedAt) {
+    const when = new Date(bible.approvedAt).toLocaleString();
+    return (
+      <div className="rounded-lg border border-emerald-700/40 bg-emerald-900/15 p-4">
+        <div className="flex items-start gap-2.5">
+          <Check className="mt-0.5 h-5 w-5 text-emerald-300" />
+          <div className="flex-1">
+            <div className="font-serif text-bone-50">Sound Bible approved</div>
+            <p className="mt-1 text-[12.5px] text-bone-300">
+              Sealed {when}. This canon now feeds the AI Video Prompt audio direction and unlocks
+              Music Pack export (Suno · Udio · Composer Brief). It shows as{" "}
+              <strong>approved</strong> on the Production Hub.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const coverageComplete = !!coverage?.isFullyCovered;
+  const pendingSections = checklist.filter((c) => !c.ok).map((c) => c.label);
+
+  return (
+    <div className="rounded-lg border border-amber-700/45 bg-amber-900/12 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="font-serif text-bone-50">Approve the whole Sound Bible</div>
+          <p className="mt-1 text-[12.5px] text-bone-300">
+            Approving the sections individually isn't the final step — the Production Hub and
+            exports only read the <strong>whole-bible</strong> seal. Apply it here once coverage is
+            complete.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {checklist.map((c) => (
+              <span
+                key={c.label}
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] ${
+                  c.ok
+                    ? "border-emerald-700/40 bg-emerald-900/20 text-emerald-100"
+                    : "border-amber-700/40 bg-amber-900/15 text-amber-100"
+                }`}
+              >
+                {c.ok ? <Check className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                {c.label}
+                {c.note ? ` · ${c.note}` : ""}
+              </span>
+            ))}
+          </div>
+          {!coverageComplete && (
+            <p className="mt-2 text-[11.5px] text-amber-200">
+              Blocked: scene coverage must be complete before the bible can be approved. Fill the
+              missing rows in the Scenes section first.
+            </p>
+          )}
+          {coverageComplete && pendingSections.length > 0 && (
+            <p className="mt-2 text-[11.5px] text-bone-400">
+              You can seal now, but these sections are still draft and will stay invisible to the
+              composer until approved: {pendingSections.join(", ")}.
+            </p>
+          )}
+          {approve.isError && (
+            <p className="mt-2 text-[11.5px] text-red-300">
+              Approval failed: {(approve.error as Error).message}
+            </p>
+          )}
+        </div>
+        <Button
+          onClick={() => approve.mutate()}
+          disabled={!coverageComplete || approve.isPending}
+          title={coverageComplete ? "Apply the whole-bible approval" : "Complete scene coverage first"}
+        >
+          {approve.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Check className="h-4 w-4" />
+          )}
+          Approve Sound Bible
+        </Button>
+      </div>
     </div>
   );
 }

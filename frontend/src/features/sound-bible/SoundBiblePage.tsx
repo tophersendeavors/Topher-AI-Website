@@ -15,6 +15,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 import {
   AudioLines,
@@ -43,6 +44,46 @@ import type {
   SoundSceneBreakdown,
   SoundSection,
 } from "@toburt/shared";
+
+/**
+ * Seed the React Query cache from a `{ bible }` approval-mutation
+ * response. Used by every Sound Bible approval surface (per-scene,
+ * per-section, and eventually whole-bible) so the UI chip flips
+ * instantly without waiting for a refetch round-trip.
+ *
+ * - Updates the cached `SoundBibleResponse.bible` directly.
+ * - Recomputes `coverage.approvedSceneCount` so the coverage banner
+ *   reflects the new total in the same render.
+ * - Invalidates the separate audit query so the audit panel refetches
+ *   against the new bible state.
+ *
+ * Keep this generic — no surface-specific knowledge. New approval
+ * mutations elsewhere on the Sound Bible page should call this.
+ */
+function applyBibleApproval(
+  qc: QueryClient,
+  projectId: string,
+  episodeId: string,
+  response: { bible: SoundBible }
+): void {
+  qc.setQueryData<SoundBibleResponse>(
+    ["sound-bible", projectId, episodeId],
+    (old) => {
+      if (!old) return old;
+      const approvedSceneCount = Object.values(response.bible.scenes ?? {}).filter(
+        (s) => s.approvedAt != null
+      ).length;
+      return {
+        ...old,
+        bible: response.bible,
+        coverage: { ...old.coverage, approvedSceneCount },
+      };
+    }
+  );
+  qc.invalidateQueries({
+    queryKey: ["sound-bible-audit", projectId, episodeId],
+  });
+}
 
 export function SoundBiblePage() {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
@@ -464,6 +505,7 @@ function SectionHeader({
 }) {
   const [notes, setNotes] = useState("");
   const [showNotes, setShowNotes] = useState(false);
+  const qc = useQueryClient();
   const regen = useMutation({
     mutationFn: (n?: string) => api.generateSoundBibleSection(projectId, episodeId, section, n),
     onSuccess: () => {
@@ -474,7 +516,15 @@ function SectionHeader({
   });
   const approve = useMutation({
     mutationFn: () => api.approveSoundSection(projectId, episodeId, section),
-    onSuccess: () => onChange(),
+    // Seed the cache from the server response so the chip flips
+    // immediately — no refetch round-trip, no refresh needed.
+    onSuccess: (response) => {
+      applyBibleApproval(qc, projectId, episodeId, response);
+      onChange();
+    },
+    onError: (e) => {
+      window.alert(`Approve failed: ${(e as Error).message}`);
+    },
   });
   return (
     <div>
@@ -832,9 +882,18 @@ function SceneRow({
   row: SoundSceneBreakdown;
   onChange: () => void;
 }) {
+  const qc = useQueryClient();
   const approve = useMutation({
     mutationFn: () => api.approveSoundScene(projectId, episodeId, row.ord),
-    onSuccess: () => onChange(),
+    // Seed the cache from the server response so the row chip flips
+    // immediately — no refetch round-trip, no refresh needed.
+    onSuccess: (response) => {
+      applyBibleApproval(qc, projectId, episodeId, response);
+      onChange();
+    },
+    onError: (e) => {
+      window.alert(`Approve failed: ${(e as Error).message}`);
+    },
   });
   return (
     <div className="rounded-md border border-white/8 bg-white/[0.02] p-3 text-sm">

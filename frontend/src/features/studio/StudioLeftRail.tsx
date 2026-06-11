@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, Link } from "react-router-dom";
 import {
   LayoutGrid,
   Film,
@@ -25,12 +25,18 @@ export function StudioLeftRail({
   logoUrl,
   onLot,
   shooting,
+  ownerName,
+  ownerTitle,
+  ownerAvatar,
 }: {
   project: Project | null;
   studioName: string;
   logoUrl: string | null;
   onLot: number;
   shooting: number;
+  ownerName: string;
+  ownerTitle: string;
+  ownerAvatar: string | null;
 }) {
   const proj = (path: string) => (project ? `/projects/${project.id}/${path}` : "/projects");
   const items: Array<{ label: string; sub: string; Icon: typeof Film; to: string; end?: boolean }> = [
@@ -55,7 +61,7 @@ export function StudioLeftRail({
         style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
       >
       {/* brand */}
-      <div className="flex items-center gap-2.5 border-b border-white/8 px-3.5 py-3.5">
+      <div className="flex items-center gap-2.5 border-b border-[#26262c] px-3.5 py-3.5">
         <Logo logoUrl={logoUrl} name={studioName} />
         <div className="leading-tight">
           <div className="font-apple text-[15px] font-semibold tracking-[0.12em] text-bone-50">{studioName.split(" ")[0]}</div>
@@ -88,8 +94,17 @@ export function StudioLeftRail({
         ))}
       </nav>
 
-        {/* studio stats — moved here from the top-right, under the nav */}
-        <div className="flex items-center justify-around border-t border-white/8 px-2 py-2.5">
+        {/* owner — under the nav (moved from the top-right) */}
+        <Link to="/studio/owner" className="flex items-center gap-2.5 border-t border-[#26262c] px-3 py-2.5 hover:bg-white/[0.03]">
+          <OwnerAvatar avatarUrl={ownerAvatar} name={ownerName} />
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-[12.5px] text-bone-50">{ownerName}</div>
+            <div className="truncate text-[9.5px]" style={gold}>{ownerTitle}</div>
+          </div>
+        </Link>
+
+        {/* studio stats */}
+        <div className="flex items-center justify-around border-t border-[#26262c] px-2 py-2.5">
           <RailStat label="On the lot" value={onLot} />
           <RailStat label="Shooting" value={shooting} />
         </div>
@@ -102,6 +117,17 @@ export function StudioLeftRail({
       >
         <RailClock />
       </div>
+    </div>
+  );
+}
+
+function OwnerAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: string }) {
+  if (avatarUrl) {
+    return <img src={avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full border object-cover" style={{ borderColor: `${GOLD}55` }} />;
+  }
+  return (
+    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border font-apple text-[13px]" style={{ borderColor: `${GOLD}55`, color: GOLD }}>
+      {(name.trim()[0] ?? "T").toUpperCase()}
     </div>
   );
 }

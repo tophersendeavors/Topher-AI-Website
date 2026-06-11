@@ -62,7 +62,7 @@ export function StudioOwnerPage() {
             <Pencil className="h-3.5 w-3.5" /> Edit identity
           </button>
         </div>
-        <div className="border-t border-white/8 px-8 py-4 text-center text-[11px] text-bone-500">
+        <div className="border-t border-[#26262c] px-8 py-4 text-center text-[11px] text-bone-500">
           This is your Creative Twin — the face of your studio. It will evolve as you create.
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
   Share2,
   ChevronRight,
 } from "lucide-react";
+import { STUDIO_ROLE_LABELS } from "@toburt/shared";
 import type { Project, StudioOwnerResponse, StudioRole } from "@toburt/shared";
 import { api } from "@/lib/api";
 import { StudioOwnerOnboarding } from "./StudioOwnerOnboarding";
@@ -62,6 +63,7 @@ export function StudioLotHome() {
   const studioName = approvedStudio?.name ?? "TOBURT STUDIOS";
   const tagline = approvedStudio?.tagline ?? "Where imagination becomes legacy.";
   const ownerName = owner?.name && owner.name !== "chris" ? owner.name : "Studio Owner";
+  const ownerTitle = owner?.role ? STUDIO_ROLE_LABELS[owner.role] : "Studio Owner";
   const featured = projects[0] ?? null; // most recently updated active production
 
   return (
@@ -70,7 +72,16 @@ export function StudioLotHome() {
       <LotEnvironment image={heroImage} studioName={studioName} />
 
       {/* ===== Left nav rail ===== */}
-      <StudioLeftRail project={featured} studioName={studioName} logoUrl={logoUrl} onLot={projects.length} shooting={inProduction} />
+      <StudioLeftRail
+        project={featured}
+        studioName={studioName}
+        logoUrl={logoUrl}
+        onLot={projects.length}
+        shooting={inProduction}
+        ownerName={ownerName}
+        ownerTitle={ownerTitle}
+        ownerAvatar={owner?.avatarUrl ?? null}
+      />
 
       {/* ===== Arrival header (overlaid on the lot) ===== */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-5">
@@ -89,11 +100,6 @@ export function StudioLotHome() {
             Welcome back, <span style={gold}>{ownerName}</span>
           </div>
           <div className="text-[12px] text-bone-300">{tagline}</div>
-        </div>
-
-        {/* right cluster */}
-        <div className="pointer-events-auto absolute right-5 top-5 flex items-center gap-3">
-          <OwnerChip name={ownerName} role={owner?.role ?? null} avatarUrl={owner?.avatarUrl ?? null} title={owner?.creativeTwin?.titleLine} />
         </div>
       </div>
 
@@ -249,21 +255,6 @@ function StudioLogo({ logoUrl, name }: { logoUrl: string | null; name: string })
   return <img src={src} alt="" onError={() => setFailed(true)} className="h-9 w-9 object-contain" />;
 }
 
-function OwnerChip({ name, role, avatarUrl, title }: { name: string; role: StudioRole | null; avatarUrl: string | null; title?: string }) {
-  void role;
-  return (
-    <Link to="/studio/owner" className="flex items-center gap-2.5 rounded-xl border border-[#d8b15a]/30 bg-black/40 px-3 py-1.5 backdrop-blur-sm hover:border-[#d8b15a]/60">
-      <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full border" style={{ borderColor: `${GOLD}66` }}>
-        {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : <span className="font-apple" style={gold}>{name[0]}</span>}
-      </div>
-      <div className="hidden leading-tight md:block">
-        <div className="text-[12px] text-bone-50">{name}</div>
-        <div className="text-[9px] uppercase tracking-wide text-bone-500">{title ?? "Studio Owner"}</div>
-      </div>
-    </Link>
-  );
-}
-
 const STATUS_HUE: Record<Project["status"], string> = {
   ideation: "#9a9aa6",
   development: "#6aa3d8",
@@ -310,7 +301,7 @@ function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
     <div className="absolute inset-x-0 bottom-0 z-20 lg:left-[212px] lg:right-[300px]">
       <div className="px-4 pb-4">
         <div
-          className="flex h-[200px] flex-col rounded-2xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl"
+          className="flex h-[200px] flex-col rounded-2xl border border-[#26262c] bg-black/45 p-3 backdrop-blur-xl"
           style={{ boxShadow: "0 -10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
         >
           <div className="mb-2 flex items-center gap-2 px-0.5">

@@ -20,7 +20,7 @@ export function SignInPage() {
     try {
       if (mode === "signin") await signIn(email, password);
       else await signUp(email, password);
-      nav("/projects", { replace: true });
+      nav("/studio", { replace: true });
     } catch (err) {
       setError((err as Error).message);
     } finally {

@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Pencil } from "lucide-react";
+import { ChevronLeft, Pencil, LogOut } from "lucide-react";
 import { STUDIO_ROLE_LABELS, type StudioOwnerResponse } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { StudioOwnerOnboarding } from "./StudioOwnerOnboarding";
 
 const GOLD = "#d8b15a";
 
 export function StudioOwnerPage() {
   const qc = useQueryClient();
+  const { signOut } = useAuth();
   const q = useQuery({ queryKey: ["studio-owner"], queryFn: () => api.getStudioOwner() });
   const save = useMutation({
     mutationFn: (patch: Parameters<typeof api.saveStudioOwner>[0]) => api.saveStudioOwner(patch),
@@ -54,13 +56,21 @@ export function StudioOwnerPage() {
           </div>
           {owner.bio && <p className="mt-4 max-w-md text-[13px] leading-relaxed text-bone-300">{owner.bio}</p>}
 
-          <button
-            onClick={() => setEditing(true)}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-[13px]"
-            style={{ borderColor: `${GOLD}55`, color: GOLD }}
-          >
-            <Pencil className="h-3.5 w-3.5" /> Edit identity
-          </button>
+          <div className="mt-6 flex items-center gap-2">
+            <button
+              onClick={() => setEditing(true)}
+              className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-[13px]"
+              style={{ borderColor: `${GOLD}55`, color: GOLD }}
+            >
+              <Pencil className="h-3.5 w-3.5" /> Edit identity
+            </button>
+            <button
+              onClick={() => signOut()}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#26262c] px-4 py-2 text-[13px] text-bone-300 hover:text-bone-100"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Sign out
+            </button>
+          </div>
         </div>
         <div className="border-t border-[#26262c] px-8 py-4 text-center text-[11px] text-bone-500">
           This is your Creative Twin — the face of your studio. It will evolve as you create.

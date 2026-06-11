@@ -721,6 +721,20 @@ async function request<T>(
     Object.assign(headers, init.headers as Record<string, string>);
   }
   const res = await fetch(`${BASE}/api${path}`, { ...init, headers });
+  if (res.status === 401 && hasSupabaseEnv()) {
+    // Token expired/invalid — clear the stale session and bounce to sign-in
+    // so the user isn't stranded on a silently-empty or perpetually-loading
+    // page.
+    try {
+      await supabase().auth.signOut();
+    } catch {
+      /* ignore */
+    }
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/sign-in")) {
+      window.location.assign("/sign-in");
+    }
+    throw new Error("Your session expired — please sign in again.");
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`${res.status} ${res.statusText} — ${body.slice(0, 240)}`);

@@ -44,7 +44,11 @@ export function StudioLotHome() {
   const inProduction = projects.filter((p) => p.status === "production").length;
   const config = configQ.data?.config ?? null;
   const approvedStudio = config?.concepts.find((c) => c.id === config?.approvedConceptId) ?? null;
+  // Per-studio asset precedence: approved-studio profile → dropped-in static
+  // file → built-in fallback. (config.heroImageUrl / config.logoUrl are the
+  // future personalization hooks, set per approved studio identity.)
   const heroImage = config?.heroImageUrl ?? null;
+  const logoUrl = config?.logoUrl ?? null;
 
   if (owner && !owner.onboardingComplete) {
     return (
@@ -63,9 +67,12 @@ export function StudioLotHome() {
 
       {/* ===== Arrival header (overlaid on the lot) ===== */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-5">
-        <div className="pointer-events-auto rounded-lg bg-black/30 px-3 py-1.5 backdrop-blur-sm">
-          <div className="font-serif text-lg tracking-[0.15em] text-bone-50">{studioName}</div>
-          <div className="text-[9px] uppercase tracking-[0.3em]" style={gold}>{owner?.creativeTwin ? "Your studio" : "Studio Lot"}</div>
+        <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg bg-black/30 px-3 py-1.5 backdrop-blur-sm">
+          <StudioLogo logoUrl={logoUrl} name={studioName} />
+          <div>
+            <div className="font-serif text-lg tracking-[0.15em] text-bone-50">{studioName}</div>
+            <div className="text-[9px] uppercase tracking-[0.3em]" style={gold}>{owner?.creativeTwin ? "Your studio" : "Studio Lot"}</div>
+          </div>
         </div>
 
         <div className="pointer-events-auto text-center">
@@ -216,6 +223,21 @@ function CssLot({ studioName }: { studioName: string }) {
       <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 200px 60px rgba(0,0,0,0.8)" }} />
     </div>
   );
+}
+
+// Logo is an OVERLAY asset, never baked into the lot footage. Precedence:
+// per-studio config.logoUrl → dropped-in /studio/logo.png → gold monogram.
+function StudioLogo({ logoUrl, name }: { logoUrl: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = logoUrl ?? "/studio/logo.png";
+  if (failed) {
+    return (
+      <div className="grid h-9 w-9 place-items-center rounded-md border font-serif text-lg" style={{ borderColor: `${GOLD}66`, color: GOLD }}>
+        {(name.trim()[0] ?? "T").toUpperCase()}
+      </div>
+    );
+  }
+  return <img src={src} alt="" onError={() => setFailed(true)} className="h-9 w-9 object-contain" />;
 }
 
 function Stat({ label, value }: { label: string; value: number }) {

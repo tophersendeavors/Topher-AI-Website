@@ -317,7 +317,7 @@ function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
             <span className="text-[10px] uppercase tracking-[0.3em]" style={gold}>Explore the Studio</span>
             <span className="text-[10px] text-bone-500">— walk inside</span>
           </div>
-          <div className="flex items-stretch gap-2.5 overflow-x-auto">
+          <div className="flex items-stretch gap-2.5 overflow-x-auto px-1 py-1.5">
             {ROOMS.map((r) => (
               <RoomImageCard key={r.label} room={r} to={featuredId ? `/projects/${featuredId}/${r.path}` : "/projects"} />
             ))}
@@ -333,16 +333,16 @@ function RoomImageCard({ room, to }: { room: (typeof ROOMS)[number]; to: string 
   return (
     <Link
       to={to}
-      className="group flex min-w-[150px] flex-1 flex-col overflow-hidden rounded-xl border border-white/8 bg-white/[0.02] transition-all hover:border-[#d8b15a]/55"
+      className="group flex min-w-[150px] flex-1 flex-col overflow-hidden rounded-xl border border-[#26262c] bg-white/[0.015] transition-all duration-200 hover:scale-[1.04] hover:border-[#d8b15a]/60 hover:bg-white/[0.05] hover:shadow-[0_0_28px_rgba(216,177,90,0.28)]"
     >
-      {/* image — text lives BELOW it, never over it */}
-      <div className="h-[150px] w-full overflow-hidden">
+      {/* image (3:2) — text lives BELOW it, never over it */}
+      <div className="aspect-[3/2] w-full overflow-hidden">
         {!failed ? (
           <img
             src={`/studio/rooms/${room.slug}.png`}
             alt={room.label}
             onError={() => setFailed(true)}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 group-hover:brightness-110"
           />
         ) : (
           // Placeholder until the room image is dropped in.

@@ -14,6 +14,7 @@ import {
   PlayCircle,
   Save,
   Sparkles,
+  Trash2,
   Wand2,
 } from "lucide-react";
 import {
@@ -324,6 +325,48 @@ export function ProjectOverviewPage() {
           </div>
         )}
       </div>
+
+      <div className="px-8">
+        <DangerZone projectId={projectId} title={project.data?.title ?? "this project"} />
+      </div>
+    </div>
+  );
+}
+
+function DangerZone({ projectId, title }: { projectId: string; title: string }) {
+  const nav = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const del = useMutation({
+    mutationFn: () => api.deleteProject(projectId),
+    onSuccess: () => nav("/studio/projects", { replace: true }),
+  });
+  return (
+    <div className="rounded-xl border border-red-900/40 bg-red-950/10 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm text-bone-100">Delete this project</div>
+          <div className="text-xs text-bone-400">
+            Permanently removes the project and all of its work — scripts, bibles, shot lists,
+            everything. This can't be undone.
+          </div>
+        </div>
+        {!confirming ? (
+          <Button variant="danger" onClick={() => setConfirming(true)}>
+            <Trash2 className="h-4 w-4" /> Delete project
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Button variant="danger" onClick={() => del.mutate()} disabled={del.isPending}>
+              {del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {del.isPending ? "Deleting…" : `Delete "${title}" forever`}
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(false)} disabled={del.isPending}>
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+      {del.isError && <div className="mt-2 text-xs text-red-300">{(del.error as Error).message}</div>}
     </div>
   );
 }

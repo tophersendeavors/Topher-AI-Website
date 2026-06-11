@@ -6,7 +6,7 @@ these files.
 
 Background (precedence: per-studio profile → these files → built-in scene):
 - `lot.mp4`  — living lot loop (preferred; muted, autoplay, loop). Best from Kling.
-- `lot.jpg`  — still fallback if no video.
+- `lot.png`  — still fallback if no video.
 
 Logo overlay (precedence: per-studio profile → this file → gold monogram):
 - `logo.png` — transparent PNG, ~square. Sits in the top-left brand mark.

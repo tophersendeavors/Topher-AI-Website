@@ -171,7 +171,7 @@ function LotEnvironment({ image, studioName }: { image: string | null; studioNam
       )}
       {!image && videoFailed && !imgFailed && (
         <>
-          <img src="/studio/lot.jpg" alt="" onError={() => setImgFailed(true)} className="absolute inset-0 h-full w-full object-cover" />
+          <img src="/studio/lot.png" alt="" onError={() => setImgFailed(true)} className="absolute inset-0 h-full w-full object-cover" />
           {overlayGrad}
         </>
       )}

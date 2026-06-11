@@ -57,9 +57,9 @@ export function StudioProjectsPage() {
       <main className="lg:pl-[224px] lg:pr-[300px]">
         <div className="mx-auto max-w-5xl px-6 py-7">
           {/* header band */}
-          <header className="relative mb-6 overflow-hidden rounded-2xl border border-[#26262c]">
+          <header className="relative mb-6 flex min-h-[200px] flex-col justify-end overflow-hidden rounded-2xl border border-[#26262c]">
             <LotBand />
-            <div className="relative px-5 py-6">
+            <div className="relative px-6 py-6">
               <div className="text-[11px] uppercase tracking-[0.3em] text-bone-400">Studio</div>
               <h1 className="mt-1 font-apple text-4xl font-semibold text-bone-50">Projects</h1>
               <p className="mt-2 max-w-md text-[13px] text-bone-300">
@@ -138,13 +138,15 @@ function LotBand() {
       <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #1a140c, #0b0a08)" }} />
       {!failed && (
         <img
-          src="/studio/lot.png"
+          src="/studio/projects-header.png"
           alt=""
           onError={() => setFailed(true)}
-          className="absolute right-0 top-0 h-full w-2/3 object-cover opacity-60"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       )}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #0b0a08 25%, rgba(11,10,8,0.4) 60%, rgba(11,10,8,0.85))" }} />
+      {/* darken the left for title legibility, plus a gentle bottom fade */}
+      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(8,8,10,0.92) 0%, rgba(8,8,10,0.58) 45%, rgba(8,8,10,0.22) 100%)" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(8,8,10,0.15), rgba(8,8,10,0.5))" }} />
     </div>
   );
 }

@@ -20,7 +20,27 @@ export function StudioOwnerPage() {
   const [editing, setEditing] = useState(false);
   const owner = q.data?.owner ?? null;
 
-  if (!owner) return <div className="p-8 text-bone-300">Loading…</div>;
+  if (q.isError) {
+    return (
+      <div className="min-h-screen bg-[#08080a] p-8">
+        <div className="mx-auto mt-20 max-w-md rounded-xl border border-red-700/40 bg-red-950/20 p-5 text-center">
+          <div className="text-bone-50">Couldn't load your studio</div>
+          <p className="mt-2 break-words text-[12px] text-red-200">{(q.error as Error).message}</p>
+          <button
+            onClick={() => {
+              signOut();
+              window.location.assign("/sign-in");
+            }}
+            className="mt-4 rounded-lg px-4 py-2 text-[13px] font-medium text-black"
+            style={{ background: GOLD }}
+          >
+            Sign in again
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (!owner) return <div className="min-h-screen bg-[#08080a] p-8 text-bone-300">Loading…</div>;
 
   if (editing) {
     return (

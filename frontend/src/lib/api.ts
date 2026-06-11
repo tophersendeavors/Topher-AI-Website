@@ -893,6 +893,7 @@ export const api = {
   // Projects
   listProjects: () => request<Project[]>("/projects"),
   getProject: (id: string) => request<Project>(`/projects/${id}`),
+  deleteProject: (id: string) => request<undefined>(`/projects/${id}`, { method: "DELETE" }),
   createProject: (
     body: Partial<Project> & { projectType?: string; redevTemplateId?: string }
   ) => request<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Smartphone } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Smartphone, Trash2, Loader2 } from "lucide-react";
 import { STUDIO_ROLE_LABELS, type Project } from "@toburt/shared";
 import { api } from "@/lib/api";
 import { StudioLeftRail } from "./StudioLeftRail";
@@ -164,6 +164,16 @@ function FilterChip({ active, onClick, label }: { active: boolean; onClick: () =
 }
 
 function ProjectCard({ project }: { project: Project }) {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const del = useMutation({
+    mutationFn: () => api.deleteProject(project.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
   const tags = project.genre ?? [];
   return (
     <Link
@@ -190,6 +200,18 @@ function ProjectCard({ project }: { project: Project }) {
         <TypeChip>{project.status}</TypeChip>
       </div>
 
+      {/* delete — top-right, appears on hover */}
+      <button
+        onClick={(e) => {
+          stop(e);
+          setConfirming(true);
+        }}
+        className="absolute right-3 top-3 z-20 hidden rounded-md border border-white/15 bg-black/55 p-1.5 text-bone-300 backdrop-blur-sm hover:border-red-500/50 hover:text-red-300 group-hover:block"
+        title="Delete project"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+
       {/* title + logline + genre — overlaid at the bottom */}
       <div className="relative z-10 p-4">
         <div className="font-apple text-[26px] font-semibold leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
@@ -211,6 +233,44 @@ function ProjectCard({ project }: { project: Project }) {
           </div>
         )}
       </div>
+
+      {/* delete confirmation overlay */}
+      {confirming && (
+        <div
+          onClick={stop}
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/88 p-6 text-center backdrop-blur-sm"
+        >
+          <Trash2 className="h-6 w-6 text-red-400" />
+          <div className="font-apple text-[15px] text-bone-50">Delete "{project.title}"?</div>
+          <p className="max-w-xs text-[11.5px] leading-relaxed text-bone-400">
+            This permanently removes the project and all of its work — scripts, bibles, shot lists,
+            everything. This can't be undone.
+          </p>
+          {del.isError && <p className="text-[11px] text-red-300">{(del.error as Error).message}</p>}
+          <div className="mt-1 flex gap-2">
+            <button
+              onClick={(e) => {
+                stop(e);
+                del.mutate();
+              }}
+              disabled={del.isPending}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-60"
+            >
+              {del.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              {del.isPending ? "Deleting…" : "Delete forever"}
+            </button>
+            <button
+              onClick={(e) => {
+                stop(e);
+                setConfirming(false);
+              }}
+              className="rounded-lg border border-white/15 px-4 py-1.5 text-[12.5px] text-bone-200 hover:bg-white/5"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </Link>
   );
 }

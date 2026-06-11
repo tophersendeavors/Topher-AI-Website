@@ -122,3 +122,7 @@ generalizing:
 
 Anything not in the table above is either already general or should be made
 general.
+
+## Toburt Brain sync
+
+When you make a meaningful change, decision, or hit a blocker, update BRAIN.md so it reflects the project's current state.

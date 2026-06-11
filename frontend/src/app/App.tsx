@@ -27,6 +27,7 @@ import { AudienceReadPage } from "@/features/audience-read/AudienceReadPage";
 import { StudioLotHome } from "@/features/studio/StudioLotHome";
 import { StudioOwnerPage } from "@/features/studio/StudioOwnerPage";
 import { StudioBuilderPage } from "@/features/studio/StudioBuilderPage";
+import { StudioProjectsPage } from "@/features/studio/StudioProjectsPage";
 import { ShotListPage } from "@/features/shot-list/ShotListPage";
 import { TrailerBuilderPage } from "@/features/trailer-builder/TrailerBuilderPage";
 import { ProductionHubPage } from "@/features/production-hub/ProductionHubPage";
@@ -53,6 +54,7 @@ function AppRoutes() {
           <Route path="studio" element={<StudioLotHome />} />
           <Route path="studio/owner" element={<StudioOwnerPage />} />
           <Route path="studio/build" element={<StudioBuilderPage />} />
+          <Route path="studio/projects" element={<StudioProjectsPage />} />
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/studio" replace />} />
             <Route path="projects" element={<ProjectsPage />} />

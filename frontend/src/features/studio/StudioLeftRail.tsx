@@ -37,7 +37,7 @@ export function StudioLeftRail({
   const proj = (path: string) => (project ? `/projects/${project.id}/${path}` : "/projects");
   const items: Array<{ label: string; sub: string; Icon: typeof Film; to: string; end?: boolean }> = [
     { label: "Studio Lot", sub: "Overview", Icon: LayoutGrid, to: "/studio", end: true },
-    { label: "Projects", sub: "All Projects", Icon: Film, to: "/projects" },
+    { label: "Projects", sub: "All Projects", Icon: Film, to: "/studio/projects" },
     { label: "Characters", sub: "Character Hub", Icon: Users, to: proj("character-bible") },
     { label: "Writers Room", sub: "Stories · Scripts", Icon: Sparkles, to: proj("writers-room") },
     { label: "Production", sub: "Stages · Shoots", Icon: Clapperboard, to: proj("production") },
@@ -50,7 +50,7 @@ export function StudioLeftRail({
   ];
 
   return (
-    <div className="absolute left-4 top-4 bottom-4 z-30 hidden w-[196px] flex-col gap-3 lg:flex">
+    <div className="fixed left-4 top-4 bottom-4 z-30 hidden w-[196px] flex-col gap-3 lg:flex">
       {/* Card 1 — brand + navigation */}
       <div
         className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[#26262c] bg-black/55 backdrop-blur-xl"

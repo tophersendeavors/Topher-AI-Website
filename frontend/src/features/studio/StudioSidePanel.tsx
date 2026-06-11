@@ -33,9 +33,14 @@ const STATUS_PROGRESS: Record<Project["status"], number> = {
   archived: 1,
 };
 
-export function StudioSidePanel({ project }: { project: Project | null }) {
+export function StudioSidePanel({ project, anchor = "bottom" }: { project: Project | null; anchor?: "top" | "bottom" }) {
   return (
-    <div className="absolute right-4 bottom-4 z-20 hidden max-h-[calc(100vh-2rem)] w-[272px] flex-col gap-3 overflow-y-auto pr-0.5 lg:flex">
+    <div
+      className={
+        "fixed right-4 z-20 hidden max-h-[calc(100vh-2rem)] w-[272px] flex-col gap-3 overflow-y-auto pr-0.5 lg:flex " +
+        (anchor === "top" ? "top-4" : "bottom-4")
+      }
+    >
       <FeaturedProjectCard project={project} />
       <StudioTeamCard projectId={project?.id ?? null} />
       <UpcomingEventsCard />

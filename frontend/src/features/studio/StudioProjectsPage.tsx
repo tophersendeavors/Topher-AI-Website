@@ -163,36 +163,48 @@ function FilterChip({ active, onClick, label }: { active: boolean; onClick: () =
   );
 }
 
-const STATUS_HUE: Record<Project["status"], string> = {
-  ideation: "#9a9aa6",
-  development: "#6aa3d8",
-  draft: "#d8b15a",
-  production: "#6ad88f",
-  archived: "#555",
-};
-
 function ProjectCard({ project }: { project: Project }) {
   const tags = project.genre ?? [];
   return (
     <Link
       to={`/projects/${project.id}`}
-      className="group flex flex-col overflow-hidden rounded-2xl border border-[#26262c] bg-white/[0.015] transition-all hover:border-[#d8b15a]/45"
+      className="group relative flex min-h-[380px] flex-col justify-end overflow-hidden rounded-2xl border border-[#26262c] transition-all hover:border-[#d8b15a]/55"
     >
-      <div className="relative aspect-[16/9] w-full overflow-hidden">
+      {/* full-bleed poster image */}
+      <div className="absolute inset-0 overflow-hidden">
         <ProjImg project={project} />
-        <div className="absolute left-2 top-2 flex flex-wrap gap-1">
-          <Chip>{PTYPE_LABEL[ptype(project)]}</Chip>
-          <Chip>{project.kind}</Chip>
-          <Chip style={{ color: STATUS_HUE[project.status] }}>{project.status}</Chip>
-        </div>
       </div>
-      <div className="flex flex-1 flex-col p-3.5">
-        <div className="font-apple text-[17px] font-semibold text-bone-50">{project.title}</div>
-        {project.logline && <p className="mt-1.5 line-clamp-3 flex-1 text-[12px] text-bone-300">{project.logline}</p>}
+      {/* legibility gradient — clear at top, dark at the bottom where text sits */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 26%, rgba(0,0,0,0.5) 56%, rgba(0,0,0,0.93) 100%)",
+        }}
+      />
+
+      {/* type chips — top-left */}
+      <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-1.5">
+        <TypeChip accent>{PTYPE_LABEL[ptype(project)]}</TypeChip>
+        <TypeChip>{project.kind}</TypeChip>
+        <TypeChip>{project.status}</TypeChip>
+      </div>
+
+      {/* title + logline + genre — overlaid at the bottom */}
+      <div className="relative z-10 p-4">
+        <div className="font-apple text-[26px] font-semibold leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+          {project.title}
+        </div>
+        {project.logline && (
+          <p className="mt-2 line-clamp-3 text-[12.5px] leading-relaxed text-bone-200">{project.logline}</p>
+        )}
         {tags.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-1">
+          <div className="mt-3 flex flex-wrap gap-1.5">
             {tags.slice(0, 4).map((g) => (
-              <span key={g} className="rounded border border-[#26262c] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-bone-400">
+              <span
+                key={g}
+                className="rounded border border-white/15 bg-black/40 px-2 py-0.5 text-[9px] uppercase tracking-wide text-bone-200 backdrop-blur-sm"
+              >
                 {g}
               </span>
             ))}
@@ -203,16 +215,32 @@ function ProjectCard({ project }: { project: Project }) {
   );
 }
 
-function Chip({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function TypeChip({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return (
-    <span className="rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-[8.5px] uppercase tracking-wide text-bone-200 backdrop-blur-sm" style={style}>
+    <span
+      className="rounded-md border bg-black/45 px-2 py-0.5 text-[9px] uppercase tracking-wide backdrop-blur-sm"
+      style={
+        accent
+          ? { borderColor: `${GOLD}80`, color: GOLD }
+          : { borderColor: "rgba(255,255,255,0.18)", color: "#dad3bd" }
+      }
+    >
       {children}
     </span>
   );
 }
 
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 function ProjImg({ project }: { project: Project }) {
-  const sources = [project.cover_url ?? "", `/studio/projects/${project.id}.png`].filter(Boolean);
+  // cover_url → /studio/projects/<id>.png → /studio/projects/<title-slug>.png → placeholder
+  const sources = [
+    project.cover_url ?? "",
+    `/studio/projects/${project.id}.png`,
+    `/studio/projects/${slugify(project.title)}.png`,
+  ].filter(Boolean);
   const [i, setI] = useState(0);
   const src = sources[i];
   if (!src) {
@@ -223,7 +251,7 @@ function ProjImg({ project }: { project: Project }) {
       src={src}
       alt={project.title}
       onError={() => setI((n) => n + 1)}
-      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
     />
   );
 }

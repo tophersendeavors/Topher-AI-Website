@@ -295,38 +295,73 @@ function SoundStageMarker({ project, index, spot }: { project: Project; index: n
   );
 }
 
+// `slug` is the room's image filename in /studio/rooms/<slug>.png.
 const ROOMS = [
-  { label: "Writers Room", sub: "Develop Stories", Icon: Sparkles, path: "writers-room" },
-  { label: "Character Dept.", sub: "Build Legends", Icon: Users, path: "character-bible" },
-  { label: "Art Department", sub: "Create Worlds", Icon: Palette, path: "production" },
-  { label: "Production", sub: "Bring to Life", Icon: Clapperboard, path: "episodes" },
-  { label: "Post Production", sub: "Shape the Cut", Icon: Film, path: "production" },
-  { label: "Distribution", sub: "Share the Story", Icon: Share2, path: "exports" },
+  { label: "Writers Room", sub: "Develop Stories", Icon: Sparkles, path: "writers-room", slug: "writers-room" },
+  { label: "Character Dept.", sub: "Build Legends", Icon: Users, path: "character-bible", slug: "character-dept" },
+  { label: "Art Department", sub: "Create Worlds", Icon: Palette, path: "production", slug: "art-department" },
+  { label: "Production", sub: "Bring to Life", Icon: Clapperboard, path: "episodes", slug: "production" },
+  { label: "Post Production", sub: "Shape the Cut", Icon: Film, path: "production", slug: "post-production" },
+  { label: "Distribution", sub: "Share the Story", Icon: Share2, path: "exports", slug: "distribution" },
 ];
 
 function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
   return (
     <div className="absolute inset-x-0 bottom-0 z-20">
       <div className="mx-auto max-w-6xl px-5 pb-4">
-        <div className="mb-1.5 text-center text-[10px] uppercase tracking-[0.3em]" style={gold}>Walk inside</div>
-        <div className="flex items-stretch gap-2 overflow-x-auto rounded-2xl border border-white/8 bg-black/45 p-2 backdrop-blur-md">
-          {ROOMS.map((r) => {
-            const to = featuredId ? `/projects/${featuredId}/${r.path}` : "/projects";
-            return (
-              <Link
-                key={r.label}
-                to={to}
-                className="group flex min-w-[140px] flex-1 flex-col items-center rounded-xl border border-transparent px-3 py-2.5 text-center transition-colors hover:border-[#d8b15a]/40 hover:bg-white/[0.03]"
-              >
-                <r.Icon className="h-5 w-5" style={gold} />
-                <div className="mt-1.5 text-[12px] text-bone-100">{r.label}</div>
-                <div className="text-[10px] text-bone-500">{r.sub}</div>
-              </Link>
-            );
-          })}
+        <div
+          className="rounded-2xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl"
+          style={{ boxShadow: "0 -10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
+        >
+          <div className="mb-2 flex items-center gap-2 px-0.5">
+            <span className="text-[10px] uppercase tracking-[0.3em]" style={gold}>Explore the Studio</span>
+            <span className="text-[10px] text-bone-500">— walk inside</span>
+          </div>
+          <div className="flex items-stretch gap-2.5 overflow-x-auto">
+            {ROOMS.map((r) => (
+              <RoomImageCard key={r.label} room={r} to={featuredId ? `/projects/${featuredId}/${r.path}` : "/projects"} />
+            ))}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function RoomImageCard({ room, to }: { room: (typeof ROOMS)[number]; to: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <Link
+      to={to}
+      className="group relative min-w-[150px] flex-1 overflow-hidden rounded-xl border border-white/8 transition-all hover:border-[#d8b15a]/55"
+    >
+      <div className="relative h-[108px] w-full">
+        {!failed ? (
+          <img
+            src={`/studio/rooms/${room.slug}.png`}
+            alt={room.label}
+            onError={() => setFailed(true)}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          // Placeholder until the room image is dropped in.
+          <div
+            className="flex h-full w-full flex-col items-center justify-center gap-1"
+            style={{ background: "linear-gradient(180deg, #1c150d, #0b0a08)" }}
+          >
+            <room.Icon className="h-6 w-6 opacity-50" style={gold} />
+            <span className="text-[8.5px] uppercase tracking-wide text-bone-600">image</span>
+          </div>
+        )}
+        {/* legibility gradient */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.88))" }} />
+        {/* label */}
+        <div className="absolute inset-x-0 bottom-0 p-2.5">
+          <div className="text-[12.5px] font-medium text-bone-50">{room.label}</div>
+          <div className="text-[10px]" style={gold}>{room.sub}</div>
+        </div>
+      </div>
+    </Link>
   );
 }
 

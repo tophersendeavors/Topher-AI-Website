@@ -110,6 +110,7 @@ function FeaturedImage({ project }: { project: Project }) {
     project.cover_url ?? "",
     `/studio/projects/${project.id}.png`,
     "/studio/projects/featured.png",
+    "/studio/projects/featured.svg", // sample so the card is populated; real drops above win
   ].filter(Boolean);
   const [i, setI] = useState(0);
   const src = sources[i];

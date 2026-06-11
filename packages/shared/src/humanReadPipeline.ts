@@ -112,10 +112,31 @@ export interface ApprovedChangeSet {
   createdAt: string;
 }
 
-export type RewriteStatus = "queued" | "running" | "complete" | "failed";
+export type RewriteStatus =
+  | "queued"
+  | "running"
+  | "complete"
+  | "failed"
+  | "rejected"
+  | "promoted";
 
-/** Phase 2 — records an approved rewrite attempt. Defined now so the
- *  Approved Change Set already knows its consumer's shape. */
+/** Per-scene before/after detail for the diff review. */
+export interface RewriteSceneDiff {
+  ord: number;
+  heading: string;
+  before: string;
+  after: string;
+  changed: boolean;
+  changeSummary: string;
+  /** Approved-change ids this scene's edit satisfies. */
+  satisfies: string[];
+  protectedTouched: boolean;
+  continuityRisks: string[];
+}
+
+/** Records a controlled rewrite attempt. Produced from — and only from — an
+ *  Approved Change Set. The original draft is never modified; promotion mints
+ *  a new draft version. */
 export interface RewriteJob {
   id: string;
   projectId: string;
@@ -123,9 +144,18 @@ export interface RewriteJob {
   sourceScriptVersionId: string;
   approvedChangeSetId: string;
   rewriteStatus: RewriteStatus;
+  /** Set only after the creator promotes the rewrite. */
   newScriptVersionId: string | null;
+  newDraftNumber: number | null;
   changeLog: string;
   continuityRisks: string[];
+  /** Only in-scope scenes appear here; out-of-scope scenes are untouched. */
+  diff: RewriteSceneDiff[];
+  /** The full reassembled draft text (out-of-scope scenes byte-identical). */
+  newFountain: string;
+  /** How many scenes were in the approved scope vs left untouched. */
+  scenesRewritten: number;
+  scenesUntouched: number;
   createdAt: string;
   completedAt: string | null;
 }

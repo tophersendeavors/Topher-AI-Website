@@ -21,6 +21,9 @@ import {
   patchProposal,
   buildApprovedChangeSet,
   assembleCanonContext,
+  runControlledRewrite,
+  promoteRewriteJob,
+  rejectRewriteJob,
 } from "../humanReadPipeline/store.js";
 
 export default async function humanReadPipelineRoutes(app: FastifyInstance) {
@@ -111,5 +114,40 @@ export default async function humanReadPipelineRoutes(app: FastifyInstance) {
     const changeSet = await buildApprovedChangeSet(projectId, episodeId, draft.scriptId, user.id);
     const response = await buildResponse(projectId, episodeId);
     return { ...response, changeSet };
+  });
+
+  // --- Phase 2: controlled rewrite (consumes ONLY the locked change set) ---
+
+  app.post("/projects/:projectId/episodes/:episodeId/rewrite/run", async (req) => {
+    const user = await requireUser(req);
+    const { projectId, episodeId } = req.params as { projectId: string; episodeId: string };
+    await assertProjectMember(user.id, projectId);
+    const { changeSetId } = z.object({ changeSetId: z.string() }).parse(req.body);
+    const job = await runControlledRewrite(projectId, episodeId, changeSetId, user.id);
+    return { ...(await buildResponse(projectId, episodeId)), job };
+  });
+
+  app.post("/projects/:projectId/episodes/:episodeId/rewrite/:jobId/promote", async (req) => {
+    const user = await requireUser(req);
+    const { projectId, episodeId, jobId } = req.params as {
+      projectId: string;
+      episodeId: string;
+      jobId: string;
+    };
+    await assertProjectMember(user.id, projectId);
+    const job = await promoteRewriteJob(projectId, episodeId, jobId, user.id);
+    return { ...(await buildResponse(projectId, episodeId)), job };
+  });
+
+  app.post("/projects/:projectId/episodes/:episodeId/rewrite/:jobId/reject", async (req) => {
+    const user = await requireUser(req);
+    const { projectId, episodeId, jobId } = req.params as {
+      projectId: string;
+      episodeId: string;
+      jobId: string;
+    };
+    await assertProjectMember(user.id, projectId);
+    const job = await rejectRewriteJob(projectId, episodeId, jobId);
+    return { ...(await buildResponse(projectId, episodeId)), job };
   });
 }

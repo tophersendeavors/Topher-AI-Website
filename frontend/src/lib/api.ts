@@ -7,6 +7,7 @@ import type {
   Character,
   CharacterBibleSummaryResponse,
   HumanReadPipelineResponse,
+  RewriteJob,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -1301,6 +1302,21 @@ export const api = {
   buildApprovedChangeSet: (projectId: string, episodeId: string) =>
     request<HumanReadPipelineResponse & { changeSet: ApprovedChangeSet }>(
       `/projects/${projectId}/episodes/${episodeId}/change-proposals/approved-set`,
+      { method: "POST" }
+    ),
+  runControlledRewrite: (projectId: string, episodeId: string, changeSetId: string) =>
+    request<HumanReadPipelineResponse & { job: RewriteJob }>(
+      `/projects/${projectId}/episodes/${episodeId}/rewrite/run`,
+      { method: "POST", body: JSON.stringify({ changeSetId }) }
+    ),
+  promoteRewriteJob: (projectId: string, episodeId: string, jobId: string) =>
+    request<HumanReadPipelineResponse & { job: RewriteJob }>(
+      `/projects/${projectId}/episodes/${episodeId}/rewrite/${jobId}/promote`,
+      { method: "POST" }
+    ),
+  rejectRewriteJob: (projectId: string, episodeId: string, jobId: string) =>
+    request<HumanReadPipelineResponse & { job: RewriteJob }>(
+      `/projects/${projectId}/episodes/${episodeId}/rewrite/${jobId}/reject`,
       { method: "POST" }
     ),
 

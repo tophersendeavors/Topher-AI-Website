@@ -138,7 +138,7 @@ function LotBand() {
       <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, #1a140c, #0b0a08)" }} />
       {!failed && (
         <img
-          src="/studio/projects-header.png"
+          src="/studio/projects-header.jpg"
           alt=""
           onError={() => setFailed(true)}
           className="absolute inset-0 h-full w-full object-cover"

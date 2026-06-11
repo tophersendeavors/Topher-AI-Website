@@ -14,6 +14,7 @@ import type { Project, StudioOwnerResponse, StudioRole } from "@toburt/shared";
 import { api } from "@/lib/api";
 import { StudioOwnerOnboarding } from "./StudioOwnerOnboarding";
 import { StudioSidePanel } from "./StudioSidePanel";
+import { StudioLeftRail } from "./StudioLeftRail";
 
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
@@ -68,9 +69,13 @@ export function StudioLotHome() {
       {/* ===== The lot itself — a place, not a page ===== */}
       <LotEnvironment image={heroImage} studioName={studioName} />
 
+      {/* ===== Left nav rail ===== */}
+      <StudioLeftRail project={featured} studioName={studioName} logoUrl={logoUrl} />
+
       {/* ===== Arrival header (overlaid on the lot) ===== */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-5">
-        <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg bg-black/30 px-3 py-1.5 backdrop-blur-sm">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-5">
+        {/* brand — small screens only; the left rail carries it on desktop */}
+        <div className="pointer-events-auto absolute left-5 top-5 flex items-center gap-2.5 rounded-lg bg-black/30 px-3 py-1.5 backdrop-blur-sm lg:hidden">
           <StudioLogo logoUrl={logoUrl} name={studioName} />
           <div>
             <div className="font-apple text-lg tracking-[0.15em] text-bone-50">{studioName}</div>
@@ -78,14 +83,16 @@ export function StudioLotHome() {
           </div>
         </div>
 
-        <div className="pointer-events-auto text-center">
+        {/* centered welcome */}
+        <div className="pointer-events-auto absolute left-1/2 top-5 -translate-x-1/2 text-center">
           <div className="font-apple text-[26px] text-bone-50 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
             Welcome back, <span style={gold}>{ownerName}</span>
           </div>
           <div className="text-[12px] text-bone-300">{tagline}</div>
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-3">
+        {/* right cluster */}
+        <div className="pointer-events-auto absolute right-5 top-5 flex items-center gap-3">
           <div className="hidden items-center gap-4 rounded-lg bg-black/30 px-3 py-1.5 backdrop-blur-sm sm:flex">
             <Stat label="On the lot" value={projects.length} />
             <Stat label="Shooting" value={inProduction} />
@@ -313,7 +320,7 @@ const ROOMS = [
 
 function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 lg:right-[300px]">
+    <div className="absolute inset-x-0 bottom-0 z-20 lg:left-[212px] lg:right-[300px]">
       <div className="px-4 pb-4">
         <div
           className="rounded-2xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl"
@@ -341,8 +348,8 @@ function RoomImageCard({ room, to }: { room: (typeof ROOMS)[number]; to: string 
       to={to}
       className="group flex min-w-[150px] flex-1 flex-col overflow-hidden rounded-xl border border-[#26262c] bg-white/[0.015] transition-all duration-200 hover:scale-[1.04] hover:border-[#d8b15a]/60 hover:bg-white/[0.05] hover:shadow-[0_0_28px_rgba(216,177,90,0.28)]"
     >
-      {/* image (3:2) — text lives BELOW it, never over it */}
-      <div className="aspect-[3/2] w-full overflow-hidden">
+      {/* image (~3:2) — fixed height so the row matches the Upcoming Events card */}
+      <div className="h-[104px] w-full overflow-hidden">
         {!failed ? (
           <img
             src={`/studio/rooms/${room.slug}.png`}

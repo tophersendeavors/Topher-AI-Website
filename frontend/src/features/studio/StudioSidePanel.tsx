@@ -43,10 +43,10 @@ export function StudioSidePanel({ project }: { project: Project | null }) {
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className="rounded-2xl border border-[#26262c] bg-black/45 p-3 backdrop-blur-xl"
+      className={"rounded-2xl border border-[#26262c] bg-black/45 p-3 backdrop-blur-xl " + className}
       style={{ boxShadow: "0 10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
     >
       {children}
@@ -179,12 +179,13 @@ function TeamAvatar({ slug, name }: { slug: string; name: string }) {
 
 function UpcomingEventsCard() {
   return (
-    <Card>
+    // Fixed height to match the Explore-the-Studio room cards.
+    <Card className="flex h-[156px] flex-col">
       <CardHeader
         title="Upcoming Events"
         action={<span className="cursor-default text-[10px] text-bone-500" title="Calendar coming soon">View Calendar</span>}
       />
-      <div className="space-y-1.5">
+      <div className="flex flex-1 flex-col justify-between">
         {EVENTS.map((e) => (
           <div key={e.title} className="flex items-center gap-2.5">
             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-[#26262c] bg-white/[0.02]">

@@ -145,7 +145,7 @@ function StudioTeamCard({ projectId }: { projectId: string | null }) {
         }
       />
       <div className="space-y-1">
-        {TEAM.map((m) => (
+        {TEAM.slice(0, 4).map((m) => (
           <div key={m.slug} className="flex items-center gap-2.5 rounded-lg px-1.5 py-1 hover:bg-white/[0.03]">
             <TeamAvatar slug={m.slug} name={m.name} />
             <div className="min-w-0 flex-1 leading-tight">

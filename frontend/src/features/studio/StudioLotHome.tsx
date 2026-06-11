@@ -45,7 +45,6 @@ export function StudioLotHome() {
 
   const owner = ownerQ.data?.owner ?? null;
   const projects = (projectsQ.data ?? []).filter((p) => p.status !== "archived");
-  const inProduction = projects.filter((p) => p.status === "production").length;
   const config = configQ.data?.config ?? null;
   const approvedStudio = config?.concepts.find((c) => c.id === config?.approvedConceptId) ?? null;
   // Per-studio asset precedence: approved-studio profile → dropped-in static
@@ -76,8 +75,6 @@ export function StudioLotHome() {
         project={featured}
         studioName={studioName}
         logoUrl={logoUrl}
-        onLot={projects.length}
-        shooting={inProduction}
         ownerName={ownerName}
         ownerTitle={ownerTitle}
         ownerAvatar={owner?.avatarUrl ?? null}

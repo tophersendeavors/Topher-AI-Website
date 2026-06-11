@@ -23,8 +23,6 @@ export function StudioLeftRail({
   project,
   studioName,
   logoUrl,
-  onLot,
-  shooting,
   ownerName,
   ownerTitle,
   ownerAvatar,
@@ -32,8 +30,6 @@ export function StudioLeftRail({
   project: Project | null;
   studioName: string;
   logoUrl: string | null;
-  onLot: number;
-  shooting: number;
   ownerName: string;
   ownerTitle: string;
   ownerAvatar: string | null;
@@ -102,12 +98,6 @@ export function StudioLeftRail({
             <div className="truncate text-[9.5px]" style={gold}>{ownerTitle}</div>
           </div>
         </Link>
-
-        {/* studio stats */}
-        <div className="flex items-center justify-around border-t border-[#26262c] px-2 py-2.5">
-          <RailStat label="On the lot" value={onLot} />
-          <RailStat label="Shooting" value={shooting} />
-        </div>
       </div>
 
       {/* Card 2 — clock / date / weather (its own card) */}
@@ -128,15 +118,6 @@ function OwnerAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: stri
   return (
     <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full border font-apple text-[13px]" style={{ borderColor: `${GOLD}55`, color: GOLD }}>
       {(name.trim()[0] ?? "T").toUpperCase()}
-    </div>
-  );
-}
-
-function RailStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="text-center">
-      <div className="font-apple text-xl" style={gold}>{value}</div>
-      <div className="text-[8.5px] uppercase tracking-wide text-bone-500">{label}</div>
     </div>
   );
 }

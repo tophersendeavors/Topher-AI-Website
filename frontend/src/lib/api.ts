@@ -8,6 +8,8 @@ import type {
   CharacterBibleSummaryResponse,
   HumanReadPipelineResponse,
   RewriteJob,
+  StudioOwnerResponse,
+  StudioRole,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -1258,6 +1260,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  // Studio Owner — account-level creator identity (the studio's face)
+  getStudioOwner: () => request<StudioOwnerResponse>(`/me/studio-owner`),
+  saveStudioOwner: (patch: {
+    name?: string;
+    role?: StudioRole | null;
+    bio?: string;
+    avatarUrl?: string | null;
+    onboardingComplete?: boolean;
+  }) => request<StudioOwnerResponse>(`/me/studio-owner`, { method: "PUT", body: JSON.stringify(patch) }),
 
   // Entities
   listCharacters: (projectId: string) =>

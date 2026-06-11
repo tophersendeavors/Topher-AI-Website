@@ -62,7 +62,7 @@ export function AppShell() {
   return (
     <div className="grid h-screen grid-cols-[280px_minmax(0,1fr)]">
       <aside className="os-sidebar relative flex flex-col">
-        <NavLink to="/projects" className="os-sidebar-brand">
+        <NavLink to="/studio" className="os-sidebar-brand">
           <div className="os-sidebar-brand-mark">T</div>
           <div>
             <div className="os-sidebar-brand-eyebrow">TOBURT</div>
@@ -71,6 +71,14 @@ export function AppShell() {
         </NavLink>
 
         <div className="px-3 pb-2">
+          <NavLink
+            to="/studio"
+            end
+            className={({ isActive }) => clsx("os-nav-item", isActive && "is-active")}
+          >
+            <Clapperboard className="os-nav-icon" />
+            Studio Lot
+          </NavLink>
           <NavLink
             to="/projects"
             end

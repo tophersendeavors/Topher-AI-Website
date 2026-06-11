@@ -10,6 +10,7 @@ export * from "./projectTypeConfig";
 export * from "./sound";
 export * from "./audienceRead";
 export * from "./humanReadPipeline";
+export * from "./studio";
 export * from "./shotList";
 export * from "./trailer";
 export * from "./productionPackage";

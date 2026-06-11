@@ -33,6 +33,7 @@ import productionHubRoutes from "./routes/productionHub.js";
 import generationQueueRoutes from "./routes/generationQueue.js";
 import wayfinderRoutes from "./routes/wayfinder.js";
 import studioRoutes from "./routes/studio.js";
+import studioOwnerRoutes from "./routes/studioOwner.js";
 import teamRoutes from "./routes/team.js";
 import briefRouterRoutes from "./routes/briefRouter.js";
 
@@ -84,6 +85,7 @@ async function main() {
       await api.register(generationQueueRoutes);
       await api.register(wayfinderRoutes);
       await api.register(studioRoutes);
+      await api.register(studioOwnerRoutes);
       await api.register(teamRoutes);
       await api.register(briefRouterRoutes);
     },

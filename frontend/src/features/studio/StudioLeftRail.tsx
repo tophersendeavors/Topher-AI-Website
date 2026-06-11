@@ -36,10 +36,12 @@ export function StudioLeftRail({ project, studioName, logoUrl }: { project: Proj
   ];
 
   return (
-    <div
-      className="absolute left-4 top-4 bottom-4 z-30 hidden w-[196px] flex-col rounded-2xl border border-[#26262c] bg-black/55 backdrop-blur-xl lg:flex"
-      style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
-    >
+    <div className="absolute left-4 top-4 bottom-4 z-30 hidden w-[196px] flex-col gap-3 lg:flex">
+      {/* Card 1 — brand + navigation */}
+      <div
+        className="flex min-h-0 flex-1 flex-col rounded-2xl border border-[#26262c] bg-black/55 backdrop-blur-xl"
+        style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
+      >
       {/* brand */}
       <div className="flex items-center gap-2.5 border-b border-white/8 px-3.5 py-3.5">
         <Logo logoUrl={logoUrl} name={studioName} />
@@ -73,9 +75,15 @@ export function StudioLeftRail({ project, studioName, logoUrl }: { project: Proj
           </NavLink>
         ))}
       </nav>
+      </div>
 
-      {/* clock / weather */}
-      <RailClock />
+      {/* Card 2 — clock / date / weather (its own card) */}
+      <div
+        className="rounded-2xl border border-[#26262c] bg-black/55 backdrop-blur-xl"
+        style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
+      >
+        <RailClock />
+      </div>
     </div>
   );
 }
@@ -100,7 +108,7 @@ function RailClock() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="border-t border-white/8 px-3.5 py-3">
+    <div className="px-3.5 py-3">
       <div className="font-apple text-[20px] text-bone-50">
         {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
       </div>

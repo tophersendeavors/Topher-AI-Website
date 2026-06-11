@@ -125,14 +125,54 @@ export function StudioLotHome() {
 // ---------------------------------------------------------------------------
 
 function LotEnvironment({ image, studioName }: { image: string | null; studioName: string }) {
-  if (image) {
-    return (
-      <>
-        <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.45), transparent 30%, rgba(0,0,0,0.25) 70%, rgba(0,0,0,0.75))" }} />
-      </>
-    );
-  }
+  // Drop a Kling/any render into frontend/public/studio/ as lot.mp4 (living
+  // lot) or lot.jpg (still). It overlays the CSS scene; if absent, onError
+  // falls back so the lot is never blank.
+  const [videoFailed, setVideoFailed] = useState(false);
+  const [imgFailed, setImgFailed] = useState(false);
+  const overlayGrad = (
+    <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.45), transparent 30%, rgba(0,0,0,0.25) 70%, rgba(0,0,0,0.78))" }} />
+  );
+
+  return (
+    <div className="absolute inset-0">
+      {/* base scene — always present so there is never a blank lot */}
+      <CssLot studioName={studioName} />
+
+      {/* preferred: a stored render (per-studio) */}
+      {image && !imgFailed && (
+        <>
+          <img src={image} alt="" onError={() => setImgFailed(true)} className="absolute inset-0 h-full w-full object-cover" />
+          {overlayGrad}
+        </>
+      )}
+
+      {/* else: a dropped-in living lot video, then a still */}
+      {!image && !videoFailed && (
+        <>
+          <video
+            src="/studio/lot.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            onError={() => setVideoFailed(true)}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {overlayGrad}
+        </>
+      )}
+      {!image && videoFailed && !imgFailed && (
+        <>
+          <img src="/studio/lot.jpg" alt="" onError={() => setImgFailed(true)} className="absolute inset-0 h-full w-full object-cover" />
+          {overlayGrad}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CssLot({ studioName }: { studioName: string }) {
   return (
     <div className="absolute inset-0">
       {/* sky → dusk → ground */}

@@ -35,7 +35,7 @@ const STATUS_PROGRESS: Record<Project["status"], number> = {
 
 export function StudioSidePanel({ project }: { project: Project | null }) {
   return (
-    <div className="absolute right-4 top-24 bottom-[168px] z-20 hidden w-[300px] flex-col gap-3 overflow-y-auto pr-0.5 lg:flex">
+    <div className="absolute right-4 bottom-4 z-20 hidden max-h-[calc(100vh-7rem)] w-[272px] flex-col gap-3 overflow-y-auto pr-0.5 lg:flex">
       <FeaturedProjectCard project={project} />
       <StudioTeamCard projectId={project?.id ?? null} />
       <UpcomingEventsCard />

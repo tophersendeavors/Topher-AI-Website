@@ -313,8 +313,8 @@ const ROOMS = [
 
 function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20">
-      <div className="mx-auto max-w-6xl px-5 pb-4">
+    <div className="absolute inset-x-0 bottom-0 z-20 lg:right-[300px]">
+      <div className="px-4 pb-4">
         <div
           className="rounded-2xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl"
           style={{ boxShadow: "0 -10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}

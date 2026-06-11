@@ -333,9 +333,10 @@ function RoomImageCard({ room, to }: { room: (typeof ROOMS)[number]; to: string 
   return (
     <Link
       to={to}
-      className="group relative min-w-[150px] flex-1 overflow-hidden rounded-xl border border-white/8 transition-all hover:border-[#d8b15a]/55"
+      className="group flex min-w-[150px] flex-1 flex-col overflow-hidden rounded-xl border border-white/8 bg-white/[0.02] transition-all hover:border-[#d8b15a]/55"
     >
-      <div className="relative h-[108px] w-full">
+      {/* image — text lives BELOW it, never over it */}
+      <div className="h-[150px] w-full overflow-hidden">
         {!failed ? (
           <img
             src={`/studio/rooms/${room.slug}.png`}
@@ -353,13 +354,11 @@ function RoomImageCard({ room, to }: { room: (typeof ROOMS)[number]; to: string 
             <span className="text-[8.5px] uppercase tracking-wide text-bone-600">image</span>
           </div>
         )}
-        {/* legibility gradient */}
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.88))" }} />
-        {/* label */}
-        <div className="absolute inset-x-0 bottom-0 p-2.5">
-          <div className="text-[12.5px] font-medium text-bone-50">{room.label}</div>
-          <div className="text-[10px]" style={gold}>{room.sub}</div>
-        </div>
+      </div>
+      {/* centered label band */}
+      <div className="px-2 py-2.5 text-center">
+        <div className="text-[14px] font-semibold leading-tight text-bone-50">{room.label}</div>
+        <div className="mt-0.5 text-[10.5px] leading-tight" style={gold}>{room.sub}</div>
       </div>
     </Link>
   );

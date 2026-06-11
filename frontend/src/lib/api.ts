@@ -12,6 +12,10 @@ import type {
   StudioOwnerResponse,
   StudioPreferences,
   StudioRole,
+  WritersRoomResponse,
+  WritersRoomState,
+  SeatKind,
+  LivePermission,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -894,6 +898,30 @@ export const api = {
   listProjects: () => request<Project[]>("/projects"),
   getProject: (id: string) => request<Project>(`/projects/${id}`),
   deleteProject: (id: string) => request<undefined>(`/projects/${id}`, { method: "DELETE" }),
+
+  // Writers Room — seating + collaborator assignment
+  getWritersRoom: (projectId: string) =>
+    request<WritersRoomResponse>(`/projects/${projectId}/writers-room`),
+  assignWritersRoomSeat: (
+    projectId: string,
+    seatId: string,
+    body: {
+      kind: SeatKind;
+      profileId?: string;
+      name?: string;
+      email?: string;
+      role?: string;
+      permission?: LivePermission;
+    }
+  ) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/seats/${seatId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  clearWritersRoomSeat: (projectId: string, seatId: string) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/seats/${seatId}`, {
+      method: "DELETE",
+    }),
   createProject: (
     body: Partial<Project> & { projectType?: string; redevTemplateId?: string }
   ) => request<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),

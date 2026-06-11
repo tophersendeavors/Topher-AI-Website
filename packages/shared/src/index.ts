@@ -11,6 +11,7 @@ export * from "./sound";
 export * from "./audienceRead";
 export * from "./humanReadPipeline";
 export * from "./studio";
+export * from "./writersRoom";
 export * from "./shotList";
 export * from "./trailer";
 export * from "./productionPackage";

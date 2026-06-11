@@ -55,11 +55,12 @@ function AppRoutes() {
           <Route path="studio/owner" element={<StudioOwnerPage />} />
           <Route path="studio/build" element={<StudioBuilderPage />} />
           <Route path="studio/projects" element={<StudioProjectsPage />} />
+          {/* Writers Room is an immersive place — full-bleed, no dashboard chrome. */}
+          <Route path="projects/:projectId/writers-room" element={<WritersRoomPage />} />
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/studio" replace />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectOverviewPage />} />
-            <Route path="projects/:projectId/writers-room" element={<WritersRoomPage />} />
             <Route path="projects/:projectId/character-bible" element={<CharacterBiblePage />} />
             <Route path="projects/:projectId/story-bible" element={<StoryBiblePage />} />
             <Route path="projects/:projectId/episodes" element={<EpisodesPage />} />

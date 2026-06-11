@@ -1,362 +1,437 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { Gavel, Send, Sparkles } from "lucide-react";
-import {
-  AGENT_PROFILES,
-  AGENT_ROLES,
-  type AgentRole,
-  type RoomMessage,
+  ChevronLeft, Plus, X, PenLine, Wand2, UserPlus, ArrowRight, Loader2,
+  ClipboardCheck, Crosshair,
+} from "lucide-react";
+import type {
+  AiCreativeProfile,
+  AiWriterProfile,
+  LivePermission,
+  QualityAgent,
+  SeatKind,
+  WritersRoomResponse,
+  WritersRoomSeat,
 } from "@toburt/shared";
+import { LIVE_PERMISSION_LABELS, LIVE_PERMISSIONS } from "@toburt/shared";
 import { api } from "@/lib/api";
-import { useApprovalsStream, useRoomStream } from "@/lib/realtime";
-import { hasSupabaseEnv } from "@/lib/supabase";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { Panel } from "@/components/ui/Panel";
-import { Button } from "@/components/ui/Button";
-import { AgentAvatar, AgentBadge } from "@/components/agents/AgentAvatar";
+
+const GOLD = "#d8b15a";
+const gold = { color: GOLD };
+
+// Chair positions over /studio/rooms/writers-room.jpg, as % of the frame.
+// HEAD = the lit executive chair at the far end (the lead writer).
+// SEATS = the six dark chairs down the two long sides of the table.
+// Tune these live with the debug overlay (Crosshair button, bottom-right).
+const HEAD = { top: "53%", left: "50%" };
+const SEATS: Array<{ seatId: string; top: string; left: string }> = [
+  { seatId: "seat-1", top: "57.3%", left: "28.1%" }, // left, nearest head
+  { seatId: "seat-2", top: "57.3%", left: "71.2%" }, // right, nearest head
+  { seatId: "seat-3", top: "60.8%", left: "24.1%" }, // left, middle
+  { seatId: "seat-4", top: "62.4%", left: "74.6%" }, // right, middle
+  { seatId: "seat-5", top: "63.8%", left: "19.6%" }, // left, near
+  { seatId: "seat-6", top: "67.1%", left: "79.7%" }, // right, near
+];
 
 export function WritersRoomPage() {
   const { projectId } = useParams<{ projectId: string }>();
   if (!projectId) return null;
   const qc = useQueryClient();
+  const projectQ = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
+  const roomQ = useQuery({ queryKey: ["writers-room", projectId], queryFn: () => api.getWritersRoom(projectId) });
+  const [assigning, setAssigning] = useState<string | null>(null);
+  const [bench, setBench] = useState(false);
+  const [debug, setDebug] = useState(typeof window !== "undefined" && window.location.search.includes("debug"));
+  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
 
-  const project = useQuery({
-    queryKey: ["project", projectId],
-    queryFn: () => api.getProject(projectId),
+  const seed = (state: WritersRoomResponse["state"]) =>
+    qc.setQueryData(["writers-room", projectId], (prev: WritersRoomResponse | undefined) =>
+      prev ? { ...prev, state } : prev
+    );
+  const clearSeat = useMutation({
+    mutationFn: (seatId: string) => api.clearWritersRoomSeat(projectId, seatId),
+    onSuccess: (r) => seed(r.state),
   });
-  const room = useRoomStream(projectId);
-  const approvals = useApprovalsStream(projectId);
 
-  const [active, setActive] = useState<AgentRole>("showrunner");
-  const [draft, setDraft] = useState("");
-  const [arbitrate, setArbitrate] = useState(false);
+  const room = roomQ.data;
+  const seatById = new Map((room?.state.seats ?? []).map((s) => [s.seatId, s]));
 
-  const post = useMutation({
-    mutationFn: () => api.postRoomMessage(projectId, { body: draft }),
-    onSuccess: () => {
-      setDraft("");
-      qc.invalidateQueries({ queryKey: ["room", projectId] });
-    },
-  });
-  const invoke = useMutation<unknown, Error, void>({
-    mutationFn: async () => {
-      if (arbitrate) {
-        return await api.arbitrateAgent({
-          projectId,
-          role: active,
-          input: agentSeedInput(active, draft),
-        });
-      }
-      return await api.invokeAgent({
-        projectId,
-        role: active,
-        input: agentSeedInput(active, draft),
-      });
-    },
-    onSuccess: () => {
-      setDraft("");
-      qc.invalidateQueries({ queryKey: ["room", projectId] });
-    },
-  });
+  const onRoomClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!debug) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = +(((e.clientX - r.left) / r.width) * 100).toFixed(1);
+    const y = +(((e.clientY - r.top) / r.height) * 100).toFixed(1);
+    setCursor({ x, y });
+    // eslint-disable-next-line no-console
+    console.log(`[writers-room seat] left: "${x}%", top: "${y}%"`);
+  };
 
   return (
-    <div className="space-y-6 pb-10">
-      <PageHeader
-        eyebrow="Writers Room"
-        title={project.data?.title ?? "Writers Room"}
-        description="The agents collaborate live. Pick a participant, post a prompt, or arbitrate."
-      />
+    <div className="relative h-screen w-full overflow-hidden bg-black" onClick={onRoomClick}>
+      {/* room plate */}
+      <img src="/studio/rooms/writers-room.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 30%, transparent 40%, rgba(0,0,0,0.55))" }} />
 
-      <div className="grid grid-cols-1 gap-6 px-8 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-        <Panel eyebrow="Participants" title="Agents in the room">
-          <ul className="space-y-2">
-            {AGENT_ROLES.map((r) => (
-              <li key={r}>
-                <button
-                  onClick={() => setActive(r)}
-                  className={`flex w-full items-start gap-3 rounded-lg border border-white/8 p-2.5 text-left transition-colors ${
-                    active === r
-                      ? "bg-white/[0.06]"
-                      : "bg-white/[0.02] hover:bg-white/[0.04]"
-                  }`}
-                >
-                  <AgentAvatar role={r} size={32} />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-bone-50">
-                      {AGENT_PROFILES[r].label}
-                    </div>
-                    <div className="line-clamp-2 text-xs text-bone-400">
-                      {AGENT_PROFILES[r].description}
-                    </div>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-
-        <Panel
-          eyebrow="Transcript"
-          title="Live"
-          actions={
-            <span
-              className="chip"
-              title={
-                hasSupabaseEnv()
-                  ? "Subscribed to Supabase Realtime channel room:{projectId}"
-                  : "Local dev — polling fallback (Supabase env not set)"
-              }
-            >
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-              {hasSupabaseEnv() ? "streaming" : "polling"}
-            </span>
-          }
-        >
-          <div className="max-h-[58vh] space-y-3 overflow-y-auto pr-2">
-            {room.isLoading ? (
-              <div className="h-24 animate-pulse-soft rounded-lg bg-white/[0.03]" />
-            ) : (room.data ?? []).length === 0 ? (
-              <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] p-6 text-center text-sm text-bone-400">
-                The room is quiet. Send a prompt to {AGENT_PROFILES[active].label} below.
-              </div>
-            ) : (
-              (room.data ?? []).map((m) => <RoomMessageRow key={m.id} m={m} />)
-            )}
+      {/* breadcrumb / exit */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-5">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-lg bg-black/35 px-3 py-1.5 backdrop-blur-sm">
+          <Link to="/studio/projects" className="text-bone-300 hover:text-bone-100"><ChevronLeft className="h-4 w-4" /></Link>
+          <div className="leading-tight">
+            <div className="text-[9px] uppercase tracking-[0.28em]" style={gold}>Writers Room</div>
+            <div className="text-[12.5px] text-bone-50">{projectQ.data?.title ?? "—"}</div>
           </div>
+        </div>
+        <div className="pointer-events-auto flex items-center gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); setBench(true); }}
+            className="flex items-center gap-1.5 rounded-lg border border-[#26262c] bg-black/40 px-3 py-1.5 text-[11.5px] text-bone-200 backdrop-blur-sm hover:border-[#d8b15a]/45"
+          >
+            <ClipboardCheck className="h-3.5 w-3.5" style={gold} /> Review Bench
+          </button>
+        </div>
+      </div>
 
-          <div className="mt-4 border-t border-white/[0.06] pt-4">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <AgentBadge role={active} />
-              <span className="text-xs text-bone-400">will respond</span>
-              <label
-                className={`ml-auto flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                  arbitrate
-                    ? "border-ember-700/60 bg-ember-950/30 text-ember-100"
-                    : "border-white/10 text-bone-300 hover:bg-white/[0.04]"
-                }`}
-                title="Routes the response through the Showrunner. The agent can be approved, vetoed, or asked to revise — automatically."
-              >
-                <input
-                  type="checkbox"
-                  className="hidden"
-                  checked={arbitrate}
-                  onChange={(e) => setArbitrate(e.target.checked)}
-                />
-                <Gavel className="h-3.5 w-3.5" />
-                Showrunner arbitration {arbitrate ? "on" : "off"}
-              </label>
-            </div>
-            <div className="flex items-end gap-2">
-              <textarea
-                className="input min-h-[72px] resize-y"
-                placeholder={`Prompt ${AGENT_PROFILES[active].label}…`}
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-              />
-              <div className="flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => post.mutate()}
-                  disabled={!draft.trim() || post.isPending}
-                >
-                  <Send className="h-4 w-4" />
-                  Post
-                </Button>
-                <Button
-                  onClick={() => invoke.mutate()}
-                  disabled={!draft.trim() || invoke.isPending}
-                >
-                  {arbitrate ? (
-                    <Gavel className="h-4 w-4" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  )}
-                  {arbitrate ? "Arbitrate" : "Invoke"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Panel>
+      {/* head seat — the lead writer */}
+      <HeadSeat head={room?.head ?? null} />
 
-        <Panel eyebrow="Decisions" title="Pending approvals">
-          {approvals.isLoading ? (
-            <div className="h-16 animate-pulse-soft rounded-lg bg-white/[0.03]" />
-          ) : (approvals.data ?? []).length === 0 ? (
-            <div className="text-sm text-bone-400">No open approvals.</div>
-          ) : (
-            <ul className="space-y-2.5">
-              {approvals.data!.map((a) => (
-                <li
-                  key={a.id}
-                  className="rounded-md border border-amber-700/40 bg-amber-950/20 p-3"
-                >
-                  <div className="text-sm text-amber-100">
-                    {a.target_kind === "artifact"
-                      ? `Stage artifact (${a.stage_id})`
-                      : a.target_kind}
-                  </div>
-                  <div className="mt-1 text-xs text-amber-200/70">
-                    {new Date(a.created_at).toLocaleString()}
-                  </div>
-                  <div className="mt-2 flex gap-2">
-                    <ApproveBtn id={a.id} projectId={projectId} ok />
-                    <ApproveBtn id={a.id} projectId={projectId} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+      {/* assignable co-writer seats */}
+      {SEATS.map((slot) => (
+        <ChairMarker
+          key={slot.seatId}
+          slot={slot}
+          seat={seatById.get(slot.seatId) ?? null}
+          debug={debug}
+          onAssign={() => setAssigning(slot.seatId)}
+          onClear={() => clearSeat.mutate(slot.seatId)}
+          clearing={clearSeat.isPending}
+        />
+      ))}
+
+      {/* objective strip */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-5">
+        <div className="pointer-events-auto flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-[#26262c] bg-black/45 px-5 py-2.5 text-[11.5px] backdrop-blur-md">
+          <span><span className="text-bone-500">Current Room · </span><span style={gold}>Writers Room</span></span>
+          <span className="text-bone-300"><span className="text-bone-500">Objective · </span>Reach a final approved draft</span>
+          <span className="inline-flex items-center gap-1 text-bone-300"><span className="text-bone-500">Next ·</span> Creative Room <ArrowRight className="h-3 w-3" style={gold} /></span>
+        </div>
+      </div>
+
+      {/* debug toggle + HUD */}
+      <button
+        onClick={(e) => { e.stopPropagation(); setDebug((d) => !d); }}
+        className="absolute bottom-5 right-5 z-40 flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] backdrop-blur-sm"
+        style={debug ? { borderColor: GOLD, color: GOLD, background: "rgba(0,0,0,0.5)" } : { borderColor: "#26262c", color: "#9a927e", background: "rgba(0,0,0,0.4)" }}
+        title="Toggle seat-tuning overlay"
+      >
+        <Crosshair className="h-3.5 w-3.5" /> Seats
+      </button>
+      {debug && (
+        <div className="pointer-events-none absolute bottom-16 right-5 z-40 rounded-lg border border-[#d8b15a]/40 bg-black/70 px-3 py-2 font-mono text-[11px] text-bone-200 backdrop-blur-sm">
+          <div style={gold}>SEAT TUNING — click a chair to read its %</div>
+          <div>head left: {HEAD.left} top: {HEAD.top}</div>
+          {cursor && <div className="mt-1 text-bone-50">clicked → left: "{cursor.x}%", top: "{cursor.y}%"</div>}
+          <div className="mt-1 text-bone-500">value also copied to console on click</div>
+        </div>
+      )}
+
+      {/* assign modal — writing team only */}
+      {assigning && room && (
+        <AssignModal
+          seatId={assigning}
+          aiWriter={room.aiWriter}
+          creatives={room.creatives}
+          projectId={projectId}
+          onClose={() => setAssigning(null)}
+          onAssigned={(state) => { seed(state); setAssigning(null); }}
+        />
+      )}
+
+      {/* review bench drawer — quality staff, NOT table writers */}
+      {bench && room && <ReviewBench staff={room.qualityStaff} onClose={() => setBench(false)} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+function HeadSeat({ head }: { head: WritersRoomResponse["head"] }) {
+  return (
+    <div className="absolute z-20 -translate-x-1/2 -translate-y-1/2 text-center" style={HEAD}>
+      <Avatar name={head?.name ?? "You"} url={head?.avatarUrl ?? null} size={56} ring />
+      <div className="mt-1 rounded-md bg-black/45 px-2 py-1 backdrop-blur-sm">
+        <div className="text-[12px] font-medium text-bone-50">{head?.name ?? "You"}</div>
+        <div className="text-[9px] uppercase tracking-wide" style={gold}>{head?.roleLabel ?? "Lead Writer"}</div>
       </div>
     </div>
   );
 }
 
-function RoomMessageRow({ m }: { m: RoomMessage }) {
-  const isAgent = m.author_kind === "agent";
-  const isUser = m.author_kind === "user";
+function ChairMarker({
+  slot, seat, debug, onAssign, onClear, clearing,
+}: {
+  slot: { seatId: string; top: string; left: string };
+  seat: WritersRoomSeat | null;
+  debug: boolean;
+  onAssign: () => void;
+  onClear: () => void;
+  clearing: boolean;
+}) {
+  const debugBadge = debug && (
+    <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-black/80 px-1 font-mono text-[9px]" style={gold}>
+      {slot.seatId} · {slot.left},{slot.top}
+    </span>
+  );
+
+  if (!seat) {
+    // The icon is centered exactly on the chair coordinate; the label floats
+    // below without shifting the icon off-center.
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onAssign(); }}
+        className="group absolute z-20 -translate-x-1/2 -translate-y-1/2"
+        style={{ top: slot.top, left: slot.left }}
+      >
+        {debugBadge}
+        <span className="grid h-14 w-14 place-items-center rounded-full border-2 border-dashed transition-all group-hover:scale-110" style={{ borderColor: `${GOLD}99`, color: GOLD, boxShadow: `0 0 22px ${GOLD}66` }}>
+          <Plus className="h-7 w-7" />
+        </span>
+        <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-black/55 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-bone-300 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+          Add co-writer
+        </span>
+      </button>
+    );
+  }
+  // Filled: avatar centered on the chair, name card floats below.
   return (
-    <article
-      className={`flex gap-3 rounded-lg border border-white/8 bg-white/[0.02] p-3 ${
-        m.kind === "approval" ? "border-amber-700/50" : ""
-      }`}
-    >
-      {isAgent && m.author_role ? (
-        <AgentAvatar role={m.author_role as AgentRole} size={32} />
-      ) : (
-        <div className="grid h-8 w-8 place-items-center rounded-md bg-white/[0.06] text-xs text-bone-200">
-          {isUser ? "U" : "S"}
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-xs text-bone-400">
-          <span className="font-medium text-bone-200">
-            {isAgent
-              ? AGENT_PROFILES[m.author_role as AgentRole]?.label ?? m.author_role
-              : isUser
-                ? "You"
-                : "System"}
-          </span>
-          <span>•</span>
-          <span>{new Date(m.created_at).toLocaleTimeString()}</span>
-          {m.kind !== "message" && <span className="chip">{m.kind}</span>}
-        </div>
-        {m.body && (
-          <p className="mt-1 whitespace-pre-wrap text-sm text-bone-100">
-            {m.body}
-          </p>
-        )}
-        {m.payload != null && (
-          <details className="mt-2 text-xs text-bone-400">
-            <summary className="cursor-pointer">payload</summary>
-            <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-black/40 p-2 text-[11px] text-bone-200">
-              {JSON.stringify(m.payload, null, 2)}
-            </pre>
-          </details>
-        )}
+    <div className="group absolute z-20 -translate-x-1/2 -translate-y-1/2" style={{ top: slot.top, left: slot.left }}>
+      {debugBadge}
+      <div className="relative">
+        <Avatar name={seat.name} url={seat.avatarUrl} size={56} ring />
+        <button
+          onClick={(e) => { e.stopPropagation(); onClear(); }}
+          disabled={clearing}
+          className="absolute -right-1.5 -top-1.5 hidden rounded-full border border-white/20 bg-black/70 p-0.5 text-bone-300 hover:text-red-300 group-hover:block"
+          title="Remove from seat"
+        >
+          <X className="h-3 w-3" />
+        </button>
       </div>
-    </article>
+      <div className="absolute left-1/2 top-full mt-1 min-w-[120px] -translate-x-1/2 rounded-md bg-black/55 px-2 py-1 text-center backdrop-blur-sm">
+        <div className="truncate text-[11.5px] font-medium text-bone-50">{seat.name}</div>
+        <div className="truncate text-[9px] uppercase tracking-wide" style={gold}>{seat.roleLabel}</div>
+        <div className="truncate text-[9px] text-bone-400">{seat.status}</div>
+      </div>
+    </div>
   );
 }
 
-function ApproveBtn({
-  id,
-  projectId,
-  ok,
-}: {
-  id: string;
-  projectId: string;
-  ok?: boolean;
-}) {
-  const qc = useQueryClient();
-  const m = useMutation({
-    mutationFn: () => api.decideApproval(id, ok ? "approved" : "rejected"),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["approvals", projectId] });
-      qc.invalidateQueries({ queryKey: ["room", projectId] });
-    },
-  });
+function Avatar({ name, url, size, ring }: { name: string; url: string | null; size: number; ring?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const style = { width: size, height: size, borderColor: `${GOLD}88` } as React.CSSProperties;
+  if (url && !failed) {
+    return <img src={url} alt="" onError={() => setFailed(true)} className={"rounded-full border-2 object-cover " + (ring ? "shadow-[0_0_22px_rgba(216,177,90,0.4)]" : "")} style={style} />;
+  }
   return (
-    <button
-      className={`rounded-md border px-2 py-1 text-xs ${
-        ok
-          ? "border-emerald-700/50 text-emerald-300 hover:bg-emerald-950/40"
-          : "border-red-700/50 text-red-300 hover:bg-red-950/40"
-      }`}
-      onClick={() => m.mutate()}
-      disabled={m.isPending}
-    >
-      {ok ? "Approve" : "Reject"}
+    <div className={"grid place-items-center rounded-full border-2 font-apple " + (ring ? "shadow-[0_0_22px_rgba(216,177,90,0.4)]" : "")} style={{ ...style, color: GOLD, background: "rgba(0,0,0,0.55)", fontSize: size * 0.4 }}>
+      {(name.trim()[0] ?? "?").toUpperCase()}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Assign modal — the WRITING TEAM only (AI Writer · AI Creative · Live Co-Writer).
+// Quality/checks agents are NOT here; they live on the Review Bench.
+
+function AssignModal({
+  seatId, aiWriter, creatives, projectId, onClose, onAssigned,
+}: {
+  seatId: string;
+  aiWriter: AiWriterProfile;
+  creatives: AiCreativeProfile[];
+  projectId: string;
+  onClose: () => void;
+  onAssigned: (state: WritersRoomResponse["state"]) => void;
+}) {
+  const [tab, setTab] = useState<SeatKind>("ai_writer");
+  const assign = useMutation({
+    mutationFn: (body: Parameters<typeof api.assignWritersRoomSeat>[2]) =>
+      api.assignWritersRoomSeat(projectId, seatId, body),
+    onSuccess: (r) => onAssigned(r.state),
+  });
+
+  const TABS: Array<{ k: SeatKind; label: string; Icon: typeof PenLine }> = [
+    { k: "ai_writer", label: "AI Writer", Icon: PenLine },
+    { k: "ai_creative", label: "AI Creative", Icon: Wand2 },
+    { k: "live_person", label: "Live Co-Writer", Icon: UserPlus },
+  ];
+  const prompt =
+    tab === "ai_writer" ? "Let the studio write with you."
+    : tab === "ai_creative" ? "Choose a creative writing lens."
+    : "Invite or select a writer.";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex max-h-[84vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#d8b15a]/25 bg-[#0b0b0e]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-[#26262c] px-5 py-3.5">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.28em]" style={gold}>Writing Team</div>
+            <div className="font-apple text-lg text-bone-50">Who is writing with you?</div>
+            <div className="text-[11.5px] text-bone-400">{prompt}</div>
+          </div>
+          <button onClick={onClose} className="text-bone-400 hover:text-bone-100"><X className="h-5 w-5" /></button>
+        </div>
+
+        <div className="flex gap-1 border-b border-[#26262c] px-3 pt-2">
+          {TABS.map((t) => (
+            <button
+              key={t.k}
+              onClick={() => setTab(t.k)}
+              className="flex items-center gap-1.5 rounded-t-lg px-3 py-2 text-[12.5px] transition-colors"
+              style={tab === t.k ? { color: GOLD, borderBottom: `2px solid ${GOLD}` } : { color: "#9a927e" }}
+            >
+              <t.Icon className="h-3.5 w-3.5" /> {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {assign.isError && <p className="mb-2 text-[12px] text-red-300">{(assign.error as Error).message}</p>}
+
+          {tab === "ai_writer" && (
+            <button
+              onClick={() => assign.mutate({ kind: "ai_writer" })}
+              disabled={assign.isPending}
+              className="flex w-full items-start gap-3 rounded-xl border border-[#26262c] bg-white/[0.015] p-4 text-left transition-colors hover:border-[#d8b15a]/45 disabled:opacity-60"
+            >
+              <Avatar name={aiWriter.name} url={aiWriter.avatarUrl} size={48} />
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] text-bone-50">{aiWriter.name}</div>
+                <div className="text-[11px]" style={gold}>{aiWriter.role}</div>
+                <div className="mt-1 text-[12px] text-bone-300">{aiWriter.description}</div>
+              </div>
+              {assign.isPending ? <Loader2 className="mt-1 h-4 w-4 animate-spin text-bone-400" /> : <ArrowRight className="mt-1 h-4 w-4" style={gold} />}
+            </button>
+          )}
+
+          {tab === "ai_creative" && (
+            <div className="grid gap-2">
+              {creatives.map((c) => (
+                <CreativeRow key={c.id} c={c} busy={assign.isPending} onPick={() => assign.mutate({ kind: "ai_creative", profileId: c.id })} />
+              ))}
+            </div>
+          )}
+
+          {tab === "live_person" && <LivePersonForm busy={assign.isPending} onAdd={(body) => assign.mutate(body)} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreativeRow({ c, busy, onPick }: { c: AiCreativeProfile; busy: boolean; onPick: () => void }) {
+  return (
+    <button onClick={onPick} disabled={busy} className="flex items-start gap-3 rounded-xl border border-[#26262c] bg-white/[0.015] p-3 text-left transition-colors hover:border-[#d8b15a]/45 disabled:opacity-60">
+      <Avatar name={c.name} url={c.avatarUrl} size={44} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="text-[13.5px] text-bone-50">{c.name}</span>
+          <span className="text-[10.5px]" style={gold}>{c.role}</span>
+        </div>
+        <div className="mt-0.5 truncate text-[11.5px] text-bone-300">{c.style}</div>
+        <div className="mt-1 text-[11px] italic text-bone-400">{c.sampleVoice}</div>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {c.strengths.slice(0, 4).map((s) => (
+            <span key={s} className="rounded-full border border-[#26262c] px-1.5 py-0.5 text-[9.5px] text-bone-400">{s}</span>
+          ))}
+        </div>
+      </div>
     </button>
   );
 }
 
-function agentSeedInput(role: AgentRole, prompt: string): unknown {
-  switch (role) {
-    case "concept":
-      return { idea: prompt };
-    case "showrunner":
-      return { intent: "respond", candidate: { note: prompt } };
-    case "character":
-      // Pass the full prompt as `brief` so the agent can extract name +
-      // occupation + age etc. from a natural-language description. Also
-      // pre-seed `name` with the first comma-separated token as a safety
-      // net if `brief` is sparse.
-      return {
-        intent: "create",
-        brief: prompt,
-        seed: { name: (prompt.split(",")[0] ?? prompt).trim() || "Unnamed" },
-      };
-    case "world":
-      return { intent: "build", draft: prompt };
-    case "plot":
-      return { intent: "treatment", brief: prompt };
-    case "scene":
-      return {
-        intent: "draft",
-        brief: {
-          slugline: "INT. UNKNOWN - DAY",
-          goal: prompt,
-          conflict: "TBD",
-          turn: "TBD",
-          characters: [],
-        },
-      };
-    case "dialogue":
-      return { intent: "pass", sceneFountain: prompt, characters: [] };
-    case "script_doctor":
-      return { scriptId: "00000000-0000-0000-0000-000000000000", focus: "all" };
-    case "continuity":
-      return { scope: {} };
-    case "producer":
-      return { scriptId: "00000000-0000-0000-0000-000000000000" };
-    // -------- Emotional Intelligence Layer --------
-    case "emotional_truth":
-      return {
-        sceneFountain: prompt || "INT. UNKNOWN - DAY\n\nThe room is quiet.",
-        characters: [],
-        allowStylistic: false,
-      };
-    case "subtext":
-      return {
-        sceneFountain: prompt || "JANE\nI feel sad.",
-        characters: [],
-        preferAction: true,
-      };
-    case "character_wound":
-      return { intent: "create", seed: prompt };
-    case "behavior":
-      return {
-        sceneFountain: prompt || "JANE\nI'm angry.",
-        characters: [],
-        replaceStatedEmotion: true,
-      };
-    case "relationship_tension":
-      return { intent: "map", sceneFountain: prompt };
-  }
+function LivePersonForm({
+  busy, onAdd,
+}: {
+  busy: boolean;
+  onAdd: (body: { kind: "live_person"; name: string; email?: string; role?: string; permission?: LivePermission }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("");
+  const [permission, setPermission] = useState<LivePermission>("co_writer");
+  const input = "w-full rounded-md border border-[#26262c] bg-black/30 px-3 py-2 text-[13px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none";
+  return (
+    <div className="space-y-3">
+      <p className="text-[11.5px] text-bone-400">
+        Add a real writer to the team. They become a reusable profile in your Writer Directory — their photo, credits and specialties are captured when they accept the invite.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <input className={input} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className={input} placeholder="Email (for invite)" value={email} onChange={(e) => setEmail(e.target.value)} />
+      </div>
+      <input className={input} placeholder="Role — e.g. Co-writer, Staff Writer" value={role} onChange={(e) => setRole(e.target.value)} />
+      <div>
+        <label className="text-[10px] uppercase tracking-wide text-bone-500">Permission</label>
+        <select className={input + " mt-1"} value={permission} onChange={(e) => setPermission(e.target.value as LivePermission)}>
+          {LIVE_PERMISSIONS.map((p) => <option key={p} value={p} className="bg-[#0b0b0e]">{LIVE_PERMISSION_LABELS[p]}</option>)}
+        </select>
+      </div>
+      <button
+        onClick={() => onAdd({ kind: "live_person", name: name.trim(), email: email.trim() || undefined, role: role.trim() || undefined, permission })}
+        disabled={busy || !name.trim()}
+        className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black disabled:opacity-50"
+        style={{ background: GOLD }}
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Invite to the team
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Review Bench — the studio's quality / script-improvement staff. These are
+// checks that activate along the pipeline; they are NOT co-writers.
+
+function ReviewBench({ staff, onClose }: { staff: QualityAgent[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex h-full w-full max-w-md flex-col overflow-hidden border-l border-[#26262c] bg-[#0b0b0e]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between border-b border-[#26262c] px-5 py-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.28em]" style={gold}>Studio Script Staff</div>
+            <div className="font-apple text-lg text-bone-50">Review Bench</div>
+            <div className="mt-0.5 text-[11.5px] text-bone-400">Which studio specialists will review this draft? They activate during the writing pipeline — they don't sit at the table.</div>
+          </div>
+          <button onClick={onClose} className="text-bone-400 hover:text-bone-100"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+          {staff.map((a) => (
+            <div key={a.id} className="flex items-center gap-3 rounded-xl border border-[#26262c] bg-white/[0.015] p-3">
+              <Avatar name={a.name} url={a.avatarUrl} size={40} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] text-bone-50">{a.name}</div>
+                <div className="truncate text-[10.5px]" style={gold}>{a.role} · activates in {a.stage}</div>
+                <div className="truncate text-[10.5px] text-bone-400">{a.specialty}</div>
+              </div>
+              <StatusPill status={a.status} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: QualityAgent["status"] }) {
+  const map = {
+    pending: { label: "Pending", color: "#9a927e", bg: "rgba(154,146,126,0.12)" },
+    active: { label: "Active", color: GOLD, bg: "rgba(216,177,90,0.14)" },
+    complete: { label: "Done", color: "#7fd1a4", bg: "rgba(127,209,164,0.12)" },
+  }[status];
+  return (
+    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px]" style={{ color: map.color, background: map.bg }}>
+      {map.label}
+    </span>
+  );
 }

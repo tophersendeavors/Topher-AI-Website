@@ -20,18 +20,25 @@ import { api } from "@/lib/api";
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
 
+// Natural size of writers-room.jpg — the stage locks to this ratio so seat
+// percentages map to fixed points on the plate regardless of window size.
+const PLATE_W = 2200;
+const PLATE_H = 1242;
+
 // Chair positions over /studio/rooms/writers-room.jpg, as % of the frame.
 // HEAD = the lit executive chair at the far end (the lead writer).
 // SEATS = the six dark chairs down the two long sides of the table.
 // Tune these live with the debug overlay (Crosshair button, bottom-right).
 const HEAD = { top: "53%", left: "50%" };
 const SEATS: Array<{ seatId: string; top: string; left: string }> = [
-  { seatId: "seat-1", top: "57.3%", left: "28.1%" }, // left, nearest head
-  { seatId: "seat-2", top: "57.3%", left: "71.2%" }, // right, nearest head
-  { seatId: "seat-3", top: "60.8%", left: "24.1%" }, // left, middle
-  { seatId: "seat-4", top: "62.4%", left: "74.6%" }, // right, middle
-  { seatId: "seat-5", top: "63.8%", left: "19.6%" }, // left, near
-  { seatId: "seat-6", top: "67.1%", left: "79.7%" }, // right, near
+  // Image-space %, anchored to the plate (stage-locked). Paired rows share a
+  // top so each side aligns: 1/2, 3/4, 5/6 — equal 8.5% spacing down the table.
+  { seatId: "seat-1", top: "56.5%", left: "29.1%" }, // left, nearest head
+  { seatId: "seat-2", top: "56.5%", left: "72.2%" }, // right, nearest head
+  { seatId: "seat-3", top: "65%", left: "25.1%" },   // left, middle
+  { seatId: "seat-4", top: "65%", left: "75.6%" },   // right, middle
+  { seatId: "seat-5", top: "73.5%", left: "20.6%" }, // left, near
+  { seatId: "seat-6", top: "73.5%", left: "80.7%" }, // right, near
 ];
 
 export function WritersRoomPage() {
@@ -68,10 +75,38 @@ export function WritersRoomPage() {
   };
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-black" onClick={onRoomClick}>
-      {/* room plate */}
-      <img src="/studio/rooms/writers-room.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 30%, transparent 40%, rgba(0,0,0,0.55))" }} />
+    <div className="relative h-screen w-full overflow-hidden bg-black">
+      {/* Aspect-locked stage: covers the viewport but keeps the plate's ratio,
+          so seat percentages always map to the SAME point on the image no
+          matter the window size (object-cover on the bare viewport would crop
+          and drift the seats off the chairs). Head + seats live in here. */}
+      <div
+        onClick={onRoomClick}
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        style={{
+          width: `max(100vw, calc(100vh * ${PLATE_W} / ${PLATE_H}))`,
+          height: `max(100vh, calc(100vw * ${PLATE_H} / ${PLATE_W}))`,
+        }}
+      >
+        <img src="/studio/rooms/writers-room.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="absolute inset-0" style={{ background: "radial-gradient(120% 90% at 50% 30%, transparent 40%, rgba(0,0,0,0.55))" }} />
+
+        {/* head seat — the lead writer */}
+        <HeadSeat head={room?.head ?? null} />
+
+        {/* assignable co-writer seats */}
+        {SEATS.map((slot) => (
+          <ChairMarker
+            key={slot.seatId}
+            slot={slot}
+            seat={seatById.get(slot.seatId) ?? null}
+            debug={debug}
+            onAssign={() => setAssigning(slot.seatId)}
+            onClear={() => clearSeat.mutate(slot.seatId)}
+            clearing={clearSeat.isPending}
+          />
+        ))}
+      </div>
 
       {/* breadcrumb / exit */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-5">
@@ -91,22 +126,6 @@ export function WritersRoomPage() {
           </button>
         </div>
       </div>
-
-      {/* head seat — the lead writer */}
-      <HeadSeat head={room?.head ?? null} />
-
-      {/* assignable co-writer seats */}
-      {SEATS.map((slot) => (
-        <ChairMarker
-          key={slot.seatId}
-          slot={slot}
-          seat={seatById.get(slot.seatId) ?? null}
-          debug={debug}
-          onAssign={() => setAssigning(slot.seatId)}
-          onClear={() => clearSeat.mutate(slot.seatId)}
-          clearing={clearSeat.isPending}
-        />
-      ))}
 
       {/* objective strip */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center p-5">

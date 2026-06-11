@@ -19,7 +19,19 @@ import type { Project } from "@toburt/shared";
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
 
-export function StudioLeftRail({ project, studioName, logoUrl }: { project: Project | null; studioName: string; logoUrl: string | null }) {
+export function StudioLeftRail({
+  project,
+  studioName,
+  logoUrl,
+  onLot,
+  shooting,
+}: {
+  project: Project | null;
+  studioName: string;
+  logoUrl: string | null;
+  onLot: number;
+  shooting: number;
+}) {
   const proj = (path: string) => (project ? `/projects/${project.id}/${path}` : "/projects");
   const items: Array<{ label: string; sub: string; Icon: typeof Film; to: string; end?: boolean }> = [
     { label: "Studio Lot", sub: "Overview", Icon: LayoutGrid, to: "/studio", end: true },
@@ -75,6 +87,12 @@ export function StudioLeftRail({ project, studioName, logoUrl }: { project: Proj
           </NavLink>
         ))}
       </nav>
+
+        {/* studio stats — moved here from the top-right, under the nav */}
+        <div className="flex items-center justify-around border-t border-white/8 px-2 py-2.5">
+          <RailStat label="On the lot" value={onLot} />
+          <RailStat label="Shooting" value={shooting} />
+        </div>
       </div>
 
       {/* Card 2 — clock / date / weather (its own card) */}
@@ -84,6 +102,15 @@ export function StudioLeftRail({ project, studioName, logoUrl }: { project: Proj
       >
         <RailClock />
       </div>
+    </div>
+  );
+}
+
+function RailStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="text-center">
+      <div className="font-apple text-xl" style={gold}>{value}</div>
+      <div className="text-[8.5px] uppercase tracking-wide text-bone-500">{label}</div>
     </div>
   );
 }

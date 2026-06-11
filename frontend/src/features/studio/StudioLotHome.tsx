@@ -70,7 +70,7 @@ export function StudioLotHome() {
       <LotEnvironment image={heroImage} studioName={studioName} />
 
       {/* ===== Left nav rail ===== */}
-      <StudioLeftRail project={featured} studioName={studioName} logoUrl={logoUrl} />
+      <StudioLeftRail project={featured} studioName={studioName} logoUrl={logoUrl} onLot={projects.length} shooting={inProduction} />
 
       {/* ===== Arrival header (overlaid on the lot) ===== */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 p-5">
@@ -93,10 +93,6 @@ export function StudioLotHome() {
 
         {/* right cluster */}
         <div className="pointer-events-auto absolute right-5 top-5 flex items-center gap-3">
-          <div className="hidden items-center gap-4 rounded-lg bg-black/30 px-3 py-1.5 backdrop-blur-sm sm:flex">
-            <Stat label="On the lot" value={projects.length} />
-            <Stat label="Shooting" value={inProduction} />
-          </div>
           <OwnerChip name={ownerName} role={owner?.role ?? null} avatarUrl={owner?.avatarUrl ?? null} title={owner?.creativeTwin?.titleLine} />
         </div>
       </div>
@@ -251,15 +247,6 @@ function StudioLogo({ logoUrl, name }: { logoUrl: string | null; name: string })
     );
   }
   return <img src={src} alt="" onError={() => setFailed(true)} className="h-9 w-9 object-contain" />;
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="text-center">
-      <div className="font-apple text-xl" style={gold}>{value}</div>
-      <div className="text-[8.5px] uppercase tracking-wide text-bone-500">{label}</div>
-    </div>
-  );
 }
 
 function OwnerChip({ name, role, avatarUrl, title }: { name: string; role: StudioRole | null; avatarUrl: string | null; title?: string }) {

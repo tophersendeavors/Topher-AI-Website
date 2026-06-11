@@ -106,7 +106,11 @@ function FeaturedProjectCard({ project }: { project: Project | null }) {
 }
 
 function FeaturedImage({ project }: { project: Project }) {
-  const sources = [project.cover_url ?? "", `/studio/projects/${project.id}.png`].filter(Boolean);
+  const sources = [
+    project.cover_url ?? "",
+    `/studio/projects/${project.id}.png`,
+    "/studio/projects/featured.png",
+  ].filter(Boolean);
   const [i, setI] = useState(0);
   const src = sources[i];
   if (!src) {
@@ -179,8 +183,8 @@ function TeamAvatar({ slug, name }: { slug: string; name: string }) {
 
 function UpcomingEventsCard() {
   return (
-    // Fixed height to match the Explore-the-Studio room cards.
-    <Card className="flex h-[156px] flex-col">
+    // Fixed height to match the Explore-the-Studio panel exactly.
+    <Card className="flex h-[200px] flex-col">
       <CardHeader
         title="Upcoming Events"
         action={<span className="cursor-default text-[10px] text-bone-500" title="Calendar coming soon">View Calendar</span>}

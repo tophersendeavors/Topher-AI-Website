@@ -323,14 +323,14 @@ function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
     <div className="absolute inset-x-0 bottom-0 z-20 lg:left-[212px] lg:right-[300px]">
       <div className="px-4 pb-4">
         <div
-          className="rounded-2xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl"
+          className="flex h-[200px] flex-col rounded-2xl border border-white/10 bg-black/45 p-3 backdrop-blur-xl"
           style={{ boxShadow: "0 -10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)" }}
         >
           <div className="mb-2 flex items-center gap-2 px-0.5">
             <span className="text-[10px] uppercase tracking-[0.3em]" style={gold}>Explore the Studio</span>
             <span className="text-[10px] text-bone-500">— walk inside</span>
           </div>
-          <div className="flex items-stretch gap-2.5 overflow-x-auto px-1 py-1.5">
+          <div className="flex min-h-0 flex-1 items-stretch gap-2.5 overflow-x-auto px-1 py-1.5">
             {ROOMS.map((r) => (
               <RoomImageCard key={r.label} room={r} to={featuredId ? `/projects/${featuredId}/${r.path}` : "/projects"} />
             ))}
@@ -348,8 +348,8 @@ function RoomImageCard({ room, to }: { room: (typeof ROOMS)[number]; to: string 
       to={to}
       className="group flex min-w-[150px] flex-1 flex-col overflow-hidden rounded-xl border border-[#26262c] bg-white/[0.015] transition-all duration-200 hover:scale-[1.04] hover:border-[#d8b15a]/60 hover:bg-white/[0.05] hover:shadow-[0_0_28px_rgba(216,177,90,0.28)]"
     >
-      {/* image (~3:2) — fixed height so the row matches the Upcoming Events card */}
-      <div className="h-[104px] w-full overflow-hidden">
+      {/* image fills the card height; the panel + Events card share one fixed height */}
+      <div className="min-h-0 w-full flex-1 overflow-hidden">
         {!failed ? (
           <img
             src={`/studio/rooms/${room.slug}.png`}

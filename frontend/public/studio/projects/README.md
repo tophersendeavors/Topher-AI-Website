@@ -1,8 +1,9 @@
-# Featured-project images (right rail)
+# Featured-project image (right rail)
 
-The Featured Project card uses, in order:
-  project.cover_url  →  /studio/projects/<projectId>.png  →  placeholder
+Easiest: drop ONE file named **featured.png** here and it shows immediately.
 
-Drop a 4:3 still named <projectId>.png to give a project a hero image without
-a cover_url. (Find the id in the project URL: /projects/<projectId>.)
-NO text baked in — the app overlays the project name.
+Full precedence the Featured Project card uses:
+  project.cover_url  →  /studio/projects/<projectId>.png  →  /studio/projects/featured.png  →  placeholder
+
+Use <projectId>.png to give a specific project its own image (id is in the URL:
+/projects/<projectId>). ~4:3, NO text baked in (the app overlays the name).

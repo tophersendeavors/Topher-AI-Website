@@ -13,20 +13,22 @@ import {
 import type { Project, StudioOwnerResponse, StudioRole } from "@toburt/shared";
 import { api } from "@/lib/api";
 import { StudioOwnerOnboarding } from "./StudioOwnerOnboarding";
+import { StudioSidePanel } from "./StudioSidePanel";
 
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
 
-/** Curated marker positions on the lot (desktop). Projects cycle through. */
+/** Curated marker positions on the lot (desktop). Projects cycle through.
+ *  Kept clear of the right rail (~right 320px) so stages aren't hidden. */
 const LOT_SPOTS = [
-  { top: "26%", left: "16%" },
-  { top: "30%", left: "70%" },
-  { top: "44%", left: "38%" },
-  { top: "37%", left: "85%" },
-  { top: "57%", left: "20%" },
-  { top: "50%", left: "62%" },
-  { top: "63%", left: "44%" },
-  { top: "33%", left: "49%" },
+  { top: "26%", left: "15%" },
+  { top: "29%", left: "58%" },
+  { top: "45%", left: "34%" },
+  { top: "38%", left: "67%" },
+  { top: "58%", left: "19%" },
+  { top: "52%", left: "50%" },
+  { top: "64%", left: "40%" },
+  { top: "33%", left: "44%" },
 ];
 
 export function StudioLotHome() {
@@ -59,6 +61,7 @@ export function StudioLotHome() {
   const studioName = approvedStudio?.name ?? "TOBURT STUDIOS";
   const tagline = approvedStudio?.tagline ?? "Where imagination becomes legacy.";
   const ownerName = owner?.name && owner.name !== "chris" ? owner.name : "Studio Owner";
+  const featured = projects[0] ?? null; // most recently updated active production
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-black">
@@ -119,8 +122,11 @@ export function StudioLotHome() {
         </Link>
       )}
 
+      {/* ===== Right rail — featured project · studio team · events ===== */}
+      <StudioSidePanel project={featured} />
+
       {/* ===== Enter the studio — the rooms (walk inside) ===== */}
-      <EnterTheStudio featuredId={projects[0]?.id ?? null} />
+      <EnterTheStudio featuredId={featured?.id ?? null} />
     </div>
   );
 }

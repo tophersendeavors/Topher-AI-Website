@@ -52,6 +52,17 @@ export async function getStudioOwner(userId: string): Promise<StudioOwnerIdentit
       (data?.user?.email ? data.user.email.split("@")[0] : "") ??
       "";
   }
+  // The avatar lives in profiles, NOT user_metadata — user_metadata rides
+  // inside the JWT, and a data-URL avatar there blows past the header size
+  // limit (HTTP 431). Read it back from profiles.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
+  const avatar = (profile?.avatar_url as string | null | undefined) ?? null;
+  owner.avatarUrl = avatar;
+  if (owner.creativeTwin) owner.creativeTwin = { ...owner.creativeTwin, avatarUrl: avatar };
   return owner;
 }
 
@@ -67,14 +78,8 @@ export async function saveStudioOwner(
   };
   next.creativeTwin = buildCreativeTwin(next);
 
-  // Merge into user_metadata, preserving every other key.
-  const meta = await loadUserMeta(userId);
-  const { error: upErr } = await supabase.auth.admin.updateUserById(userId, {
-    user_metadata: { ...meta, studioOwner: next },
-  });
-  if (upErr) throw new Error(`save studio owner failed: ${upErr.message}`);
-
-  // Mirror name + avatar to the profiles table (best-effort).
+  // Avatar (often a sizeable data URL) goes to profiles ONLY. Keeping it out
+  // of user_metadata keeps the JWT small (avoids HTTP 431 on every request).
   await supabase
     .from("profiles")
     .update({
@@ -84,5 +89,17 @@ export async function saveStudioOwner(
     })
     .eq("id", userId);
 
-  return next;
+  // Write a LIGHT copy to user_metadata — no avatar data anywhere in it.
+  const light: StudioOwnerIdentity = {
+    ...next,
+    avatarUrl: null,
+    creativeTwin: next.creativeTwin ? { ...next.creativeTwin, avatarUrl: null } : null,
+  };
+  const meta = await loadUserMeta(userId);
+  const { error: upErr } = await supabase.auth.admin.updateUserById(userId, {
+    user_metadata: { ...meta, studioOwner: light },
+  });
+  if (upErr) throw new Error(`save studio owner failed: ${upErr.message}`);
+
+  return next; // full identity (with avatar) for the caller/UI
 }

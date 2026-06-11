@@ -70,13 +70,13 @@ export function StudioLotHome() {
         <div className="pointer-events-auto flex items-center gap-2.5 rounded-lg bg-black/30 px-3 py-1.5 backdrop-blur-sm">
           <StudioLogo logoUrl={logoUrl} name={studioName} />
           <div>
-            <div className="font-serif text-lg tracking-[0.15em] text-bone-50">{studioName}</div>
+            <div className="font-apple text-lg tracking-[0.15em] text-bone-50">{studioName}</div>
             <div className="text-[9px] uppercase tracking-[0.3em]" style={gold}>{owner?.creativeTwin ? "Your studio" : "Studio Lot"}</div>
           </div>
         </div>
 
         <div className="pointer-events-auto text-center">
-          <div className="font-serif text-[26px] text-bone-50 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+          <div className="font-apple text-[26px] text-bone-50 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
             Welcome back, <span style={gold}>{ownerName}</span>
           </div>
           <div className="text-[12px] text-bone-300">{tagline}</div>
@@ -215,7 +215,7 @@ function CssLot({ studioName }: { studioName: string }) {
       </svg>
       {/* studio name on the arch */}
       <div className="absolute left-1/2 top-[58%] -translate-x-1/2 text-center">
-        <div className="font-serif text-2xl tracking-[0.22em] drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]" style={gold}>
+        <div className="font-apple text-2xl tracking-[0.22em] drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]" style={gold}>
           {studioName}
         </div>
       </div>
@@ -232,7 +232,7 @@ function StudioLogo({ logoUrl, name }: { logoUrl: string | null; name: string })
   const src = logoUrl ?? "/studio/logo.png";
   if (failed) {
     return (
-      <div className="grid h-9 w-9 place-items-center rounded-md border font-serif text-lg" style={{ borderColor: `${GOLD}66`, color: GOLD }}>
+      <div className="grid h-9 w-9 place-items-center rounded-md border font-apple text-lg" style={{ borderColor: `${GOLD}66`, color: GOLD }}>
         {(name.trim()[0] ?? "T").toUpperCase()}
       </div>
     );
@@ -243,7 +243,7 @@ function StudioLogo({ logoUrl, name }: { logoUrl: string | null; name: string })
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="text-center">
-      <div className="font-serif text-xl" style={gold}>{value}</div>
+      <div className="font-apple text-xl" style={gold}>{value}</div>
       <div className="text-[8.5px] uppercase tracking-wide text-bone-500">{label}</div>
     </div>
   );
@@ -254,7 +254,7 @@ function OwnerChip({ name, role, avatarUrl, title }: { name: string; role: Studi
   return (
     <Link to="/studio/owner" className="flex items-center gap-2.5 rounded-xl border border-[#d8b15a]/30 bg-black/40 px-3 py-1.5 backdrop-blur-sm hover:border-[#d8b15a]/60">
       <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full border" style={{ borderColor: `${GOLD}66` }}>
-        {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : <span className="font-serif" style={gold}>{name[0]}</span>}
+        {avatarUrl ? <img src={avatarUrl} alt="" className="h-full w-full object-cover" /> : <span className="font-apple" style={gold}>{name[0]}</span>}
       </div>
       <div className="hidden leading-tight md:block">
         <div className="text-[12px] text-bone-50">{name}</div>
@@ -283,7 +283,7 @@ function SoundStageMarker({ project, index, spot }: { project: Project; index: n
       <div className="mx-auto mb-1 h-2 w-2 rounded-full" style={{ background: GOLD, boxShadow: `0 0 14px 3px ${GOLD}` }} />
       <div className="min-w-[150px] rounded-lg border border-[#d8b15a]/30 bg-black/55 px-3 py-2 text-center backdrop-blur-sm transition-all group-hover:-translate-y-0.5 group-hover:border-[#d8b15a]/70 group-hover:bg-black/70">
         <div className="text-[8.5px] uppercase tracking-[0.2em] text-bone-500">Sound Stage {index}</div>
-        <div className="font-serif text-[15px] leading-tight text-bone-50">{project.title}</div>
+        <div className="font-apple text-[15px] leading-tight text-bone-50">{project.title}</div>
         <div className="mt-0.5 inline-flex items-center gap-1 text-[9.5px]" style={{ color: STATUS_HUE[project.status] }}>
           ● {project.status}
         </div>
@@ -333,7 +333,7 @@ function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
 function EmptyLot({ hasStudio }: { hasStudio: boolean }) {
   return (
     <div className="absolute left-1/2 top-[42%] z-20 w-[min(90vw,460px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#d8b15a]/25 bg-black/55 p-7 text-center backdrop-blur-sm">
-      <div className="font-serif text-2xl text-bone-50">Your lot is dark</div>
+      <div className="font-apple text-2xl text-bone-50">Your lot is dark</div>
       <p className="mx-auto mt-1.5 text-[12.5px] text-bone-300">
         Every production lights a sound stage. Open your first one and the lot comes alive.
       </p>

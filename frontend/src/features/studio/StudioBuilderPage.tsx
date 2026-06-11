@@ -63,7 +63,7 @@ export function StudioBuilderPage() {
 
       <div className="mt-5 max-w-4xl">
         <div className="text-[11px] uppercase tracking-[0.3em]" style={gold}>Build your studio</div>
-        <h1 className="mt-1 font-serif text-3xl text-bone-50">If you owned a movie studio, what would it feel like?</h1>
+        <h1 className="mt-1 font-apple text-3xl text-bone-50">If you owned a movie studio, what would it feel like?</h1>
         <p className="mt-1 text-[13px] text-bone-400">
           Design it. We'll generate studios with a soul — pick the one that feels like home.
         </p>
@@ -174,7 +174,7 @@ function ConceptCard({
       className="flex flex-col rounded-2xl border bg-gradient-to-b from-[#141008] to-[#0b0a08] p-5"
       style={{ borderColor: approved ? GOLD : "rgba(216,177,90,0.2)" }}
     >
-      <div className="font-serif text-2xl text-bone-50">{concept.name}</div>
+      <div className="font-apple text-2xl text-bone-50">{concept.name}</div>
       <div className="mt-0.5 text-[11px] uppercase tracking-[0.18em]" style={gold}>{concept.tagline}</div>
       <p className="mt-3 flex-1 text-[12.5px] leading-relaxed text-bone-300">{concept.identity}</p>
       <button

@@ -63,7 +63,7 @@ export function StudioOwnerOnboarding({
           <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.28em]" style={{ color: GOLD }}>
             <Clapperboard className="h-4 w-4" /> Welcome to your studio
           </div>
-          <h2 className="mt-2 font-serif text-2xl text-bone-50">Create your Studio Owner identity</h2>
+          <h2 className="mt-2 font-apple text-2xl text-bone-50">Create your Studio Owner identity</h2>
           <p className="mt-1 text-[12.5px] text-bone-300">
             This becomes the face of your studio — your Creative Twin appears throughout the lot.
           </p>
@@ -80,7 +80,7 @@ export function StudioOwnerOnboarding({
               {avatar ? (
                 <img src={avatar} alt="" className="h-full w-full object-cover" />
               ) : (
-                <span className="font-serif text-3xl" style={{ color: GOLD }}>{monogram}</span>
+                <span className="font-apple text-3xl" style={{ color: GOLD }}>{monogram}</span>
               )}
               <span className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-1 bg-black/60 py-0.5 text-[9px] text-bone-200">
                 <Camera className="h-2.5 w-2.5" /> Photo

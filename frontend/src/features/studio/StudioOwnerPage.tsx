@@ -45,10 +45,10 @@ export function StudioOwnerPage() {
             {owner.avatarUrl ? (
               <img src={owner.avatarUrl} alt="" className="h-full w-full object-cover" />
             ) : (
-              <span className="font-serif text-5xl" style={{ color: GOLD }}>{(owner.name[0] ?? "T").toUpperCase()}</span>
+              <span className="font-apple text-5xl" style={{ color: GOLD }}>{(owner.name[0] ?? "T").toUpperCase()}</span>
             )}
           </div>
-          <h1 className="mt-4 font-serif text-3xl text-bone-50">{twin?.displayName ?? owner.name}</h1>
+          <h1 className="mt-4 font-apple text-3xl text-bone-50">{twin?.displayName ?? owner.name}</h1>
           <div className="mt-1 text-[12px] uppercase tracking-[0.22em]" style={{ color: GOLD }}>
             {twin?.titleLine ?? (owner.role ? STUDIO_ROLE_LABELS[owner.role] : "Studio Owner")}
           </div>

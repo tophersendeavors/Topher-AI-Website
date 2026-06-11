@@ -37,6 +37,16 @@ export default {
       },
       fontFamily: {
         sans: ['"Inter"', "ui-sans-serif", "system-ui", "sans-serif"],
+        // Clean Apple system stack — renders San Francisco on macOS/iOS.
+        apple: [
+          "-apple-system",
+          "BlinkMacSystemFont",
+          '"SF Pro Display"',
+          '"SF Pro Text"',
+          '"Segoe UI"',
+          "system-ui",
+          "sans-serif",
+        ],
         serif: ['"Source Serif Pro"', "ui-serif", "Georgia", "serif"],
         mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
         screenplay: ['"Courier Prime"', '"Courier New"', "Courier", "monospace"],

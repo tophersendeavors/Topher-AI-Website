@@ -49,11 +49,12 @@ function AppRoutes() {
       <Routes>
         <Route path="/sign-in" element={<SignInPage />} />
         <Route element={<RequireAuth />}>
+          {/* The studio lot is a full-bleed place — no dashboard chrome. */}
+          <Route path="studio" element={<StudioLotHome />} />
+          <Route path="studio/owner" element={<StudioOwnerPage />} />
+          <Route path="studio/build" element={<StudioBuilderPage />} />
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/studio" replace />} />
-            <Route path="studio" element={<StudioLotHome />} />
-            <Route path="studio/owner" element={<StudioOwnerPage />} />
-            <Route path="studio/build" element={<StudioBuilderPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectOverviewPage />} />
             <Route path="projects/:projectId/writers-room" element={<WritersRoomPage />} />

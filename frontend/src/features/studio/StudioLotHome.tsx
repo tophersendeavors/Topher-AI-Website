@@ -305,7 +305,7 @@ function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
             <span className="text-[10px] uppercase tracking-[0.3em]" style={gold}>Explore the Studio</span>
             <span className="text-[10px] text-bone-500">— walk inside</span>
           </div>
-          <div className="flex min-h-0 flex-1 items-stretch gap-2.5 overflow-x-auto px-1 py-1.5">
+          <div className="flex min-h-0 flex-1 items-stretch gap-2.5 px-1 py-1.5">
             {ROOMS.map((r) => (
               <RoomImageCard key={r.label} room={r} to={featuredId ? `/projects/${featuredId}/${r.path}` : "/projects"} />
             ))}
@@ -321,7 +321,7 @@ function RoomImageCard({ room, to }: { room: (typeof ROOMS)[number]; to: string 
   return (
     <Link
       to={to}
-      className="group flex min-w-[150px] flex-1 flex-col overflow-hidden rounded-xl border border-[#26262c] bg-white/[0.015] transition-all duration-200 hover:scale-[1.04] hover:border-[#d8b15a]/60 hover:bg-white/[0.05] hover:shadow-[0_0_28px_rgba(216,177,90,0.28)]"
+      className="group flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#26262c] bg-white/[0.015] transition-all duration-200 hover:scale-[1.04] hover:border-[#d8b15a]/60 hover:bg-white/[0.05] hover:shadow-[0_0_28px_rgba(216,177,90,0.28)]"
     >
       {/* image fills the card height; the panel + Events card share one fixed height */}
       <div className="min-h-0 w-full flex-1 overflow-hidden">

@@ -26,6 +26,7 @@ import { SoundBiblePage } from "@/features/sound-bible/SoundBiblePage";
 import { AudienceReadPage } from "@/features/audience-read/AudienceReadPage";
 import { StudioLotHome } from "@/features/studio/StudioLotHome";
 import { StudioOwnerPage } from "@/features/studio/StudioOwnerPage";
+import { StudioBuilderPage } from "@/features/studio/StudioBuilderPage";
 import { ShotListPage } from "@/features/shot-list/ShotListPage";
 import { TrailerBuilderPage } from "@/features/trailer-builder/TrailerBuilderPage";
 import { ProductionHubPage } from "@/features/production-hub/ProductionHubPage";
@@ -52,6 +53,7 @@ function AppRoutes() {
             <Route index element={<Navigate to="/studio" replace />} />
             <Route path="studio" element={<StudioLotHome />} />
             <Route path="studio/owner" element={<StudioOwnerPage />} />
+            <Route path="studio/build" element={<StudioBuilderPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="projects/:projectId" element={<ProjectOverviewPage />} />
             <Route path="projects/:projectId/writers-room" element={<WritersRoomPage />} />

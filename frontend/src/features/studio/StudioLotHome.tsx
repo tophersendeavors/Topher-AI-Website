@@ -35,6 +35,7 @@ export function StudioLotHome() {
   const qc = useQueryClient();
   const ownerQ = useQuery({ queryKey: ["studio-owner"], queryFn: () => api.getStudioOwner() });
   const projectsQ = useQuery({ queryKey: ["projects"], queryFn: () => api.listProjects() });
+  const configQ = useQuery({ queryKey: ["studio-config"], queryFn: () => api.getStudioConfig() });
   const save = useMutation({
     mutationFn: (patch: Parameters<typeof api.saveStudioOwner>[0]) => api.saveStudioOwner(patch),
     onSuccess: (r: StudioOwnerResponse) => qc.setQueryData(["studio-owner"], r),
@@ -57,7 +58,10 @@ export function StudioLotHome() {
     );
   }
 
-  const studioName = "TOBURT";
+  const config = configQ.data?.config ?? null;
+  const approvedStudio = config?.concepts.find((c) => c.id === config?.approvedConceptId) ?? null;
+  const studioName = approvedStudio?.name ?? "TOBURT";
+  const studioTagline = approvedStudio?.tagline ?? "Stories. Reimagined. Limits. Removed.";
   const ownerName = owner?.name && owner.name !== "chris" ? owner.name : "Studio Owner";
 
   return (
@@ -102,10 +106,21 @@ export function StudioLotHome() {
             }}
           />
           <div className="relative pb-7 text-center">
-            <div className="font-serif text-4xl tracking-[0.18em] text-bone-50">{studioName} STUDIOS</div>
-            <div className="mt-1 text-[10.5px] uppercase tracking-[0.34em]" style={goldText}>
-              Stories. Reimagined. Limits. Removed.
+            <div className="font-serif text-4xl tracking-[0.18em] text-bone-50">
+              {approvedStudio ? studioName : "TOBURT STUDIOS"}
             </div>
+            <div className="mt-1 text-[10.5px] uppercase tracking-[0.34em]" style={goldText}>
+              {studioTagline}
+            </div>
+            {!approvedStudio && (
+              <Link
+                to="/studio/build"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-[11.5px]"
+                style={{ borderColor: `${GOLD}55`, color: GOLD }}
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Design your own studio
+              </Link>
+            )}
           </div>
         </div>
       </div>

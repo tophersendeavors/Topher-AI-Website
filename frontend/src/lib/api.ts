@@ -8,7 +8,9 @@ import type {
   CharacterBibleSummaryResponse,
   HumanReadPipelineResponse,
   RewriteJob,
+  StudioConfigResponse,
   StudioOwnerResponse,
+  StudioPreferences,
   StudioRole,
   CharacterWound,
   DirectnessReport,
@@ -1270,6 +1272,19 @@ export const api = {
     avatarUrl?: string | null;
     onboardingComplete?: boolean;
   }) => request<StudioOwnerResponse>(`/me/studio-owner`, { method: "PUT", body: JSON.stringify(patch) }),
+
+  // Studio Builder — design + approve your studio (Phase 3)
+  getStudioConfig: () => request<StudioConfigResponse>(`/me/studio-config`),
+  generateStudioConfig: (preferences: StudioPreferences) =>
+    request<StudioConfigResponse>(`/me/studio-config/generate`, {
+      method: "POST",
+      body: JSON.stringify({ preferences }),
+    }),
+  approveStudioConfig: (conceptId: string) =>
+    request<StudioConfigResponse>(`/me/studio-config/approve`, {
+      method: "POST",
+      body: JSON.stringify({ conceptId }),
+    }),
 
   // Entities
   listCharacters: (projectId: string) =>

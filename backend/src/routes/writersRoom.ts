@@ -205,7 +205,7 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { projectId } = req.params as { projectId: string };
     await assertProjectMember(user.id, projectId);
-    const { approved } = z.object({ approved: z.boolean().default(true) }).parse(req.body ?? {});
-    return { state: await setDraftApproved(projectId, approved) };
+    const { approved, scriptId } = z.object({ approved: z.boolean().default(true), scriptId: z.string().optional() }).parse(req.body ?? {});
+    return { state: await setDraftApproved(projectId, approved, scriptId) };
   });
 }

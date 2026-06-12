@@ -17,14 +17,14 @@ interface DraftRef {
   metadata: Record<string, unknown>;
 }
 
-async function loadDraftRef(projectId: string): Promise<DraftRef> {
+async function loadDraftRef(projectId: string, preferredId?: string | null): Promise<DraftRef> {
   const { data } = await supabase
     .from("scripts")
     .select("id, fountain, draft_number, current, metadata, updated_at")
     .eq("project_id", projectId)
     .order("updated_at", { ascending: false });
   const rows = (data ?? []) as Array<{ id: string; fountain: string | null; draft_number: number | null; current: boolean | null; metadata: Record<string, unknown> | null }>;
-  const s = rows.find((r) => r.current) ?? rows[0];
+  const s = (preferredId ? rows.find((r) => r.id === preferredId) : null) ?? rows.find((r) => r.current) ?? rows[0];
   if (!s) return { scriptId: null, draftNumber: null, label: null, hasText: false, metadata: {} };
   return {
     scriptId: s.id,
@@ -85,9 +85,9 @@ function buildRequirements(
 }
 
 export async function getLockStatus(projectId: string): Promise<LockStatus> {
-  const [state, draft, openNotes] = await Promise.all([
-    getWritersRoomState(projectId),
-    loadDraftRef(projectId),
+  const state = await getWritersRoomState(projectId);
+  const [draft, openNotes] = await Promise.all([
+    loadDraftRef(projectId, state.writeFlow.draftScriptId),
     openNoteCount(projectId, "writers"),
   ]);
   const lock = state.finalLock;
@@ -110,7 +110,8 @@ export async function updateLockSettings(
 export async function lockFinalDraft(projectId: string, userId: string): Promise<LockStatus> {
   const status = await getLockStatus(projectId);
   if (!status.canLock) throw new Error("The Final Draft checklist isn't complete yet.");
-  const draft = await loadDraftRef(projectId);
+  const state = await getWritersRoomState(projectId);
+  const draft = await loadDraftRef(projectId, state.writeFlow.draftScriptId);
   if (!draft.scriptId) throw new Error("There's no draft to lock.");
 
   // Mark the script's draft locked so the existing lockGuard honours it.

@@ -11,14 +11,14 @@ import type { CollabAction, WriteFlowCollaborator } from "@toburt/shared";
 import { getWritersRoomState, saveWriteFlow } from "./store.js";
 import { resolveCollaborator, collaboratorSystem } from "./writeFlow.js";
 
-async function loadDraftText(projectId: string): Promise<string> {
+async function loadDraftText(projectId: string, preferredId?: string | null): Promise<string> {
   const { data } = await supabase
     .from("scripts")
-    .select("fountain, current, updated_at")
+    .select("id, fountain, current, updated_at")
     .eq("project_id", projectId)
     .order("updated_at", { ascending: false });
-  const rows = (data ?? []) as Array<{ fountain: string | null; current: boolean | null }>;
-  const s = rows.find((r) => r.current) ?? rows[0];
+  const rows = (data ?? []) as Array<{ id: string; fountain: string | null; current: boolean | null }>;
+  const s = (preferredId ? rows.find((r) => r.id === preferredId) : null) ?? rows.find((r) => r.current) ?? rows[0];
   return (s?.fountain ?? "").slice(-12_000); // recent tail is enough for context
 }
 
@@ -48,7 +48,7 @@ export async function collaborate(
   if (!resolved) throw new Error("Seat an AI Writer or AI Creative in the Writers Room first.");
   const brief = ACTION_BRIEF[action];
   // Prefer the editor's live text (reflects unsaved edits + cursor) when given.
-  const draft = opts.context?.trim() ? opts.context.slice(-12_000) : await loadDraftText(projectId);
+  const draft = opts.context?.trim() ? opts.context.slice(-12_000) : await loadDraftText(projectId, state.writeFlow.draftScriptId);
 
   const parts: string[] = [`Draft so far (continue from the very end of this):\n${draft || "(empty — start the script)"}`];
   if (brief.needsSelection) parts.push(`Selected passage:\n${opts.selection?.trim() || "(none selected — use the latest scene)"}`);
@@ -71,11 +71,18 @@ function collaboratorName(ref: WriteFlowCollaborator): string {
   return ref.name;
 }
 
-export async function setDraftApproved(projectId: string, approved: boolean) {
+export async function setDraftApproved(projectId: string, approved: boolean, scriptId?: string) {
   const state = await getWritersRoomState(projectId);
+  // Approving pins THIS script as the working draft (so the Review Bench, lock,
+  // and collaborate all read it) and marks it current.
+  if (approved && scriptId) {
+    await supabase.from("scripts").update({ current: false }).eq("project_id", projectId);
+    await supabase.from("scripts").update({ current: true }).eq("id", scriptId);
+  }
   return saveWriteFlow(projectId, {
     ...state.writeFlow,
     draftApproved: approved,
     draftApprovedAt: approved ? new Date().toISOString() : null,
+    draftScriptId: scriptId ?? state.writeFlow.draftScriptId,
   });
 }

@@ -18,15 +18,15 @@ import { getWritersRoomState, saveReviewRun, setReviewBench } from "./store.js";
 
 const MAX_DRAFT_CHARS = 24_000;
 
-/** The project's current draft (current=true, else most recently updated). */
-async function loadProjectDraft(projectId: string): Promise<{ scriptId: string | null; label: string | null; text: string }> {
+/** The draft being worked on (pinned working draft, else current, else latest). */
+async function loadProjectDraft(projectId: string, preferredId?: string | null): Promise<{ scriptId: string | null; label: string | null; text: string }> {
   const { data } = await supabase
     .from("scripts")
     .select("id, fountain, draft_number, current, updated_at")
     .eq("project_id", projectId)
     .order("updated_at", { ascending: false });
   const rows = (data ?? []) as Array<{ id: string; fountain: string | null; draft_number: number | null; current: boolean | null }>;
-  const script = rows.find((r) => r.current) ?? rows[0];
+  const script = (preferredId ? rows.find((r) => r.id === preferredId) : null) ?? rows.find((r) => r.current) ?? rows[0];
   if (!script) return { scriptId: null, label: null, text: "" };
   return {
     scriptId: script.id,
@@ -87,7 +87,8 @@ export async function runReviewAgent(projectId: string, agentId: string): Promis
   const agent = QUALITY_STAFF.find((a) => a.id === agentId);
   if (!agent) throw new Error("Unknown review agent.");
   const authority = reviewAuthorityOf(agent.rewriteAuthority);
-  const draft = await loadProjectDraft(projectId);
+  const state = await getWritersRoomState(projectId);
+  const draft = await loadProjectDraft(projectId, state.writeFlow.draftScriptId);
 
   let finding: ReviewFinding;
   if (!draft.text.trim()) {

@@ -82,6 +82,21 @@ export function WritingDeskPage() {
     mutationFn: () => api.updateScript(scriptId, { fountain: body }),
     onSuccess: () => { setDirty(false); qc.invalidateQueries({ queryKey: ["script", scriptId] }); },
   });
+  // Approve = save your text first (so the staff reviews what you see), then pin
+  // THIS script as the working/approved draft.
+  const approveMut = useMutation({
+    mutationFn: async () => {
+      if (dirty) await api.updateScript(scriptId, { fountain: body });
+      const approving = !(roomQ.data?.state.writeFlow.draftApproved ?? false);
+      return api.approveWriteDraft(projectId, approving, scriptId);
+    },
+    onSuccess: () => {
+      setDirty(false);
+      qc.invalidateQueries({ queryKey: ["writers-room", projectId] });
+      qc.invalidateQueries({ queryKey: ["scripts", projectId] });
+      qc.invalidateQueries({ queryKey: ["script", scriptId] });
+    },
+  });
 
   const onMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -164,7 +179,7 @@ export function WritingDeskPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {showApprove && <ApproveDraftButton projectId={projectId} approved={room?.state.writeFlow.draftApproved ?? false} hasText={hasText} unfinished={unfinished} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />}
+          {showApprove && <ApproveDraftButton approved={room?.state.writeFlow.draftApproved ?? false} hasText={hasText} unfinished={unfinished} pending={approveMut.isPending} onToggle={() => approveMut.mutate()} />}
           {(stage === "reviewing" || stage === "locked") && (
             <button onClick={() => setLockOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#26262c] px-2.5 py-1.5 text-[12px] text-bone-200 hover:border-[#d8b15a]/45">
               <Lock className="h-3.5 w-3.5" style={gold} /> Final Draft Lock
@@ -283,24 +298,23 @@ export function WritingDeskPage() {
   );
 }
 
-function ApproveDraftButton({ projectId, approved, hasText, unfinished, onState }: { projectId: string; approved: boolean; hasText: boolean; unfinished: boolean; onState: () => void }) {
+function ApproveDraftButton({ approved, hasText, unfinished, pending, onToggle }: { approved: boolean; hasText: boolean; unfinished: boolean; pending: boolean; onToggle: () => void }) {
   const [confirm, setConfirm] = useState(false);
-  const m = useMutation({ mutationFn: () => api.approveWriteDraft(projectId, !approved), onSuccess: () => { setConfirm(false); onState(); } });
-  const onClick = () => { if (!approved && unfinished && !confirm) { setConfirm(true); return; } m.mutate(); };
+  const onClick = () => { if (!approved && unfinished && !confirm) { setConfirm(true); return; } setConfirm(false); onToggle(); };
   if (confirm && !approved) {
     return (
       <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#d8b15a]/40 bg-black/40 px-2 py-1 text-[11.5px]">
         <AlertTriangle className="h-3.5 w-3.5" style={gold} />
         <span className="text-bone-200">May be incomplete.</span>
-        <button onClick={() => m.mutate()} disabled={m.isPending} className="rounded px-2 py-0.5 font-medium text-black" style={{ background: GOLD }}>Approve anyway</button>
+        <button onClick={() => { setConfirm(false); onToggle(); }} disabled={pending} className="rounded px-2 py-0.5 font-medium text-black" style={{ background: GOLD }}>Approve anyway</button>
         <button onClick={() => setConfirm(false)} className="px-1 text-bone-400 hover:text-bone-100">Cancel</button>
       </div>
     );
   }
   return (
-    <button onClick={onClick} disabled={m.isPending || (!hasText && !approved)} className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] disabled:opacity-50"
+    <button onClick={onClick} disabled={pending || (!hasText && !approved)} className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] disabled:opacity-50"
       style={approved ? { borderColor: "#7fd1a4", color: "#7fd1a4" } : { borderColor: "#26262c", color: GOLD }}>
-      {m.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {approved ? "Draft approved" : "Approve Draft"}
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {approved ? "Draft approved" : "Approve Draft"}
     </button>
   );
 }

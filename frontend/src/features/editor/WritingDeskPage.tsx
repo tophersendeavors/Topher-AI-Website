@@ -152,6 +152,24 @@ export function WritingDeskPage() {
     if (sel && !sel.isEmpty()) { ed.executeEdits("collab", [{ range: sel, text }]); setBody(ed.getValue()); setDirty(true); }
     else { setBody((b) => `${b.trimEnd()}\n\n${text}\n`); setDirty(true); }
   };
+  // Put an approved Review Bench rewrite INTO the script: replace its verbatim
+  // `before` where found, else append the `after`. Persists immediately so the
+  // editor and the staff (which read the DB) stay in sync.
+  const applyRewriteToEditor = async (before: string | null, after: string) => {
+    const ed = editorRef.current; const model = ed?.getModel();
+    let next = body;
+    if (ed && model && before && before.trim()) {
+      const matches = model.findMatches(before, false, false, false, null, false);
+      if (matches.length) { ed.executeEdits("rewrite", [{ range: matches[0].range, text: after }]); next = model.getValue(); }
+      else next = `${body.trimEnd()}\n\n${after}\n`;
+    } else {
+      next = `${body.trimEnd()}\n\n${after}\n`;
+    }
+    setBody(next);
+    await api.updateScript(scriptId, { fountain: next });
+    setDirty(false);
+    qc.invalidateQueries({ queryKey: ["script", scriptId] });
+  };
 
   const room = roomQ.data;
   const title = scriptQ.data?.title ?? projectQ.data?.title ?? "—";
@@ -287,7 +305,7 @@ export function WritingDeskPage() {
             {!room ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-bone-500" /></div>
               : tab === "team" ? <TeamTab projectId={projectId} room={room} stage={stage} getSelection={getSelection} getContext={getContext} applyText={applyText} onRoomRefresh={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : tab === "outline" ? <OutlineTab room={room} onGoRoom={() => navigate(`/projects/${projectId}/writers-room`)} />
-              : tab === "bench" ? <BenchTab projectId={projectId} room={room} hasText={!!body.trim()} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
+              : tab === "bench" ? <BenchTab projectId={projectId} room={room} hasText={!!body.trim()} applyRewrite={applyRewriteToEditor} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : <NotesTab projectId={projectId} />}
           </div>
         </aside>
@@ -540,15 +558,25 @@ function OutlineTab({ room, onGoRoom }: { room: WritersRoomResponse; onGoRoom: (
 
 // ---- Review Bench (separate from writing collaborators) --------------------
 
-function BenchTab({ projectId, room, hasText, onState }: { projectId: string; room: WritersRoomResponse; hasText: boolean; onState: () => void }) {
+function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { projectId: string; room: WritersRoomResponse; hasText: boolean; applyRewrite: (before: string | null, after: string) => Promise<void>; onState: () => void }) {
   const approved = room.state.writeFlow.draftApproved;
   const runById = new Map(room.state.reviewBench.map((r) => [r.agentId, r]));
   const [acting, setActing] = useState<string | null>(null);
   const act = useMutation({
-    mutationFn: (v: { id: string; action: "run" | "skip" | "apply" }) => api.reviewAgentAction(projectId, v.id, v.action),
+    mutationFn: async (v: { id: string; action: "run" | "skip" | "apply" }) => {
+      // Approving a rewrite ALSO puts it into the script, then records approval.
+      if (v.action === "apply") {
+        const opt = runById.get(v.id)?.finding?.rewriteOption;
+        if (opt) await applyRewrite(opt.before, opt.after);
+      }
+      return api.reviewAgentAction(projectId, v.id, v.action);
+    },
     onMutate: (v) => setActing(v.id),
     onSuccess: onState,
     onSettled: () => setActing(null),
+  });
+  const insert = useMutation({
+    mutationFn: (opt: { before: string | null; after: string }) => applyRewrite(opt.before, opt.after),
   });
 
   if (!hasText) return <div className="py-8 text-center text-[12px] text-bone-400">Write or generate some pages first — the staff reviews real text.</div>;
@@ -564,14 +592,25 @@ function BenchTab({ projectId, room, hasText, onState }: { projectId: string; ro
   return (
     <div className="space-y-2">
       <div className="text-[11px] text-bone-400">Script staff — they review and propose rewrites. You approve before anything is applied.</div>
-      {room.qualityStaff.map((agent) => (
-        <BenchCard key={agent.id} agent={agent} run={runById.get(agent.id) ?? null} busy={acting === agent.id} onAction={(action) => act.mutate({ id: agent.id, action })} />
-      ))}
+      {room.qualityStaff.map((agent) => {
+        const run = runById.get(agent.id) ?? null;
+        return (
+          <BenchCard
+            key={agent.id}
+            agent={agent}
+            run={run}
+            busy={acting === agent.id}
+            inserting={insert.isPending}
+            onAction={(action) => act.mutate({ id: agent.id, action })}
+            onInsert={() => { const o = run?.finding?.rewriteOption; if (o) insert.mutate(o); }}
+          />
+        );
+      })}
     </div>
   );
 }
 
-function BenchCard({ agent, run, busy, onAction }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; onAction: (a: "run" | "skip" | "apply") => void }) {
+function BenchCard({ agent, run, busy, inserting, onAction, onInsert }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; inserting: boolean; onAction: (a: "run" | "skip" | "apply") => void; onInsert: () => void }) {
   const authority = run?.authority ?? reviewAuthorityOf(agent.rewriteAuthority);
   const f = run?.finding ?? null;
   return (
@@ -587,8 +626,18 @@ function BenchCard({ agent, run, busy, onAction }: { agent: QualityAgent; run: R
             <div className="mt-1.5 rounded border border-[#d8b15a]/25 bg-[#d8b15a]/[0.05] p-1.5">
               <div className="text-[9px] uppercase tracking-wide" style={gold}>Rewrite · {f.rewriteOption.targetLabel}</div>
               <p className="mt-0.5 whitespace-pre-wrap text-[11px] text-bone-50">{f.rewriteOption.after}</p>
-              {run?.applied ? <span className="mt-1 inline-flex items-center gap-1 text-[10.5px]" style={{ color: "#7fd1a4" }}><CheckCircle2 className="h-3 w-3" /> Applied</span>
-                : <button onClick={() => onAction("apply")} disabled={busy} className="mt-1 inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10.5px] font-medium text-black" style={{ background: GOLD }}><Check className="h-3 w-3" /> Approve &amp; apply</button>}
+              <div className="mt-1 flex items-center gap-2">
+                {run?.applied ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: "#7fd1a4" }}><CheckCircle2 className="h-3 w-3" /> Approved</span>
+                    <button onClick={onInsert} disabled={inserting} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
+                      {inserting ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />} Insert into draft
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => onAction("apply")} disabled={busy} className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10.5px] font-medium text-black" style={{ background: GOLD }}><Check className="h-3 w-3" /> Approve &amp; apply</button>
+                )}
+              </div>
             </div>
           )}
         </div>

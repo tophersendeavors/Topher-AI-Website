@@ -20,8 +20,9 @@ Stack: Fastify + TypeScript backend, React + TypeScript (Vite) frontend, Supabas
 ## Status
 
 Active build. The immersive **Writers Room** is live and committed. **Phase 2 —
-Writer/Talent Directory + Live Co-Writer wiring — is built and the DB migration is
-applied; it is awaiting smoke-test + commit.**
+Writer/Talent Directory + Live Co-Writer wiring — is built, migration applied, and
+committed (`1da5146`).** A **Writers Room lobby** (`/studio/writers-room`) now lets
+you pick a project or start a new script instead of assuming the first project.
 
 ## Key decisions — LOCKED
 
@@ -62,13 +63,12 @@ remote but were unrecorded; repaired, then `0014_talent_directory.sql` applied.)
 
 ## Next 1–3 moves
 
-1. Smoke-test `/studio/talent` + the Writers Room Live Co-Writer tab, then **commit
-   Phase 2** (migration + shared types + backend + directory page + wiring).
-2. Build the **writing-mode flow** (how the lead writer begins: upload / manual /
-   AI-generate / build-with-co-writers).
-3. **Pipeline orchestration**: drive the existing redevelopment passes + Human Read
+1. Build the **writing-mode flow** (how the lead writer begins: upload / manual /
+   AI-generate / build-with-co-writers). _(Next part of the build — incoming.)_
+2. **Pipeline orchestration**: drive the existing redevelopment passes + Human Read
    from the room, activating Review Bench staff, and produce the Creative Room
    handoff.
+3. Real **invite-email delivery** for Live Co-Writers + profile-photo upload.
 
 ## Who's involved
 

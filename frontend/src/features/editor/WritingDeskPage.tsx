@@ -561,22 +561,22 @@ function OutlineTab({ room, onGoRoom }: { room: WritersRoomResponse; onGoRoom: (
 function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { projectId: string; room: WritersRoomResponse; hasText: boolean; applyRewrite: (before: string | null, after: string) => Promise<void>; onState: () => void }) {
   const approved = room.state.writeFlow.draftApproved;
   const runById = new Map(room.state.reviewBench.map((r) => [r.agentId, r]));
-  const [acting, setActing] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
+
   const act = useMutation({
-    mutationFn: async (v: { id: string; action: "run" | "skip" | "apply" }) => {
-      // Approving a rewrite ALSO puts it into the script, then records approval.
-      if (v.action === "apply") {
-        const opt = runById.get(v.id)?.finding?.rewriteOption;
-        if (opt) await applyRewrite(opt.before, opt.after);
-      }
-      return api.reviewAgentAction(projectId, v.id, v.action);
-    },
-    onMutate: (v) => setActing(v.id),
-    onSuccess: onState,
-    onSettled: () => setActing(null),
+    mutationFn: async (v: { id: string; action: "run" | "skip"; }) => api.reviewAgentAction(projectId, v.id, v.action),
+    onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
   });
-  const insert = useMutation({
-    mutationFn: (opt: { before: string | null; after: string }) => applyRewrite(opt.before, opt.after),
+  const rewrite = useMutation({
+    mutationFn: (v: { id: string; notes?: string }) => api.reviewRewrite(projectId, v.id, v.notes),
+    onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
+  });
+  const apply = useMutation({
+    mutationFn: async (v: { id: string; before: string | null; after: string }) => {
+      await applyRewrite(v.before, v.after);
+      return api.reviewAgentAction(projectId, v.id, "apply");
+    },
+    onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
   });
 
   if (!hasText) return <div className="py-8 text-center text-[12px] text-bone-400">Write or generate some pages first — the staff reviews real text.</div>;
@@ -591,7 +591,7 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
   }
   return (
     <div className="space-y-2">
-      <div className="text-[11px] text-bone-400">Script staff — they review and propose rewrites. You approve before anything is applied.</div>
+      <div className="text-[11px] text-bone-400">Script staff review your pages and propose fixes. For any note: refine the fix with your own notes, then apply it into the draft.</div>
       {room.qualityStaff.map((agent) => {
         const run = runById.get(agent.id) ?? null;
         return (
@@ -599,10 +599,11 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
             key={agent.id}
             agent={agent}
             run={run}
-            busy={acting === agent.id}
-            inserting={insert.isPending}
-            onAction={(action) => act.mutate({ id: agent.id, action })}
-            onInsert={() => { const o = run?.finding?.rewriteOption; if (o) insert.mutate(o); }}
+            busy={actingId === agent.id}
+            onReview={() => act.mutate({ id: agent.id, action: "run" })}
+            onSkip={() => act.mutate({ id: agent.id, action: "skip" })}
+            onRewrite={(notes) => rewrite.mutate({ id: agent.id, notes })}
+            onApply={() => { const o = run?.finding?.rewriteOption; if (o) apply.mutate({ id: agent.id, before: o.before, after: o.after }); }}
           />
         );
       })}
@@ -610,43 +611,62 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
   );
 }
 
-function BenchCard({ agent, run, busy, inserting, onAction, onInsert }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; inserting: boolean; onAction: (a: "run" | "skip" | "apply") => void; onInsert: () => void }) {
+function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onApply: () => void }) {
+  const [notes, setNotes] = useState("");
   const authority = run?.authority ?? reviewAuthorityOf(agent.rewriteAuthority);
   const f = run?.finding ?? null;
+  const fix = f?.rewriteOption?.after?.trim() ? f.rewriteOption : null;
+
   return (
     <div className="rounded-lg border border-[#26262c] bg-white/[0.015] p-2.5">
       <div className="flex items-center gap-2">
         <span className="truncate text-[12.5px] text-bone-50">{agent.name}</span>
+        {run?.applied && <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: "#7fd1a4" }}><CheckCircle2 className="h-3 w-3" /> applied</span>}
         <span className="ml-auto rounded border border-[#26262c] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-bone-400">{REVIEW_AUTHORITY_LABELS[authority]}</span>
       </div>
-      {f && (
-        <div className="mt-1.5 rounded-md border border-[#26262c] bg-black/30 p-2">
-          <p className="text-[11.5px] leading-snug text-bone-100">{f.diagnosis}</p>
-          {f.rewriteOption && (
-            <div className="mt-1.5 rounded border border-[#d8b15a]/25 bg-[#d8b15a]/[0.05] p-1.5">
-              <div className="text-[9px] uppercase tracking-wide" style={gold}>Rewrite · {f.rewriteOption.targetLabel}</div>
-              <p className="mt-0.5 whitespace-pre-wrap text-[11px] text-bone-50">{f.rewriteOption.after}</p>
-              <div className="mt-1 flex items-center gap-2">
-                {run?.applied ? (
-                  <>
-                    <span className="inline-flex items-center gap-1 text-[10.5px]" style={{ color: "#7fd1a4" }}><CheckCircle2 className="h-3 w-3" /> Approved</span>
-                    <button onClick={onInsert} disabled={inserting} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
-                      {inserting ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />} Insert into draft
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => onAction("apply")} disabled={busy} className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10.5px] font-medium text-black" style={{ background: GOLD }}><Check className="h-3 w-3" /> Approve &amp; apply</button>
-                )}
-              </div>
+
+      {!f ? (
+        <p className="mt-1 text-[10.5px] text-bone-500">Not reviewed yet.</p>
+      ) : (
+        <div className="mt-1.5 space-y-1.5">
+          <div className="rounded-md border border-[#26262c] bg-black/30 p-2">
+            <div className="text-[9px] uppercase tracking-wide text-bone-500">What {agent.name.split(" ")[0]} found</div>
+            <p className="mt-0.5 text-[11.5px] leading-snug text-bone-100">{f.diagnosis}</p>
+          </div>
+
+          {fix && (
+            <div className="rounded-md border border-[#d8b15a]/25 bg-[#d8b15a]/[0.05] p-2">
+              <div className="text-[9px] uppercase tracking-wide" style={gold}>Proposed fix · {fix.targetLabel}</div>
+              {fix.before && <p className="mt-0.5 whitespace-pre-wrap text-[10.5px] text-bone-500 line-through decoration-bone-700">{fix.before}</p>}
+              <p className="mt-0.5 whitespace-pre-wrap text-[11px] text-bone-50">{fix.after}</p>
             </div>
           )}
+
+          {/* Always steerable: refine the fix with your notes, then apply it. */}
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={fix ? "Refine the fix with your notes (optional)…" : "How should this be fixed? Add notes (optional)…"}
+            className="min-h-[36px] w-full resize-y rounded-md border border-[#26262c] bg-black/30 px-2 py-1.5 text-[11.5px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none"
+          />
+          <div className="flex flex-wrap gap-1.5">
+            <button onClick={() => onRewrite(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} {fix ? "Rewrite with notes" : "Write the fix"}
+            </button>
+            {fix && (
+              <button onClick={onApply} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
+                <ArrowDownToLine className="h-3 w-3" /> Apply to draft
+              </button>
+            )}
+          </div>
         </div>
       )}
-      <div className="mt-1.5 flex gap-1.5">
-        <button onClick={() => onAction("run")} disabled={busy} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
+
+      <div className="mt-1.5 flex gap-1.5 border-t border-[#1c1c20] pt-1.5">
+        <button onClick={onReview} disabled={busy} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} {run ? "Review again" : "Review"}
         </button>
-        {run?.status !== "skipped" && <button onClick={() => onAction("skip")} disabled={busy} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-400 hover:border-bone-600 disabled:opacity-50"><SkipForward className="h-3 w-3" /> Skip</button>}
+        {run?.status !== "skipped" && <button onClick={onSkip} disabled={busy} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-400 hover:border-bone-600 disabled:opacity-50"><SkipForward className="h-3 w-3" /> Skip</button>}
       </div>
     </div>
   );

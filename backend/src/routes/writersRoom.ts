@@ -10,7 +10,7 @@ import { assertProjectMember } from "../db/queries.js";
 import { getStudioOwner } from "../studio/identityStore.js";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES, QUALITY_STAFF } from "../writersRoom/profiles.js";
 import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../writersRoom/store.js";
-import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite } from "../writersRoom/review.js";
+import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite, rewriteFinding } from "../writersRoom/review.js";
 import { getLockStatus, updateLockSettings, lockFinalDraft, unlockFinalDraft } from "../writersRoom/lock.js";
 import { conceptDefaults, saveConcept, generateOutline, approveOutline, generateDraftFromOutline } from "../writersRoom/writeFlow.js";
 import { collaborate, setDraftApproved } from "../writersRoom/collaborate.js";
@@ -97,6 +97,14 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
   app.post("/projects/:projectId/writers-room/review/:agentId/skip", reviewAction(skipReviewAgent));
   app.post("/projects/:projectId/writers-room/review/:agentId/apply", reviewAction(applyReviewRewrite));
   app.post("/projects/:projectId/writers-room/review/:agentId/reset", reviewAction(resetReviewAgent));
+
+  app.post("/projects/:projectId/writers-room/review/:agentId/rewrite", async (req) => {
+    const user = await requireUser(req);
+    const { projectId, agentId } = req.params as { projectId: string; agentId: string };
+    await assertProjectMember(user.id, projectId);
+    const { notes } = z.object({ notes: z.string().max(2000).optional() }).parse(req.body ?? {});
+    return { state: await rewriteFinding(projectId, agentId, notes) };
+  });
 
   // --- Final Draft Lock ----------------------------------------------------
   app.get("/projects/:projectId/writers-room/lock", async (req) => {

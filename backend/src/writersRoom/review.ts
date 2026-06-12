@@ -164,6 +164,40 @@ export async function resetReviewAgent(projectId: string, agentId: string): Prom
   return setReviewBench(projectId, state.reviewBench.filter((r) => r.agentId !== agentId));
 }
 
+/** Re-generate the fix for a finding, steered by the creator's notes. Updates
+ *  the stored rewrite option (and un-applies it, since it's a new version). */
+export async function rewriteFinding(projectId: string, agentId: string, notes?: string): Promise<WritersRoomState> {
+  const agent = QUALITY_STAFF.find((a) => a.id === agentId);
+  if (!agent) throw new Error("Unknown review agent.");
+  const state = await getWritersRoomState(projectId);
+  const run = state.reviewBench.find((r) => r.agentId === agentId);
+  if (!run?.finding) throw new Error("Run this pass first, then rewrite.");
+  const draft = await loadProjectDraft(projectId, state.writeFlow.draftScriptId);
+  const before = run.finding.rewriteOption?.before ?? null;
+  const targetLabel = run.finding.rewriteOption?.targetLabel ?? agent.role;
+
+  const system = `You are the ${agent.name} — ${agent.role} — on a studio script staff. You flagged this: ${run.finding.diagnosis}\nRewrite the passage to fix it, honoring your craft. Return ONLY the rewritten passage in Fountain — no preamble, no commentary.`;
+  const user = [
+    `Draft (for context):\n${draft.text.slice(-8000)}`,
+    before ? `Passage to rewrite (verbatim from the draft):\n${before}` : `Rewrite the specific moment your diagnosis refers to (${targetLabel}).`,
+    notes?.trim() ? `The creator's steering notes — follow them closely:\n${notes.trim()}` : "",
+  ].filter(Boolean).join("\n\n");
+
+  const res = await callLLM({
+    model: config.SCENE_MODEL,
+    messages: [{ role: "system", content: system }, { role: "user", content: user }],
+    temperature: 0.7,
+    maxTokens: 1200,
+  });
+  const after = res.text.trim();
+  return saveReviewRun(projectId, {
+    ...run,
+    status: "done",
+    applied: false,
+    finding: { ...run.finding, rewriteOption: { targetLabel, before, after, rationale: notes?.trim() || run.finding.rewriteOption?.rationale || "" } },
+  });
+}
+
 /** Creator approves + applies the agent's rewrite option. */
 export async function applyReviewRewrite(projectId: string, agentId: string): Promise<WritersRoomState> {
   const state = await getWritersRoomState(projectId);

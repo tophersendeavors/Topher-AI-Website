@@ -4,12 +4,12 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { LIVE_PERMISSIONS, type LivePermission, type WritersRoomResponse } from "@toburt/shared";
+import { LIVE_PERMISSIONS, WRITING_MODES, type LivePermission, type WritersRoomResponse, type WritingMode } from "@toburt/shared";
 import { requireUser } from "../auth/verifyJwt.js";
 import { assertProjectMember } from "../db/queries.js";
 import { getStudioOwner } from "../studio/identityStore.js";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES, QUALITY_STAFF } from "../writersRoom/profiles.js";
-import { getWritersRoomState, assignSeat, clearSeat } from "../writersRoom/store.js";
+import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../writersRoom/store.js";
 import { listTalent } from "../talent/store.js";
 
 export default async function writersRoomRoutes(app: FastifyInstance) {
@@ -39,6 +39,17 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
       talent,
     };
     return res;
+  });
+
+  app.put("/projects/:projectId/writers-room/mode", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const { mode } = z
+      .object({ mode: z.enum(WRITING_MODES as unknown as [WritingMode, ...WritingMode[]]) })
+      .parse(req.body);
+    const state = await setWritingMode(projectId, mode, user.id);
+    return { state };
   });
 
   app.put("/projects/:projectId/writers-room/seats/:seatId", async (req) => {

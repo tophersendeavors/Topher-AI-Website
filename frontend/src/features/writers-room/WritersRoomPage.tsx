@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Plus, X, PenLine, Wand2, UserPlus, ArrowRight, Loader2,
-  ClipboardCheck, Crosshair,
+  ClipboardCheck, Crosshair, Upload, Lightbulb, Bot, PencilLine, Pencil,
 } from "lucide-react";
 import type {
   AiCreativeProfile,
@@ -14,8 +14,12 @@ import type {
   TalentProfile,
   WritersRoomResponse,
   WritersRoomSeat,
+  WritingMode,
 } from "@toburt/shared";
-import { LIVE_PERMISSION_LABELS, LIVE_PERMISSIONS, TALENT_CATEGORY_LABELS, TALENT_INVITE_LABELS } from "@toburt/shared";
+import {
+  LIVE_PERMISSION_LABELS, LIVE_PERMISSIONS, TALENT_CATEGORY_LABELS, TALENT_INVITE_LABELS,
+  WRITING_MODES, WRITING_MODE_LABELS, WRITING_MODE_BLURBS,
+} from "@toburt/shared";
 import { api } from "@/lib/api";
 import { markProjectOpened } from "@/lib/recentProjects";
 
@@ -47,10 +51,14 @@ export function WritersRoomPage() {
   const { projectId } = useParams<{ projectId: string }>();
   if (!projectId) return null;
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const projectQ = useQuery({ queryKey: ["project", projectId], queryFn: () => api.getProject(projectId) });
   const roomQ = useQuery({ queryKey: ["writers-room", projectId], queryFn: () => api.getWritersRoom(projectId) });
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [assignTab, setAssignTab] = useState<SeatKind>("ai_writer");
   const [bench, setBench] = useState(false);
+  const [beginOpen, setBeginOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [debug, setDebug] = useState(typeof window !== "undefined" && window.location.search.includes("debug"));
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => { markProjectOpened(projectId); }, [projectId]);
@@ -63,9 +71,39 @@ export function WritersRoomPage() {
     mutationFn: (seatId: string) => api.clearWritersRoomSeat(projectId, seatId),
     onSuccess: (r) => seed(r.state),
   });
+  const setMode = useMutation({
+    mutationFn: (mode: WritingMode) => api.setWritersRoomMode(projectId, mode),
+    onSuccess: (r) => seed(r.state),
+  });
+  const createScript = useMutation({
+    mutationFn: (body: { title: string; fountain?: string }) =>
+      api.createScript({ projectId, title: body.title, fountain: body.fountain }),
+    onSuccess: (s) => navigate(`/projects/${projectId}/drafts/${s.id}/editor`),
+  });
 
   const room = roomQ.data;
   const seatById = new Map((room?.state.seats ?? []).map((s) => [s.seatId, s]));
+  const firstEmptySeat = SEATS.find((s) => !seatById.has(s.seatId))?.seatId ?? SEATS[0].seatId;
+
+  // The room's first question. Auto-open until the lead writer answers it.
+  const writingMode = room?.state.writingMode ?? null;
+  useEffect(() => {
+    if (room && writingMode == null) setBeginOpen(true);
+  }, [room, writingMode]);
+
+  function chooseMode(mode: WritingMode) {
+    setMode.mutate(mode);
+    setBeginOpen(false);
+    const openAssign = (tab: SeatKind) => { setAssignTab(tab); setAssigning(firstEmptySeat); };
+    switch (mode) {
+      case "upload": setUploadOpen(true); break;
+      case "manual": createScript.mutate({ title: `${projectQ.data?.title ?? "Untitled"} — Draft` }); break;
+      case "concept": navigate(`/projects/${projectId}/story-bible`); break;
+      case "ai_writer": openAssign("ai_writer"); break;
+      case "ai_creative": openAssign("ai_creative"); break;
+      case "co_writer": openAssign("live_person"); break;
+    }
+  }
 
   const onRoomClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!debug) return;
@@ -113,12 +151,25 @@ export function WritersRoomPage() {
 
       {/* breadcrumb / exit */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between p-5">
-        <div className="pointer-events-auto flex items-center gap-2 rounded-lg bg-black/35 px-3 py-1.5 backdrop-blur-sm">
-          <Link to="/studio/projects" className="text-bone-300 hover:text-bone-100"><ChevronLeft className="h-4 w-4" /></Link>
-          <div className="leading-tight">
-            <div className="text-[9px] uppercase tracking-[0.28em]" style={gold}>Writers Room</div>
-            <div className="text-[12.5px] text-bone-50">{projectQ.data?.title ?? "—"}</div>
+        <div className="pointer-events-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg bg-black/35 px-3 py-1.5 backdrop-blur-sm">
+            <Link to="/studio/writers-room" className="text-bone-300 hover:text-bone-100"><ChevronLeft className="h-4 w-4" /></Link>
+            <div className="leading-tight">
+              <div className="text-[9px] uppercase tracking-[0.28em]" style={gold}>Writers Room</div>
+              <div className="text-[12.5px] text-bone-50">{projectQ.data?.title ?? "—"}</div>
+            </div>
           </div>
+          {writingMode && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setBeginOpen(true); }}
+              className="flex items-center gap-1.5 rounded-lg border border-[#26262c] bg-black/35 px-2.5 py-1.5 text-[11px] text-bone-200 backdrop-blur-sm hover:border-[#d8b15a]/45"
+              title="Change how you're writing"
+            >
+              <PencilLine className="h-3.5 w-3.5" style={gold} />
+              {WRITING_MODE_LABELS[writingMode]}
+              <Pencil className="h-3 w-3 text-bone-500" />
+            </button>
+          )}
         </div>
         <div className="pointer-events-auto flex items-center gap-2">
           <button
@@ -161,12 +212,35 @@ export function WritersRoomPage() {
       {assigning && room && (
         <AssignModal
           seatId={assigning}
+          initialTab={assignTab}
           aiWriter={room.aiWriter}
           creatives={room.creatives}
           talent={room.talent}
           projectId={projectId}
           onClose={() => setAssigning(null)}
           onAssigned={(state) => { seed(state); setAssigning(null); }}
+        />
+      )}
+
+      {/* the room's first question — how do you want to begin? */}
+      {beginOpen && (
+        <BeginModal
+          current={writingMode}
+          busy={setMode.isPending || createScript.isPending}
+          dismissable={writingMode != null}
+          onPick={chooseMode}
+          onClose={() => setBeginOpen(false)}
+        />
+      )}
+
+      {/* upload intake — paste an existing screenplay */}
+      {uploadOpen && (
+        <UploadIntakeModal
+          busy={createScript.isPending}
+          error={createScript.isError ? (createScript.error as Error).message : null}
+          defaultTitle={`${projectQ.data?.title ?? "Untitled"} — Draft`}
+          onClose={() => setUploadOpen(false)}
+          onSubmit={(title, fountain) => createScript.mutate({ title, fountain })}
         />
       )}
 
@@ -267,9 +341,10 @@ function Avatar({ name, url, size, ring }: { name: string; url: string | null; s
 // Quality/checks agents are NOT here; they live on the Review Bench.
 
 function AssignModal({
-  seatId, aiWriter, creatives, talent, projectId, onClose, onAssigned,
+  seatId, initialTab, aiWriter, creatives, talent, projectId, onClose, onAssigned,
 }: {
   seatId: string;
+  initialTab?: SeatKind;
   aiWriter: AiWriterProfile;
   creatives: AiCreativeProfile[];
   talent: TalentProfile[];
@@ -277,7 +352,7 @@ function AssignModal({
   onClose: () => void;
   onAssigned: (state: WritersRoomResponse["state"]) => void;
 }) {
-  const [tab, setTab] = useState<SeatKind>("ai_writer");
+  const [tab, setTab] = useState<SeatKind>(initialTab ?? "ai_writer");
   const assign = useMutation({
     mutationFn: (body: Parameters<typeof api.assignWritersRoomSeat>[2]) =>
       api.assignWritersRoomSeat(projectId, seatId, body),
@@ -508,5 +583,115 @@ function StatusPill({ status }: { status: QualityAgent["status"] }) {
     <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px]" style={{ color: map.color, background: map.bg }}>
       {map.label}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// "How do you want to begin?" — the room's first question. Routes the writer to
+// the right path instead of jumping straight to seat assignment.
+
+const MODE_ICON: Record<WritingMode, typeof Upload> = {
+  upload: Upload,
+  manual: PencilLine,
+  concept: Lightbulb,
+  ai_writer: Bot,
+  ai_creative: Wand2,
+  co_writer: UserPlus,
+};
+
+function BeginModal({
+  current, busy, dismissable, onPick, onClose,
+}: {
+  current: WritingMode | null;
+  busy: boolean;
+  dismissable: boolean;
+  onPick: (mode: WritingMode) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={() => dismissable && onClose()}>
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[#d8b15a]/25 bg-[#0b0b0e]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between border-b border-[#26262c] px-6 py-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.28em]" style={gold}>Writers Room</div>
+            <div className="font-apple text-xl text-bone-50">How do you want to begin writing?</div>
+            <div className="mt-0.5 text-[12px] text-bone-400">Pick a starting point. You can change this anytime.</div>
+          </div>
+          {dismissable && <button onClick={onClose} className="text-bone-400 hover:text-bone-100"><X className="h-5 w-5" /></button>}
+        </div>
+        <div className="grid gap-2 p-4 sm:grid-cols-2">
+          {WRITING_MODES.map((m) => {
+            const Icon = MODE_ICON[m];
+            const active = current === m;
+            return (
+              <button
+                key={m}
+                onClick={() => onPick(m)}
+                disabled={busy}
+                className="flex items-start gap-3 rounded-xl border bg-white/[0.015] p-3.5 text-left transition-colors hover:border-[#d8b15a]/55 disabled:opacity-60"
+                style={{ borderColor: active ? `${GOLD}88` : "#26262c" }}
+              >
+                <span className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border" style={{ borderColor: `${GOLD}40`, color: GOLD, background: "rgba(216,177,90,0.06)" }}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[13.5px] text-bone-50">{WRITING_MODE_LABELS[m]}</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-bone-400">{WRITING_MODE_BLURBS[m]}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UploadIntakeModal({
+  busy, error, defaultTitle, onClose, onSubmit,
+}: {
+  busy: boolean;
+  error: string | null;
+  defaultTitle: string;
+  onClose: () => void;
+  onSubmit: (title: string, fountain: string) => void;
+}) {
+  const [title, setTitle] = useState(defaultTitle);
+  const [text, setText] = useState("");
+  const input = "w-full rounded-md border border-[#26262c] bg-black/30 px-3 py-2 text-[13px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#d8b15a]/25 bg-[#0b0b0e]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-[#26262c] px-5 py-3.5">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.28em]" style={gold}>Upload Existing Script</div>
+            <div className="font-apple text-lg text-bone-50">Bring in your screenplay</div>
+            <div className="text-[11.5px] text-bone-400">Paste your draft (Fountain or plain text). The studio indexes the scenes and opens it in the editor for review and rewrites.</div>
+          </div>
+          <button onClick={onClose} className="text-bone-400 hover:text-bone-100"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
+          {error && <p className="text-[12px] text-red-300">{error}</p>}
+          <input className={input} placeholder="Draft title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <textarea
+            className={input + " min-h-[260px] resize-y font-mono text-[12px] leading-relaxed"}
+            placeholder={"INT. KITCHEN - NIGHT\n\nA kettle screams. MARA doesn't move.\n\nMARA\nLet it."}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </div>
+        <div className="flex justify-end gap-2 border-t border-[#26262c] px-5 py-3">
+          <button onClick={onClose} className="rounded-lg border border-white/15 px-4 py-2 text-[13px] text-bone-200 hover:bg-white/5">Cancel</button>
+          <button
+            onClick={() => onSubmit(title.trim() || defaultTitle, text)}
+            disabled={busy || !text.trim()}
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black disabled:opacity-50"
+            style={{ background: GOLD }}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import & open editor
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

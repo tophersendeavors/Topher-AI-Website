@@ -9,6 +9,7 @@ import type {
   SeatKind,
   WritersRoomSeat,
   WritersRoomState,
+  WritingMode,
 } from "@toburt/shared";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES } from "./profiles.js";
 import { getTalent, createTalent, addProjectHistory } from "../talent/store.js";
@@ -19,10 +20,31 @@ async function loadMeta(projectId: string): Promise<Record<string, unknown>> {
   return (data?.metadata as Record<string, unknown> | null) ?? {};
 }
 
+const EMPTY_STATE: WritersRoomState = {
+  seats: [],
+  writingMode: null,
+  modeChosenAt: null,
+  updatedAt: null,
+};
+
 export async function getWritersRoomState(projectId: string): Promise<WritersRoomState> {
   const meta = await loadMeta(projectId);
-  const wr = (meta.writersRoom as WritersRoomState | undefined) ?? null;
-  return wr ?? { seats: [], updatedAt: null };
+  const wr = (meta.writersRoom as Partial<WritersRoomState> | undefined) ?? null;
+  // Merge with defaults so older rows (pre writingMode) read cleanly.
+  return { ...EMPTY_STATE, ...(wr ?? {}), seats: wr?.seats ?? [] };
+}
+
+export async function setWritingMode(
+  projectId: string,
+  mode: WritingMode,
+  _userId: string
+): Promise<WritersRoomState> {
+  const state = await getWritersRoomState(projectId);
+  return saveState(projectId, {
+    ...state,
+    writingMode: mode,
+    modeChosenAt: new Date().toISOString(),
+  });
 }
 
 async function saveState(projectId: string, state: WritersRoomState): Promise<WritersRoomState> {

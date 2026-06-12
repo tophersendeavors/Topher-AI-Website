@@ -15,6 +15,7 @@ import type {
   WritersRoomResponse,
   WritersRoomState,
   SeatKind,
+  WritingMode,
   LivePermission,
   TalentProfile,
   TalentProfileInput,
@@ -925,6 +926,11 @@ export const api = {
   clearWritersRoomSeat: (projectId: string, seatId: string) =>
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/seats/${seatId}`, {
       method: "DELETE",
+    }),
+  setWritersRoomMode: (projectId: string, mode: WritingMode) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/mode`, {
+      method: "PUT",
+      body: JSON.stringify({ mode }),
     }),
 
   // Writer / Talent Directory — account-level reusable people

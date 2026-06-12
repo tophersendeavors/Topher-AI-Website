@@ -21,6 +21,36 @@
 
 export type SeatKind = "ai_writer" | "ai_creative" | "live_person";
 
+// How the lead writer chooses to begin. This is the FIRST question the room
+// asks; it routes them to the right path instead of jumping straight to seats.
+export const WRITING_MODES = [
+  "upload",      // already wrote a screenplay/draft — bring it in
+  "manual",      // write by hand inside the app, no AI drafting
+  "concept",     // only an idea/logline — build foundation → bible → draft
+  "ai_writer",   // let the studio generate from foundation + Creative DNA
+  "ai_creative", // generate through a chosen creative lens
+  "co_writer",   // invite/assign another live writer
+] as const;
+export type WritingMode = (typeof WRITING_MODES)[number];
+
+export const WRITING_MODE_LABELS: Record<WritingMode, string> = {
+  upload: "Upload Existing Script",
+  manual: "Write Manually",
+  concept: "Start From Concept",
+  ai_writer: "Use AI Writer",
+  ai_creative: "Use AI Creative",
+  co_writer: "Add Co-Writer",
+};
+
+export const WRITING_MODE_BLURBS: Record<WritingMode, string> = {
+  upload: "You already wrote a screenplay or draft — bring it in for review and rewrites.",
+  manual: "Write inside Toburt yourself, no AI drafting. The studio's staff still reviews it.",
+  concept: "You have an idea, logline or premise. Build the foundation, then the draft.",
+  ai_writer: "Let the studio generate the draft using the project foundation and your Creative DNA.",
+  ai_creative: "Generate through a chosen creative lens / virtual co-writer archetype.",
+  co_writer: "Invite or assign another real writer to the table.",
+};
+
 export const LIVE_PERMISSIONS = [
   "view",
   "comment",
@@ -135,6 +165,10 @@ export interface WritersRoomSeat {
 
 export interface WritersRoomState {
   seats: WritersRoomSeat[];
+  // How the lead writer chose to begin (null until they answer the first
+  // "How do you want to begin?" question).
+  writingMode: WritingMode | null;
+  modeChosenAt: string | null;
   updatedAt: string | null;
 }
 

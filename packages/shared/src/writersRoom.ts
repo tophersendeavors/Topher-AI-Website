@@ -192,6 +192,36 @@ export interface ReviewRun {
   appliedAt: string | null;
 }
 
+// --- Final Draft Lock --------------------------------------------------------
+
+/** The formal lock that must happen before the room hands off to Creative. */
+export interface FinalLock {
+  locked: boolean;
+  version: number | null; // assigned at lock (the locked draft's number)
+  lockedAt: string | null;
+  lockedBy: string | null;
+  scriptId: string | null; // the draft that got locked
+  // creator-controlled confirmations / waivers
+  humanReadStatus: "pending" | "complete" | "skipped";
+  notesWaived: boolean; // waive remaining open notes intentionally
+  creatorApproved: boolean;
+}
+
+export interface LockRequirement {
+  key: string;
+  label: string;
+  met: boolean;
+  detail: string;
+  waivable: boolean; // can be satisfied by an intentional skip/waive
+}
+
+export interface LockStatus {
+  requirements: LockRequirement[];
+  canLock: boolean;
+  lock: FinalLock;
+  draftLabel: string | null;
+}
+
 // --- Seats -------------------------------------------------------------------
 
 /** A seat's pointer to a reusable profile. */
@@ -225,6 +255,8 @@ export interface WritersRoomState {
   modeChosenAt: string | null;
   // Review Bench run state, keyed by quality-agent id.
   reviewBench: ReviewRun[];
+  // Formal Final Draft Lock — the gate before Creative Room handoff.
+  finalLock: FinalLock;
   updatedAt: string | null;
 }
 

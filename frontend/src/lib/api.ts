@@ -24,6 +24,7 @@ import type {
   RoomNoteInput,
   NoteTargetType,
   NoteStatus,
+  LockStatus,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -955,6 +956,16 @@ export const api = {
   // Review Bench — run / skip / apply / reset a quality agent
   reviewAgentAction: (projectId: string, agentId: string, action: "run" | "skip" | "apply" | "reset") =>
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/review/${agentId}/${action}`, { method: "POST" }),
+
+  // Final Draft Lock
+  getFinalLock: (projectId: string) =>
+    request<{ status: LockStatus }>(`/projects/${projectId}/writers-room/lock`),
+  updateFinalLockSettings: (projectId: string, patch: { humanReadStatus?: "pending" | "complete" | "skipped"; notesWaived?: boolean; creatorApproved?: boolean }) =>
+    request<{ status: LockStatus }>(`/projects/${projectId}/writers-room/lock/settings`, { method: "PUT", body: JSON.stringify(patch) }),
+  lockFinalDraft: (projectId: string) =>
+    request<{ status: LockStatus }>(`/projects/${projectId}/writers-room/lock`, { method: "POST" }),
+  unlockFinalDraft: (projectId: string) =>
+    request<{ status: LockStatus }>(`/projects/${projectId}/writers-room/lock/unlock`, { method: "POST" }),
 
   // Writer / Talent Directory — account-level reusable people
   listTalent: (category?: TalentCategory) =>

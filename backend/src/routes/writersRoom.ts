@@ -11,6 +11,7 @@ import { getStudioOwner } from "../studio/identityStore.js";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES, QUALITY_STAFF } from "../writersRoom/profiles.js";
 import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../writersRoom/store.js";
 import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite } from "../writersRoom/review.js";
+import { getLockStatus, updateLockSettings, lockFinalDraft, unlockFinalDraft } from "../writersRoom/lock.js";
 import { listTalent } from "../talent/store.js";
 
 export default async function writersRoomRoutes(app: FastifyInstance) {
@@ -94,4 +95,40 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
   app.post("/projects/:projectId/writers-room/review/:agentId/skip", reviewAction(skipReviewAgent));
   app.post("/projects/:projectId/writers-room/review/:agentId/apply", reviewAction(applyReviewRewrite));
   app.post("/projects/:projectId/writers-room/review/:agentId/reset", reviewAction(resetReviewAgent));
+
+  // --- Final Draft Lock ----------------------------------------------------
+  app.get("/projects/:projectId/writers-room/lock", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return { status: await getLockStatus(projectId) };
+  });
+
+  app.put("/projects/:projectId/writers-room/lock/settings", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const patch = z
+      .object({
+        humanReadStatus: z.enum(["pending", "complete", "skipped"]).optional(),
+        notesWaived: z.boolean().optional(),
+        creatorApproved: z.boolean().optional(),
+      })
+      .parse(req.body);
+    return { status: await updateLockSettings(projectId, patch) };
+  });
+
+  app.post("/projects/:projectId/writers-room/lock", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return { status: await lockFinalDraft(projectId, user.id) };
+  });
+
+  app.post("/projects/:projectId/writers-room/lock/unlock", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return { status: await unlockFinalDraft(projectId) };
+  });
 }

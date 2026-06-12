@@ -164,8 +164,8 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { projectId } = req.params as { projectId: string };
     await assertProjectMember(user.id, projectId);
-    const { seatId } = z.object({ seatId: z.string().optional() }).parse(req.body ?? {});
-    const state = await generateOutline(projectId, seatId);
+    const { seatId, notes } = z.object({ seatId: z.string().optional(), notes: z.string().max(2000).optional() }).parse(req.body ?? {});
+    const state = await generateOutline(projectId, seatId, notes);
     return { state };
   });
 
@@ -180,6 +180,7 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { projectId } = req.params as { projectId: string };
     await assertProjectMember(user.id, projectId);
-    return await generateDraftFromOutline(projectId);
+    const { notes } = z.object({ notes: z.string().max(2000).optional() }).parse(req.body ?? {});
+    return await generateDraftFromOutline(projectId, notes);
   });
 }

@@ -973,12 +973,12 @@ export const api = {
     request<{ concept: ConceptBrief }>(`/projects/${projectId}/writers-room/write-flow/defaults`),
   saveWriteConcept: (projectId: string, concept: ConceptBrief) =>
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/concept`, { method: "PUT", body: JSON.stringify(concept) }),
-  generateWriteOutline: (projectId: string, seatId?: string) =>
-    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/outline`, { method: "POST", body: JSON.stringify({ seatId }) }),
+  generateWriteOutline: (projectId: string, seatId?: string, notes?: string) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/outline`, { method: "POST", body: JSON.stringify({ seatId, notes }) }),
   approveWriteOutline: (projectId: string) =>
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/outline/approve`, { method: "POST" }),
-  generateWriteDraft: (projectId: string) =>
-    request<{ state: WritersRoomState; scriptId: string }>(`/projects/${projectId}/writers-room/write-flow/draft`, { method: "POST" }),
+  generateWriteDraft: (projectId: string, notes?: string) =>
+    request<{ state: WritersRoomState; scriptId: string }>(`/projects/${projectId}/writers-room/write-flow/draft`, { method: "POST", body: JSON.stringify({ notes }) }),
 
   // Writer / Talent Directory — account-level reusable people
   listTalent: (category?: TalentCategory) =>

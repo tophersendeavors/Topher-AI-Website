@@ -104,17 +104,20 @@ const OUTLINE_SCHEMA = {
   },
 } as const;
 
-export async function generateOutline(projectId: string, seatId?: string): Promise<WritersRoomState> {
+export async function generateOutline(projectId: string, seatId?: string, notes?: string): Promise<WritersRoomState> {
   const state = await getWritersRoomState(projectId);
   const resolved = resolveCollaborator(state, seatId);
   if (!resolved) throw new Error("Seat an AI Writer or AI Creative first — they develop the outline with you.");
   const concept = state.writeFlow.concept ?? (await conceptDefaults(projectId));
+  const steer = notes?.trim()
+    ? `\n\nThe creator gave steering notes for this outline — follow them closely:\n${notes.trim()}`
+    : "";
 
   const res = await callLLM({
     model: config.SCENE_MODEL,
     messages: [
       { role: "system", content: `${collaboratorSystem(resolved.ref, resolved.creativeIdx)}\n\nDevelop the creator's concept into a beat OUTLINE (not prose). 8–12 beats, in order, each with a short heading and a 1–2 sentence summary. Return JSON only.` },
-      { role: "user", content: `Concept:\n${conceptText(concept)}\n\nReturn { "beats": [{ "heading", "summary" }] }.` },
+      { role: "user", content: `Concept:\n${conceptText(concept)}${steer}\n\nReturn { "beats": [{ "heading", "summary" }] }.` },
     ],
     jsonSchema: OUTLINE_SCHEMA as unknown as { name: string; schema: Record<string, unknown> },
     temperature: 0.7,
@@ -144,20 +147,21 @@ export async function approveOutline(projectId: string): Promise<WritersRoomStat
   });
 }
 
-export async function generateDraftFromOutline(projectId: string): Promise<{ state: WritersRoomState; scriptId: string }> {
+export async function generateDraftFromOutline(projectId: string, notes?: string): Promise<{ state: WritersRoomState; scriptId: string }> {
   const state = await getWritersRoomState(projectId);
   const outline = state.writeFlow.outline;
   if (!outline || !outline.approved) throw new Error("Approve the outline before drafting.");
   const concept = state.writeFlow.concept ?? (await conceptDefaults(projectId));
   const resolved = resolveCollaborator(state, outline.collaborator?.seatId);
   const sys = resolved ? collaboratorSystem(resolved.ref, resolved.creativeIdx) : collaboratorSystem({ kind: "ai_writer", id: "studio_ai_writer", seatId: "", name: STUDIO_AI_WRITER.name, lens: null }, -1);
+  const steer = notes?.trim() ? `\n\nThe creator gave steering notes for the draft — follow them closely:\n${notes.trim()}` : "";
 
   const beatList = outline.beats.map((b, i) => `${i + 1}. ${b.heading} — ${b.summary}`).join("\n");
   const res = await callLLM({
     model: config.SCENE_MODEL,
     messages: [
       { role: "system", content: `${sys}\n\nWrite the actual screenplay in FOUNTAIN format from the approved outline, honoring your lens. Use scene headings in CAPS (INT./EXT. — LOCATION — TIME). Cover every beat in order. Producible, filmable, no camera directions. Return ONLY the Fountain screenplay text.` },
-      { role: "user", content: `Concept:\n${conceptText(concept)}\n\nApproved outline:\n${beatList}\n\nWrite the first draft now.` },
+      { role: "user", content: `Concept:\n${conceptText(concept)}\n\nApproved outline:\n${beatList}${steer}\n\nWrite the first draft now.` },
     ],
     temperature: 0.8,
     maxTokens: 6000,

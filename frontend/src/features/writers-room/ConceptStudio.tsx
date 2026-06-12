@@ -196,18 +196,21 @@ function OutlineStep({ projectId, room, collabName, lens, seatId, onState, onApp
   onState: (state: WritersRoomResponse["state"]) => void; onApproved: (state: WritersRoomResponse["state"]) => void; onBack: () => void;
 }) {
   const outline = room.state.writeFlow.outline;
-  const gen = useMutation({ mutationFn: () => api.generateWriteOutline(projectId, seatId), onSuccess: (r) => onState(r.state) });
+  const [notes, setNotes] = useState("");
+  const gen = useMutation({ mutationFn: () => api.generateWriteOutline(projectId, seatId, notes.trim() || undefined), onSuccess: (r) => { onState(r.state); setNotes(""); } });
   const approve = useMutation({ mutationFn: () => api.approveWriteOutline(projectId), onSuccess: (r) => onApproved(r.state) });
+  const noteCls = "w-full rounded-md border border-[#26262c] bg-black/30 px-3 py-2 text-[12px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none";
 
   if (gen.isPending) {
     return <div className="grid place-items-center gap-3 py-12 text-center"><Loader2 className="h-6 w-6 animate-spin" style={gold} /><div className="text-[13px] text-bone-200">{collabName ?? "The studio"} is preparing an outline…</div>{lens && <div className="text-[11px] text-bone-500">through the lens: {lens}</div>}</div>;
   }
   if (!outline) {
     return (
-      <div className="grid place-items-center gap-3 py-10 text-center">
+      <div className="grid place-items-center gap-3 py-8 text-center">
         <Lightbulb className="h-7 w-7" style={gold} />
         <div className="font-apple text-[16px] text-bone-100">Develop this into a beat outline</div>
         {lens && <div className="max-w-md text-[11.5px] text-bone-400">{collabName}'s lens: {lens}</div>}
+        <textarea className={noteCls + " mt-1 min-h-[56px] w-full max-w-md text-left"} placeholder={`Optional — steer ${collabName ?? "the outline"}: "open quieter", "more on the sister relationship", "end on a hard turn"…`} value={notes} onChange={(e) => setNotes(e.target.value)} />
         {gen.isError && <p className="text-[12px] text-red-300">{(gen.error as Error).message}</p>}
         <button onClick={() => gen.mutate()} className="mt-1 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black" style={{ background: GOLD }}><Wand2 className="h-4 w-4" /> Generate outline with {collabName ?? "AI"}</button>
         <button onClick={onBack} className="text-[12px] text-bone-500 hover:text-bone-300">Back</button>
@@ -216,10 +219,7 @@ function OutlineStep({ projectId, room, collabName, lens, seatId, onState, onApp
   }
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="text-[12px] text-bone-400">Outline by <span style={gold}>{outline.collaborator?.name ?? collabName}</span> · {outline.beats.length} beats. Review, then approve to draft.</div>
-        <button onClick={() => gen.mutate()} disabled={gen.isPending} className="inline-flex items-center gap-1.5 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-300 hover:border-[#d8b15a]/45"><RefreshCw className="h-3 w-3" /> Regenerate</button>
-      </div>
+      <div className="text-[12px] text-bone-400">Outline by <span style={gold}>{outline.collaborator?.name ?? collabName}</span> · {outline.beats.length} beats. Steer and regenerate, or approve to draft.</div>
       <ol className="space-y-2">
         {outline.beats.map((b, i) => (
           <li key={b.id} className="rounded-xl border border-[#26262c] bg-white/[0.015] p-3">
@@ -228,9 +228,21 @@ function OutlineStep({ projectId, room, collabName, lens, seatId, onState, onApp
           </li>
         ))}
       </ol>
+
+      {/* steering notes — never just approve/regenerate blindly */}
+      <div className="rounded-xl border border-[#26262c] bg-black/20 p-3">
+        <div className="text-[10px] uppercase tracking-wide text-bone-500">Steering notes for {collabName ?? "the outline"}</div>
+        <textarea className={noteCls + " mt-1 min-h-[52px]"} placeholder={`e.g. "compress the middle", "give the antagonist an earlier entrance", "the ending should ache, not resolve"`} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <div className="mt-2 flex items-center justify-between">
+          <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[12px] text-bone-400 hover:text-bone-100"><ArrowLeft className="h-4 w-4" /> Back</button>
+          <button onClick={() => gen.mutate()} disabled={gen.isPending} className="inline-flex items-center gap-1.5 rounded-md border border-[#26262c] px-3 py-1.5 text-[12px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
+            {gen.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} {notes.trim() ? "Regenerate with notes" : "Regenerate"}
+          </button>
+        </div>
+      </div>
+
       {approve.isError && <p className="text-[12px] text-red-300">{(approve.error as Error).message}</p>}
-      <div className="flex items-center justify-between pt-1">
-        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-[12px] text-bone-400 hover:text-bone-100"><ArrowLeft className="h-4 w-4" /> Back</button>
+      <div className="flex justify-end">
         <button onClick={() => approve.mutate()} disabled={approve.isPending} className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
           {approve.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Approve outline & continue
         </button>
@@ -243,7 +255,9 @@ function DraftStep({ projectId, collabName, drafted, draftScriptId, onState, onO
   projectId: string; collabName: string | null; drafted: boolean; draftScriptId: string | null;
   onState: (state: WritersRoomResponse["state"]) => void; onOpenEditor: (scriptId: string) => void; onBack: () => void;
 }) {
-  const gen = useMutation({ mutationFn: () => api.generateWriteDraft(projectId), onSuccess: (r) => { onState(r.state); onOpenEditor(r.scriptId); } });
+  const [notes, setNotes] = useState("");
+  const noteCls = "w-full max-w-md rounded-md border border-[#26262c] bg-black/30 px-3 py-2 text-[12px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none";
+  const gen = useMutation({ mutationFn: () => api.generateWriteDraft(projectId, notes.trim() || undefined), onSuccess: (r) => { onState(r.state); onOpenEditor(r.scriptId); } });
   if (gen.isPending) {
     return <div className="grid place-items-center gap-3 py-12 text-center"><Loader2 className="h-6 w-6 animate-spin" style={gold} /><div className="text-[13px] text-bone-200">{collabName ?? "The studio"} is writing the first draft from your approved outline…</div><div className="text-[11px] text-bone-500">This can take a moment.</div></div>;
   }
@@ -263,6 +277,7 @@ function DraftStep({ projectId, collabName, drafted, draftScriptId, onState, onO
       <PencilLine className="h-7 w-7" style={gold} />
       <div className="font-apple text-[16px] text-bone-100">Draft from the approved outline</div>
       <p className="max-w-md text-[11.5px] text-bone-400">{collabName} writes the first draft in screenplay format, covering every approved beat. You can keep writing manually after.</p>
+      <textarea className={noteCls + " min-h-[52px] text-left"} placeholder={`Optional — steer the draft: "lean on silence", "sharper dialogue", "don't rush the opening"…`} value={notes} onChange={(e) => setNotes(e.target.value)} />
       {gen.isError && <p className="text-[12px] text-red-300">{(gen.error as Error).message}</p>}
       <button onClick={() => gen.mutate()} className="mt-1 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black" style={{ background: GOLD }}><Wand2 className="h-4 w-4" /> Generate first draft with {collabName ?? "AI"}</button>
       <button onClick={onBack} className="text-[12px] text-bone-500 hover:text-bone-300">Back to outline</button>

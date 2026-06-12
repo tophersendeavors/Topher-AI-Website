@@ -578,6 +578,17 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
     },
     onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
   });
+  // One step: surgically edit the current fix per the notes, then apply it.
+  const approveWithChanges = useMutation({
+    mutationFn: async (v: { id: string; notes: string }) => {
+      const r = await api.reviewRewrite(projectId, v.id, v.notes);
+      const opt = r.state.reviewBench.find((x) => x.agentId === v.id)?.finding?.rewriteOption;
+      if (opt) await applyRewrite(opt.before, opt.after);
+      await api.reviewAgentAction(projectId, v.id, "apply");
+      return r;
+    },
+    onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
+  });
 
   if (!hasText) return <div className="py-8 text-center text-[12px] text-bone-400">Write or generate some pages first — the staff reviews real text.</div>;
   if (!approved) {
@@ -603,6 +614,7 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
             onReview={() => act.mutate({ id: agent.id, action: "run" })}
             onSkip={() => act.mutate({ id: agent.id, action: "skip" })}
             onRewrite={(notes) => rewrite.mutate({ id: agent.id, notes })}
+            onApprove={(notes) => approveWithChanges.mutate({ id: agent.id, notes })}
             onApply={() => { const o = run?.finding?.rewriteOption; if (o) apply.mutate({ id: agent.id, before: o.before, after: o.after }); }}
           />
         );
@@ -611,11 +623,12 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
   );
 }
 
-function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onApply: () => void }) {
+function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onApprove, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onApprove: (notes: string) => void; onApply: () => void }) {
   const [notes, setNotes] = useState("");
   const authority = run?.authority ?? reviewAuthorityOf(agent.rewriteAuthority);
   const f = run?.finding ?? null;
   const fix = f?.rewriteOption?.after?.trim() ? f.rewriteOption : null;
+  const hasNotes = !!notes.trim();
 
   return (
     <div className="rounded-lg border border-[#26262c] bg-white/[0.015] p-2.5">
@@ -642,23 +655,34 @@ function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onApply }: {
             </div>
           )}
 
-          {/* Always steerable: refine the fix with your notes, then apply it. */}
+          {/* Targeted: notes change ONLY what you point at, not the whole fix. */}
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder={fix ? "Refine the fix with your notes (optional)…" : "How should this be fixed? Add notes (optional)…"}
+            placeholder={fix ? "Change just one thing about this fix… (e.g. 'keep her pen line', 'shorter')" : "How should this be fixed? Add notes (optional)…"}
             className="min-h-[36px] w-full resize-y rounded-md border border-[#26262c] bg-black/30 px-2 py-1.5 text-[11.5px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none"
           />
           <div className="flex flex-wrap gap-1.5">
-            <button onClick={() => onRewrite(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} {fix ? "Rewrite with notes" : "Write the fix"}
-            </button>
-            {fix && (
+            {hasNotes ? (
+              <>
+                <button onClick={() => onApprove(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
+                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Approve with changes
+                </button>
+                <button onClick={() => onRewrite(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
+                  <Sparkles className="h-3 w-3" /> Preview change
+                </button>
+              </>
+            ) : fix ? (
               <button onClick={onApply} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
-                <ArrowDownToLine className="h-3 w-3" /> Apply to draft
+                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />} Apply this fix
+              </button>
+            ) : (
+              <button onClick={() => onRewrite("")} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
+                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} Write the fix
               </button>
             )}
           </div>
+          {hasNotes && <p className="text-[10px] text-bone-600">"Approve with changes" edits only what your note says and applies it — it won't re-do the whole passage.</p>}
         </div>
       )}
 

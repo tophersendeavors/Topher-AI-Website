@@ -175,18 +175,30 @@ export async function rewriteFinding(projectId: string, agentId: string, notes?:
   const draft = await loadProjectDraft(projectId, state.writeFlow.draftScriptId);
   const before = run.finding.rewriteOption?.before ?? null;
   const targetLabel = run.finding.rewriteOption?.targetLabel ?? agent.role;
+  const current = run.finding.rewriteOption?.after?.trim() || "";
+  const hasNotes = !!notes?.trim();
 
-  const system = `You are the ${agent.name} — ${agent.role} — on a studio script staff. You flagged this: ${run.finding.diagnosis}\nRewrite the passage to fix it, honoring your craft. Return ONLY the rewritten passage in Fountain — no preamble, no commentary.`;
-  const user = [
-    `Draft (for context):\n${draft.text.slice(-8000)}`,
-    before ? `Passage to rewrite (verbatim from the draft):\n${before}` : `Rewrite the specific moment your diagnosis refers to (${targetLabel}).`,
-    notes?.trim() ? `The creator's steering notes — follow them closely:\n${notes.trim()}` : "",
-  ].filter(Boolean).join("\n\n");
+  let system: string;
+  let user: string;
+  if (current && hasNotes) {
+    // SURGICAL: edit only what the note asks for; keep the rest identical.
+    // (This is what stops the "every rewrite brings new changes" loop.)
+    system = `You are the ${agent.name} — ${agent.role}. Make a SMALL, TARGETED edit to an existing passage. Change ONLY what the creator's note asks for and keep EVERYTHING else word-for-word identical — do not re-style, re-order, or introduce any other change. Return ONLY the full edited passage in Fountain, no commentary.`;
+    user = `Current passage:\n${current}\n\nThe creator's note — apply ONLY this change, nothing else:\n${notes!.trim()}`;
+  } else {
+    // First fix (or no notes): write a fix for the flagged passage.
+    system = `You are the ${agent.name} — ${agent.role}. You flagged this: ${run.finding.diagnosis}\nWrite a focused fix for ONLY that passage, honoring your craft — do not touch the rest of the script. Return ONLY the rewritten passage in Fountain, no commentary.`;
+    user = [
+      before ? `Passage to fix (verbatim from the draft):\n${before}` : `The specific moment your diagnosis refers to (${targetLabel}).`,
+      hasNotes ? `The creator's notes — follow them closely:\n${notes!.trim()}` : "",
+      `Draft (for context only — do not rewrite it):\n${draft.text.slice(-6000)}`,
+    ].filter(Boolean).join("\n\n");
+  }
 
   const res = await callLLM({
     model: config.SCENE_MODEL,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
-    temperature: 0.7,
+    temperature: current && hasNotes ? 0.3 : 0.7,
     maxTokens: 1200,
   });
   const after = res.text.trim();

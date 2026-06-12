@@ -5,12 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Save, Download, Loader2, Wand2, PencilLine, MessageCircle,
   Sparkles, ClipboardCheck, StickyNote, ListOrdered, Users, Check, ArrowRight,
-  CheckCircle2, Play, SkipForward, AlertTriangle, Copy, ArrowDownToLine, Trash2,
+  CheckCircle2, Play, SkipForward, AlertTriangle, Copy, ArrowDownToLine, Trash2, Lock,
 } from "lucide-react";
 import type { CollabAction, NoteStatus, QualityAgent, ReviewRun, WritersRoomResponse } from "@toburt/shared";
 import { reviewAuthorityOf, REVIEW_AUTHORITY_LABELS, OPEN_NOTE_STATUSES } from "@toburt/shared";
 import { api } from "@/lib/api";
 import { markProjectOpened } from "@/lib/recentProjects";
+import { FinalDraftDrawer } from "@/features/writers-room/FinalDraftDrawer";
 import { FOUNTAIN_LANG_ID, FOUNTAIN_THEME, fountainLanguageDef } from "./fountain";
 
 const GOLD = "#d8b15a";
@@ -72,6 +73,7 @@ export function WritingDeskPage() {
   const [body, setBody] = useState("");
   const [dirty, setDirty] = useState(false);
   const [tab, setTab] = useState<Tab>("team");
+  const [lockOpen, setLockOpen] = useState(false);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   useEffect(() => { markProjectOpened(projectId); }, [projectId]);
   useEffect(() => { if (scriptQ.data) { setBody(scriptQ.data.fountain ?? ""); setDirty(false); } }, [scriptQ.data?.id]);
@@ -163,6 +165,11 @@ export function WritingDeskPage() {
         </div>
         <div className="flex items-center gap-2">
           {showApprove && <ApproveDraftButton projectId={projectId} approved={room?.state.writeFlow.draftApproved ?? false} hasText={hasText} unfinished={unfinished} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />}
+          {(stage === "reviewing" || stage === "locked") && (
+            <button onClick={() => setLockOpen(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-[#26262c] px-2.5 py-1.5 text-[12px] text-bone-200 hover:border-[#d8b15a]/45">
+              <Lock className="h-3.5 w-3.5" style={gold} /> Final Draft Lock
+            </button>
+          )}
           <ExportMenu scriptId={scriptId} />
           <button onClick={() => save.mutate()} disabled={!dirty || save.isPending} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
             {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} {dirty ? "Save Draft" : "Saved"}
@@ -202,10 +209,25 @@ export function WritingDeskPage() {
 
         {/* center: the script page on the writing desk */}
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden p-5" style={{ background: "radial-gradient(130% 85% at 50% -8%, rgba(216,177,90,0.07), transparent 55%), #0a0a0c" }}>
-          {unfinished && (
+          {unfinished && stage !== "reviewing" && stage !== "locked" && (
             <div className="mx-auto mb-3 flex w-full max-w-3xl items-center justify-between gap-3 rounded-lg border border-[#d8b15a]/30 bg-[#d8b15a]/[0.06] px-4 py-2">
               <span className="text-[11.5px] text-bone-200">This draft appears unfinished — it ends on a heading/cue with nothing after it.</span>
               <button onClick={() => setTab("team")} className="shrink-0 rounded-md px-3 py-1 text-[11.5px] font-medium text-black" style={{ background: GOLD }}>Continue from end</button>
+            </div>
+          )}
+          {stage === "reviewing" && (
+            <div className="mx-auto mb-3 flex w-full max-w-3xl flex-wrap items-center justify-between gap-3 rounded-lg border border-[#7fd1a4]/25 bg-[#7fd1a4]/[0.05] px-4 py-2">
+              <span className="text-[11.5px] text-bone-200"><span className="font-medium" style={{ color: "#7fd1a4" }}>Draft approved.</span> Next: run the Review Bench for notes &amp; fixes, then lock the final draft.</span>
+              <div className="flex shrink-0 gap-2">
+                <button onClick={() => setTab("bench")} className="rounded-md px-3 py-1 text-[11.5px] font-medium text-black" style={{ background: GOLD }}>Open Review Bench</button>
+                <button onClick={() => setLockOpen(true)} className="rounded-md border border-[#26262c] px-3 py-1 text-[11.5px] text-bone-200 hover:border-[#d8b15a]/45">Final Draft Lock</button>
+              </div>
+            </div>
+          )}
+          {stage === "locked" && (
+            <div className="mx-auto mb-3 flex w-full max-w-3xl items-center justify-between gap-3 rounded-lg border border-[#d8b15a]/30 bg-[#d8b15a]/[0.06] px-4 py-2">
+              <span className="text-[11.5px] text-bone-200"><span className="font-medium" style={gold}>Draft locked.</span> Ready for the Creative Room handoff.</span>
+              <Link to={`/projects/${projectId}/writers-room`} className="shrink-0 rounded-md px-3 py-1 text-[11.5px] font-medium text-black" style={{ background: GOLD }}>Back to Writers Room</Link>
             </div>
           )}
           <div
@@ -255,6 +277,8 @@ export function WritingDeskPage() {
           </div>
         </aside>
       </div>
+
+      {lockOpen && <FinalDraftDrawer projectId={projectId} onClose={() => { setLockOpen(false); qc.invalidateQueries({ queryKey: ["writers-room", projectId] }); }} />}
     </div>
   );
 }

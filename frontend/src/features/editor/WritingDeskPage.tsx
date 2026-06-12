@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Save, Download, Loader2, Wand2, PencilLine, MessageCircle,
   Sparkles, ClipboardCheck, StickyNote, ListOrdered, Users, Check, ArrowRight,
-  CheckCircle2, Play, SkipForward, AlertTriangle, Copy, ArrowDownToLine, Trash2, Lock,
+  CheckCircle2, Play, SkipForward, AlertTriangle, Copy, ArrowDownToLine, Trash2, Lock, RefreshCw,
 } from "lucide-react";
 import type { CollabAction, NoteStatus, QualityAgent, ReviewRun, WritersRoomResponse } from "@toburt/shared";
 import { reviewAuthorityOf, REVIEW_AUTHORITY_LABELS, OPEN_NOTE_STATUSES } from "@toburt/shared";
@@ -568,7 +568,7 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
     onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
   });
   const rewrite = useMutation({
-    mutationFn: (v: { id: string; notes?: string }) => api.reviewRewrite(projectId, v.id, v.notes),
+    mutationFn: (v: { id: string; notes?: string; regenerate?: boolean }) => api.reviewRewrite(projectId, v.id, v.notes, v.regenerate),
     onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
   });
   const apply = useMutation({
@@ -614,6 +614,7 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
             onReview={() => act.mutate({ id: agent.id, action: "run" })}
             onSkip={() => act.mutate({ id: agent.id, action: "skip" })}
             onRewrite={(notes) => rewrite.mutate({ id: agent.id, notes })}
+            onRegenerate={(notes) => rewrite.mutate({ id: agent.id, notes, regenerate: true })}
             onApprove={(notes) => approveWithChanges.mutate({ id: agent.id, notes })}
             onApply={() => { const o = run?.finding?.rewriteOption; if (o) apply.mutate({ id: agent.id, before: o.before, after: o.after }); }}
           />
@@ -623,7 +624,7 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
   );
 }
 
-function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onApprove, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onApprove: (notes: string) => void; onApply: () => void }) {
+function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onRegenerate, onApprove, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onRegenerate: (notes: string) => void; onApprove: (notes: string) => void; onApply: () => void }) {
   const [notes, setNotes] = useState("");
   const authority = run?.authority ?? reviewAuthorityOf(agent.rewriteAuthority);
   const f = run?.finding ?? null;
@@ -668,21 +669,23 @@ function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onApprove, o
                 <button onClick={() => onApprove(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
                   {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Approve with changes
                 </button>
-                <button onClick={() => onRewrite(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
-                  <Sparkles className="h-3 w-3" /> Preview change
-                </button>
+                {fix && <button onClick={() => onRewrite(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50"><Sparkles className="h-3 w-3" /> Preview change</button>}
+                <button onClick={() => onRegenerate(notes)} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-300 hover:border-[#d8b15a]/45 disabled:opacity-50"><RefreshCw className="h-3 w-3" /> Regenerate with notes</button>
               </>
             ) : fix ? (
-              <button onClick={onApply} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
-                {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />} Apply this fix
-              </button>
+              <>
+                <button onClick={onApply} disabled={busy} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
+                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />} Apply this fix
+                </button>
+                <button onClick={() => onRegenerate("")} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-300 hover:border-[#d8b15a]/45 disabled:opacity-50"><RefreshCw className="h-3 w-3" /> Regenerate</button>
+              </>
             ) : (
               <button onClick={() => onRewrite("")} disabled={busy} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
                 {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} Write the fix
               </button>
             )}
           </div>
-          {hasNotes && <p className="text-[10px] text-bone-600">"Approve with changes" edits only what your note says and applies it — it won't re-do the whole passage.</p>}
+          {hasNotes && <p className="text-[10px] text-bone-600">Approve with changes = edit only what your note says. Regenerate with notes = a fresh take steered by your note.</p>}
         </div>
       )}
 

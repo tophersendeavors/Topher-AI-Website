@@ -102,8 +102,8 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { projectId, agentId } = req.params as { projectId: string; agentId: string };
     await assertProjectMember(user.id, projectId);
-    const { notes } = z.object({ notes: z.string().max(2000).optional() }).parse(req.body ?? {});
-    return { state: await rewriteFinding(projectId, agentId, notes) };
+    const { notes, regenerate } = z.object({ notes: z.string().max(2000).optional(), regenerate: z.boolean().optional() }).parse(req.body ?? {});
+    return { state: await rewriteFinding(projectId, agentId, notes, regenerate) };
   });
 
   // --- Final Draft Lock ----------------------------------------------------

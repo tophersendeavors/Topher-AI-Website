@@ -958,8 +958,8 @@ export const api = {
   // Review Bench — run / skip / apply / reset a quality agent
   reviewAgentAction: (projectId: string, agentId: string, action: "run" | "skip" | "apply" | "reset") =>
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/review/${agentId}/${action}`, { method: "POST" }),
-  reviewRewrite: (projectId: string, agentId: string, notes?: string) =>
-    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/review/${agentId}/rewrite`, { method: "POST", body: JSON.stringify({ notes }) }),
+  reviewRewrite: (projectId: string, agentId: string, notes?: string, regenerate?: boolean) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/review/${agentId}/rewrite`, { method: "POST", body: JSON.stringify({ notes, regenerate }) }),
 
   // Final Draft Lock
   getFinalLock: (projectId: string) =>

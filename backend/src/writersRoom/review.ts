@@ -166,7 +166,7 @@ export async function resetReviewAgent(projectId: string, agentId: string): Prom
 
 /** Re-generate the fix for a finding, steered by the creator's notes. Updates
  *  the stored rewrite option (and un-applies it, since it's a new version). */
-export async function rewriteFinding(projectId: string, agentId: string, notes?: string): Promise<WritersRoomState> {
+export async function rewriteFinding(projectId: string, agentId: string, notes?: string, regenerate?: boolean): Promise<WritersRoomState> {
   const agent = QUALITY_STAFF.find((a) => a.id === agentId);
   if (!agent) throw new Error("Unknown review agent.");
   const state = await getWritersRoomState(projectId);
@@ -180,7 +180,7 @@ export async function rewriteFinding(projectId: string, agentId: string, notes?:
 
   let system: string;
   let user: string;
-  if (current && hasNotes) {
+  if (current && hasNotes && !regenerate) {
     // SURGICAL: edit only what the note asks for; keep the rest identical.
     // (This is what stops the "every rewrite brings new changes" loop.)
     system = `You are the ${agent.name} — ${agent.role}. Make a SMALL, TARGETED edit to an existing passage. Change ONLY what the creator's note asks for and keep EVERYTHING else word-for-word identical — do not re-style, re-order, or introduce any other change. Return ONLY the full edited passage in Fountain, no commentary.`;
@@ -198,7 +198,7 @@ export async function rewriteFinding(projectId: string, agentId: string, notes?:
   const res = await callLLM({
     model: config.SCENE_MODEL,
     messages: [{ role: "system", content: system }, { role: "user", content: user }],
-    temperature: current && hasNotes ? 0.3 : 0.7,
+    temperature: current && hasNotes && !regenerate ? 0.3 : 0.85,
     maxTokens: 1200,
   });
   const after = res.text.trim();

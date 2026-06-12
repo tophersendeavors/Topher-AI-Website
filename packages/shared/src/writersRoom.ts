@@ -138,6 +138,60 @@ export interface QualityAgent {
   status: QualityStatus; // pending until their pass begins
 }
 
+// --- Review Bench runs (a quality agent actually working on the draft) -------
+
+export type ReviewStatus = "pending" | "active" | "done" | "skipped";
+
+/** What a quality agent is allowed to do with what it finds. */
+export type ReviewAuthority =
+  | "observe"
+  | "recommend"
+  | "rewrite"
+  | "rewrite_requires_approval";
+
+export const REVIEW_AUTHORITY_LABELS: Record<ReviewAuthority, string> = {
+  observe: "Observe",
+  recommend: "Recommend",
+  rewrite: "Rewrite",
+  rewrite_requires_approval: "Rewrite (needs approval)",
+};
+
+/** Map the internal rewrite-authority onto the bench's 4 authority levels. */
+export function reviewAuthorityOf(a: RewriteAuthority): ReviewAuthority {
+  switch (a) {
+    case "observe": return "observe";
+    case "observe_recommend": return "recommend";
+    case "observe_rewrite": return "rewrite";
+    case "observe_rewrite_approve": return "rewrite_requires_approval";
+  }
+}
+
+/** A concrete fix an agent can safely propose (before → after). */
+export interface ReviewRewriteOption {
+  targetLabel: string; // e.g. "Scene 4 — Mara's exit"
+  before: string | null;
+  after: string;
+  rationale: string;
+}
+
+export interface ReviewFinding {
+  diagnosis: string;
+  notes: string[];
+  rewriteOption: ReviewRewriteOption | null;
+  confidence: number; // 0..1
+}
+
+/** Per-agent run state on the bench (lives in WritersRoomState.reviewBench). */
+export interface ReviewRun {
+  agentId: string;
+  status: ReviewStatus;
+  authority: ReviewAuthority;
+  finding: ReviewFinding | null;
+  applied: boolean; // creator approved + applied the rewrite option
+  ranAt: string | null;
+  appliedAt: string | null;
+}
+
 // --- Seats -------------------------------------------------------------------
 
 /** A seat's pointer to a reusable profile. */
@@ -169,6 +223,8 @@ export interface WritersRoomState {
   // "How do you want to begin?" question).
   writingMode: WritingMode | null;
   modeChosenAt: string | null;
+  // Review Bench run state, keyed by quality-agent id.
+  reviewBench: ReviewRun[];
   updatedAt: string | null;
 }
 

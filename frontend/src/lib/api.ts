@@ -952,6 +952,10 @@ export const api = {
   deleteRoomNote: (projectId: string, noteId: string) =>
     request<{ ok: true }>(`/projects/${projectId}/notes/${noteId}`, { method: "DELETE" }),
 
+  // Review Bench — run / skip / apply / reset a quality agent
+  reviewAgentAction: (projectId: string, agentId: string, action: "run" | "skip" | "apply" | "reset") =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/review/${agentId}/${action}`, { method: "POST" }),
+
   // Writer / Talent Directory — account-level reusable people
   listTalent: (category?: TalentCategory) =>
     request<{ profiles: TalentProfile[] }>(`/talent${category ? `?category=${category}` : ""}`),

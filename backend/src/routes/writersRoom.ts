@@ -10,6 +10,7 @@ import { assertProjectMember } from "../db/queries.js";
 import { getStudioOwner } from "../studio/identityStore.js";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES, QUALITY_STAFF } from "../writersRoom/profiles.js";
 import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../writersRoom/store.js";
+import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite } from "../writersRoom/review.js";
 import { listTalent } from "../talent/store.js";
 
 export default async function writersRoomRoutes(app: FastifyInstance) {
@@ -78,4 +79,19 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const state = await clearSeat(projectId, seatId);
     return { state };
   });
+
+  // --- Review Bench: run / skip / apply / reset a quality agent -------------
+  const reviewAction =
+    (fn: (projectId: string, agentId: string) => Promise<unknown>) => async (req: import("fastify").FastifyRequest) => {
+      const user = await requireUser(req);
+      const { projectId, agentId } = req.params as { projectId: string; agentId: string };
+      await assertProjectMember(user.id, projectId);
+      const state = await fn(projectId, agentId);
+      return { state };
+    };
+
+  app.post("/projects/:projectId/writers-room/review/:agentId/run", reviewAction(runReviewAgent));
+  app.post("/projects/:projectId/writers-room/review/:agentId/skip", reviewAction(skipReviewAgent));
+  app.post("/projects/:projectId/writers-room/review/:agentId/apply", reviewAction(applyReviewRewrite));
+  app.post("/projects/:projectId/writers-room/review/:agentId/reset", reviewAction(resetReviewAgent));
 }

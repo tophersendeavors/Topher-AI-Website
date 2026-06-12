@@ -9,7 +9,6 @@ import type {
   AiCreativeProfile,
   AiWriterProfile,
   LivePermission,
-  QualityAgent,
   SeatKind,
   TalentProfile,
   WritersRoomResponse,
@@ -23,6 +22,7 @@ import {
 import { api } from "@/lib/api";
 import { markProjectOpened } from "@/lib/recentProjects";
 import { NotesDrawer } from "./NotesDrawer";
+import { ReviewBenchDrawer } from "./ReviewBenchDrawer";
 
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
@@ -256,7 +256,15 @@ export function WritersRoomPage() {
       {notesOpen && <NotesDrawer projectId={projectId} onClose={() => setNotesOpen(false)} />}
 
       {/* review bench drawer — quality staff, NOT table writers */}
-      {bench && room && <ReviewBench staff={room.qualityStaff} onClose={() => setBench(false)} />}
+      {bench && room && (
+        <ReviewBenchDrawer
+          projectId={projectId}
+          staff={room.qualityStaff}
+          runs={room.state.reviewBench}
+          onState={seed}
+          onClose={() => setBench(false)}
+        />
+      )}
     </div>
   );
 }
@@ -547,53 +555,6 @@ function LivePersonPicker({
         </>
       )}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Review Bench — the studio's quality / script-improvement staff. These are
-// checks that activate along the pipeline; they are NOT co-writers.
-
-function ReviewBench({ staff, onClose }: { staff: QualityAgent[]; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="flex h-full w-full max-w-md flex-col overflow-hidden border-l border-[#26262c] bg-[#0b0b0e]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between border-b border-[#26262c] px-5 py-4">
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.28em]" style={gold}>Studio Script Staff</div>
-            <div className="font-apple text-lg text-bone-50">Review Bench</div>
-            <div className="mt-0.5 text-[11.5px] text-bone-400">Which studio specialists will review this draft? They activate during the writing pipeline — they don't sit at the table.</div>
-          </div>
-          <button onClick={onClose} className="text-bone-400 hover:text-bone-100"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
-          {staff.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 rounded-xl border border-[#26262c] bg-white/[0.015] p-3">
-              <Avatar name={a.name} url={a.avatarUrl} size={40} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] text-bone-50">{a.name}</div>
-                <div className="truncate text-[10.5px]" style={gold}>{a.role} · activates in {a.stage}</div>
-                <div className="truncate text-[10.5px] text-bone-400">{a.specialty}</div>
-              </div>
-              <StatusPill status={a.status} />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatusPill({ status }: { status: QualityAgent["status"] }) {
-  const map = {
-    pending: { label: "Pending", color: "#9a927e", bg: "rgba(154,146,126,0.12)" },
-    active: { label: "Active", color: GOLD, bg: "rgba(216,177,90,0.14)" },
-    complete: { label: "Done", color: "#7fd1a4", bg: "rgba(127,209,164,0.12)" },
-  }[status];
-  return (
-    <span className="shrink-0 rounded-full px-2 py-0.5 text-[10px]" style={{ color: map.color, background: map.bg }}>
-      {map.label}
-    </span>
   );
 }
 

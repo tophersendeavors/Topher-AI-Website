@@ -24,14 +24,39 @@ const EMPTY_STATE: WritersRoomState = {
   seats: [],
   writingMode: null,
   modeChosenAt: null,
+  reviewBench: [],
   updatedAt: null,
 };
 
 export async function getWritersRoomState(projectId: string): Promise<WritersRoomState> {
   const meta = await loadMeta(projectId);
   const wr = (meta.writersRoom as Partial<WritersRoomState> | undefined) ?? null;
-  // Merge with defaults so older rows (pre writingMode) read cleanly.
-  return { ...EMPTY_STATE, ...(wr ?? {}), seats: wr?.seats ?? [] };
+  // Merge with defaults so older rows (pre writingMode/reviewBench) read cleanly.
+  return {
+    ...EMPTY_STATE,
+    ...(wr ?? {}),
+    seats: wr?.seats ?? [],
+    reviewBench: wr?.reviewBench ?? [],
+  };
+}
+
+/** Upsert a single agent's run on the bench. */
+export async function saveReviewRun(
+  projectId: string,
+  run: WritersRoomState["reviewBench"][number]
+): Promise<WritersRoomState> {
+  const state = await getWritersRoomState(projectId);
+  const reviewBench = [...state.reviewBench.filter((r) => r.agentId !== run.agentId), run];
+  return saveState(projectId, { ...state, reviewBench });
+}
+
+/** Replace the whole bench (used to reset a single agent's run). */
+export async function setReviewBench(
+  projectId: string,
+  reviewBench: WritersRoomState["reviewBench"]
+): Promise<WritersRoomState> {
+  const state = await getWritersRoomState(projectId);
+  return saveState(projectId, { ...state, reviewBench });
 }
 
 export async function setWritingMode(

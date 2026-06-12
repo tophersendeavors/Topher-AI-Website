@@ -964,6 +964,8 @@ export const api = {
     request<{ state: WritersRoomState; matched: boolean; changed: boolean; before: string | null; after: string; fountain: string }>(`/projects/${projectId}/writers-room/review/${agentId}/apply`, { method: "POST" }),
   autoResolveReview: (projectId: string, agentId: string) =>
     request<{ state: WritersRoomState; status: "resolved" | "stuck" | "needs_manual" | "maxed" | "no_draft"; rounds: number; changed: boolean; fountain: string }>(`/projects/${projectId}/writers-room/review/${agentId}/auto-resolve`, { method: "POST" }),
+  polishDraft: (projectId: string) =>
+    request<{ state: WritersRoomState; rounds: Record<string, { status: string; rounds: number }>; changed: boolean; fountain: string }>(`/projects/${projectId}/writers-room/polish`, { method: "POST" }),
 
   // Final Draft Lock
   getFinalLock: (projectId: string) =>

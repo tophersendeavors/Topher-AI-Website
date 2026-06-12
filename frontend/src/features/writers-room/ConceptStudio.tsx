@@ -256,17 +256,39 @@ function DraftStep({ projectId, collabName, drafted, draftScriptId, onState, onO
   onState: (state: WritersRoomResponse["state"]) => void; onOpenEditor: (scriptId: string) => void; onBack: () => void;
 }) {
   const [notes, setNotes] = useState("");
+  const [phase, setPhase] = useState<"writing" | "polishing">("writing");
   const noteCls = "w-full max-w-md rounded-md border border-[#26262c] bg-black/30 px-3 py-2 text-[12px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none";
-  const gen = useMutation({ mutationFn: () => api.generateWriteDraft(projectId, notes.trim() || undefined), onSuccess: (r) => { onState(r.state); onOpenEditor(r.scriptId); } });
+  // Write the draft, then run the studio's quality gauntlet (fix-until-clean for
+  // structure/character/emotional truth/subtext/dialogue/continuity) before opening.
+  const gen = useMutation({
+    mutationFn: async () => {
+      setPhase("writing");
+      const r = await api.generateWriteDraft(projectId, notes.trim() || undefined);
+      onState(r.state);
+      setPhase("polishing");
+      await api.polishDraft(projectId);
+      return r;
+    },
+    onSuccess: (r) => onOpenEditor(r.scriptId),
+  });
   if (gen.isPending) {
-    return <div className="grid place-items-center gap-3 py-12 text-center"><Loader2 className="h-6 w-6 animate-spin" style={gold} /><div className="text-[13px] text-bone-200">{collabName ?? "The studio"} is writing the first draft from your approved outline…</div><div className="text-[11px] text-bone-500">This can take a moment.</div></div>;
+    return (
+      <div className="grid place-items-center gap-3 py-12 text-center">
+        <Loader2 className="h-6 w-6 animate-spin" style={gold} />
+        {phase === "writing" ? (
+          <><div className="text-[13px] text-bone-200">{collabName ?? "The studio"} is writing the first draft from your approved outline…</div><div className="text-[11px] text-bone-500">This can take a moment.</div></>
+        ) : (
+          <><div className="text-[13px] text-bone-200">Polishing with the studio staff…</div><div className="max-w-sm text-[11px] text-bone-500">Structure, character, emotional truth, subtext, dialogue and continuity — fixing until clean. Only the Human Read is left for you.</div></>
+        )}
+      </div>
+    );
   }
   if (drafted && draftScriptId) {
     return (
       <div className="grid place-items-center gap-3 py-10 text-center">
         <Check className="h-7 w-7" style={{ color: "#7fd1a4" }} />
-        <div className="font-apple text-[16px] text-bone-100">First draft is ready</div>
-        <p className="max-w-md text-[11.5px] text-bone-400">{collabName} drafted from your approved outline. Open it in the editor to keep writing, then run the Review Bench to refine.</p>
+        <div className="font-apple text-[16px] text-bone-100">First draft is written &amp; polished</div>
+        <p className="max-w-md text-[11.5px] text-bone-400">{collabName} drafted it and the studio staff polished it (structure, character, emotional truth, subtext, dialogue, continuity). Open it to keep writing — the only review left is the Human Read.</p>
         <button onClick={() => onOpenEditor(draftScriptId)} className="mt-1 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black" style={{ background: GOLD }}><ArrowRight className="h-4 w-4" /> Open in editor</button>
         <button onClick={() => gen.mutate()} className="text-[12px] text-bone-500 hover:text-bone-300">Regenerate draft</button>
       </div>

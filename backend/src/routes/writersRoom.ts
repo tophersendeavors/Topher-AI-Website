@@ -10,7 +10,7 @@ import { assertProjectMember } from "../db/queries.js";
 import { getStudioOwner } from "../studio/identityStore.js";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES, QUALITY_STAFF } from "../writersRoom/profiles.js";
 import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../writersRoom/store.js";
-import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite, rewriteFinding, autoResolveFinding } from "../writersRoom/review.js";
+import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite, rewriteFinding, autoResolveFinding, polishDraft } from "../writersRoom/review.js";
 import { getLockStatus, updateLockSettings, lockFinalDraft, unlockFinalDraft } from "../writersRoom/lock.js";
 import { conceptDefaults, saveConcept, generateOutline, approveOutline, generateDraftFromOutline } from "../writersRoom/writeFlow.js";
 import { collaborate, setDraftApproved } from "../writersRoom/collaborate.js";
@@ -111,6 +111,14 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const { projectId, agentId } = req.params as { projectId: string; agentId: string };
     await assertProjectMember(user.id, projectId);
     return await autoResolveFinding(projectId, agentId);
+  });
+
+  // Auto-polish: run every fixable quality pass to convergence (post-write).
+  app.post("/projects/:projectId/writers-room/polish", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return await polishDraft(projectId);
   });
 
   app.post("/projects/:projectId/writers-room/review/:agentId/rewrite", async (req) => {

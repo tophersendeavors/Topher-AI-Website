@@ -185,6 +185,34 @@ export async function autoResolveFinding(projectId: string, agentId: string, max
   return { state: lastState, status, rounds, changed, fountain: changed ? lastFountain : "" };
 }
 
+// The order the staff polishes a fresh draft in. Structure first, continuity
+// last (it catches inconsistencies introduced by the earlier edits). These are
+// the rewrite-capable passes; the Audience / Human Read is left for the human.
+const POLISH_ORDER = ["script_doctor", "character", "emotional_truth", "subtext", "dialogue", "continuity"] as const;
+
+export interface PolishResult {
+  state: WritersRoomState;
+  rounds: Record<string, { status: AutoResolveStatus; rounds: number }>;
+  changed: boolean;
+  fountain: string;
+}
+
+/** Run every auto-fixable quality pass to convergence so a freshly written
+ *  draft comes out already polished — only the Human Read is left for the user. */
+export async function polishDraft(projectId: string, maxRoundsPerAgent = 2): Promise<PolishResult> {
+  const rounds: PolishResult["rounds"] = {};
+  let changed = false;
+  for (const agentId of POLISH_ORDER) {
+    if (!QUALITY_STAFF.some((a) => a.id === agentId)) continue;
+    const r = await autoResolveFinding(projectId, agentId, maxRoundsPerAgent);
+    rounds[agentId] = { status: r.status, rounds: r.rounds };
+    if (r.changed) changed = true;
+  }
+  const fountain = (await loadFullDraft(projectId)) ?? "";
+  const state = await getWritersRoomState(projectId);
+  return { state, rounds, changed, fountain };
+}
+
 async function loadFullDraft(projectId: string): Promise<string | null> {
   const state = await getWritersRoomState(projectId);
   const { data } = await supabase.from("scripts").select("id, fountain, current, updated_at").eq("project_id", projectId).order("updated_at", { ascending: false });

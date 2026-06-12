@@ -160,7 +160,7 @@ export async function generateDraftFromOutline(projectId: string, notes?: string
   const res = await callLLM({
     model: config.SCENE_MODEL,
     messages: [
-      { role: "system", content: `${sys}\n\nWrite the actual screenplay in FOUNTAIN format from the approved outline, honoring your lens. Use scene headings in CAPS (INT./EXT. — LOCATION — TIME). Cover every beat in order. Producible, filmable, no camera directions. Return ONLY the Fountain screenplay text.` },
+      { role: "system", content: `${sys}\n\nWrite the actual screenplay in FOUNTAIN format from the approved outline, honoring your lens. Use scene headings in CAPS (INT./EXT. — LOCATION — TIME). Cover every beat in order. Producible, filmable, no camera directions.\n\nWrite to the studio's craft bar from the start: every emotional turn earned and motivated; subtext over on-the-nose lines (show behavior, not stated feeling); distinct, character-specific voices; consistent continuity (timeline, props, facts); and clean structure and pacing. Return ONLY the Fountain screenplay text.` },
       { role: "user", content: `Concept:\n${conceptText(concept)}\n\nApproved outline:\n${beatList}${steer}\n\nWrite the first draft now.` },
     ],
     temperature: 0.8,

@@ -574,6 +574,12 @@ function BenchTab({ projectId, room, hasText, ensureSaved, onDraftReplaced, onSt
     onSuccess: (r, v) => { if (r.changed) onDraftReplaced(r.fountain); recordApply(v.id, r); onState(); },
     onSettled: () => setActingId(null),
   });
+  const polish = useMutation({
+    mutationFn: async () => { await ensureSaved(); return api.polishDraft(projectId); },
+    onMutate: () => setActingId("__polish__"),
+    onSuccess: (r) => { if (r.changed) onDraftReplaced(r.fountain); setApplied({}); setAuto({}); onState(); },
+    onSettled: () => setActingId(null),
+  });
   // One step: surgically edit the current fix per the notes, then apply it.
   const approveWithChanges = useMutation({
     mutationFn: async (v: { id: string; notes: string }) => {
@@ -605,7 +611,12 @@ function BenchTab({ projectId, room, hasText, ensureSaved, onDraftReplaced, onSt
   }
   return (
     <div className="space-y-2">
-      <div className="text-[11px] text-bone-400">Script staff review your pages and propose fixes. For any note: refine the fix with your own notes, then apply it into the draft.</div>
+      <div className="rounded-lg border border-[#26262c] bg-white/[0.015] p-2.5">
+        <p className="text-[11px] text-bone-300">Structure, character, emotional truth, subtext, dialogue and continuity are <span style={gold}>auto-polished as the draft is written</span>. The <span className="text-bone-100">Human Read</span> (Audience Attachment) is the one pass meant for you. You can re-polish anytime.</p>
+        <button onClick={() => polish.mutate()} disabled={actingId === "__polish__"} className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] disabled:opacity-60" style={{ borderColor: `${GOLD}55`, color: GOLD }}>
+          {actingId === "__polish__" ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} {actingId === "__polish__" ? "Polishing all passes…" : "Polish all again"}
+        </button>
+      </div>
       {room.qualityStaff.map((agent) => {
         const run = runById.get(agent.id) ?? null;
         return (

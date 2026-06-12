@@ -31,26 +31,44 @@ const EMPTY_LOCK: WritersRoomState["finalLock"] = {
   creatorApproved: false,
 };
 
+const EMPTY_WRITE_FLOW: WritersRoomState["writeFlow"] = {
+  status: "concept",
+  concept: null,
+  outline: null,
+  draftScriptId: null,
+  updatedAt: null,
+};
+
 const EMPTY_STATE: WritersRoomState = {
   seats: [],
   writingMode: null,
   modeChosenAt: null,
   reviewBench: [],
   finalLock: EMPTY_LOCK,
+  writeFlow: EMPTY_WRITE_FLOW,
   updatedAt: null,
 };
 
 export async function getWritersRoomState(projectId: string): Promise<WritersRoomState> {
   const meta = await loadMeta(projectId);
   const wr = (meta.writersRoom as Partial<WritersRoomState> | undefined) ?? null;
-  // Merge with defaults so older rows (pre writingMode/reviewBench/finalLock) read cleanly.
+  // Merge with defaults so older rows read cleanly.
   return {
     ...EMPTY_STATE,
     ...(wr ?? {}),
     seats: wr?.seats ?? [],
     reviewBench: wr?.reviewBench ?? [],
     finalLock: { ...EMPTY_LOCK, ...(wr?.finalLock ?? {}) },
+    writeFlow: { ...EMPTY_WRITE_FLOW, ...(wr?.writeFlow ?? {}) },
   };
+}
+
+export async function saveWriteFlow(
+  projectId: string,
+  writeFlow: WritersRoomState["writeFlow"]
+): Promise<WritersRoomState> {
+  const state = await getWritersRoomState(projectId);
+  return saveState(projectId, { ...state, writeFlow: { ...writeFlow, updatedAt: new Date().toISOString() } });
 }
 
 export async function saveFinalLock(

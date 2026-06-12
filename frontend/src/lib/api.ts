@@ -25,6 +25,7 @@ import type {
   NoteTargetType,
   NoteStatus,
   LockStatus,
+  ConceptBrief,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -966,6 +967,18 @@ export const api = {
     request<{ status: LockStatus }>(`/projects/${projectId}/writers-room/lock`, { method: "POST" }),
   unlockFinalDraft: (projectId: string) =>
     request<{ status: LockStatus }>(`/projects/${projectId}/writers-room/lock/unlock`, { method: "POST" }),
+
+  // Concept → Outline → Draft write flow (active AI collaboration)
+  getWriteFlowDefaults: (projectId: string) =>
+    request<{ concept: ConceptBrief }>(`/projects/${projectId}/writers-room/write-flow/defaults`),
+  saveWriteConcept: (projectId: string, concept: ConceptBrief) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/concept`, { method: "PUT", body: JSON.stringify(concept) }),
+  generateWriteOutline: (projectId: string, seatId?: string) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/outline`, { method: "POST", body: JSON.stringify({ seatId }) }),
+  approveWriteOutline: (projectId: string) =>
+    request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/outline/approve`, { method: "POST" }),
+  generateWriteDraft: (projectId: string) =>
+    request<{ state: WritersRoomState; scriptId: string }>(`/projects/${projectId}/writers-room/write-flow/draft`, { method: "POST" }),
 
   // Writer / Talent Directory — account-level reusable people
   listTalent: (category?: TalentCategory) =>

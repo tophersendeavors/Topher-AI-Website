@@ -24,6 +24,7 @@ import { markProjectOpened } from "@/lib/recentProjects";
 import { NotesDrawer } from "./NotesDrawer";
 import { ReviewBenchDrawer } from "./ReviewBenchDrawer";
 import { FinalDraftDrawer } from "./FinalDraftDrawer";
+import { ConceptStudio } from "./ConceptStudio";
 
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
@@ -61,6 +62,7 @@ export function WritersRoomPage() {
   const [bench, setBench] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [lockOpen, setLockOpen] = useState(false);
+  const [conceptOpen, setConceptOpen] = useState(false);
   const [beginOpen, setBeginOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [debug, setDebug] = useState(typeof window !== "undefined" && window.location.search.includes("debug"));
@@ -91,6 +93,8 @@ export function WritersRoomPage() {
   const room = roomQ.data;
   const seatById = new Map((room?.state.seats ?? []).map((s) => [s.seatId, s]));
   const firstEmptySeat = SEATS.find((s) => !seatById.has(s.seatId))?.seatId ?? SEATS[0].seatId;
+  // A seated AI writer/creative means the primary action is "develop with them".
+  const aiSeat = (room?.state.seats ?? []).find((s) => s.kind === "ai_creative" || s.kind === "ai_writer") ?? null;
 
   // Always-available path INTO the writing surface: open the current draft, or
   // create a blank one and open the editor. This is the room's "write" action.
@@ -112,9 +116,11 @@ export function WritersRoomPage() {
     switch (mode) {
       case "upload": setUploadOpen(true); break;
       case "manual": openDraft(); break;
-      case "concept": navigate(`/projects/${projectId}/drafts`); break;
-      case "ai_writer": openAssign("ai_writer"); break;
-      case "ai_creative": openAssign("ai_creative"); break;
+      // Concept / AI Writer / AI Creative all run the guided concept→outline→draft
+      // studio — a seated AI collaborator actively writes (never a blank editor).
+      case "concept":
+      case "ai_writer":
+      case "ai_creative": setConceptOpen(true); break;
       case "co_writer": openAssign("live_person"); break;
     }
   }
@@ -186,15 +192,25 @@ export function WritersRoomPage() {
           )}
         </div>
         <div className="pointer-events-auto flex items-center gap-2">
-          <button
-            onClick={(e) => { e.stopPropagation(); openDraft(); }}
-            disabled={createScript.isPending}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-medium text-black disabled:opacity-60"
-            style={{ background: GOLD }}
-          >
-            {createScript.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PenLine className="h-3.5 w-3.5" />}
-            {currentDraft ? "Open Draft" : "Write the Draft"}
-          </button>
+          {aiSeat && !currentDraft && room?.state.writeFlow.status !== "drafted" ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); setConceptOpen(true); }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-medium text-black"
+              style={{ background: GOLD }}
+            >
+              <Wand2 className="h-3.5 w-3.5" /> Develop with {aiSeat.name.split(" ")[0]}
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); openDraft(); }}
+              disabled={createScript.isPending}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-medium text-black disabled:opacity-60"
+              style={{ background: GOLD }}
+            >
+              {createScript.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PenLine className="h-3.5 w-3.5" />}
+              {currentDraft ? "Open Draft" : "Write the Draft"}
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); setNotesOpen(true); }}
             className="flex items-center gap-1.5 rounded-lg border border-[#26262c] bg-black/40 px-3 py-1.5 text-[11.5px] text-bone-200 backdrop-blur-sm hover:border-[#d8b15a]/45"
@@ -284,6 +300,19 @@ export function WritersRoomPage() {
 
       {/* final draft lock drawer — the gate before Creative Room handoff */}
       {lockOpen && <FinalDraftDrawer projectId={projectId} onClose={() => setLockOpen(false)} />}
+
+      {/* concept studio — guided concept → outline → draft with the seated AI */}
+      {conceptOpen && room && (
+        <ConceptStudio
+          projectId={projectId}
+          room={room}
+          firstEmptySeat={firstEmptySeat}
+          onState={seed}
+          onOpenEditor={(scriptId) => navigate(`/projects/${projectId}/drafts/${scriptId}/editor`)}
+          onWriteManually={() => { setConceptOpen(false); openDraft(); }}
+          onClose={() => setConceptOpen(false)}
+        />
+      )}
 
       {/* review bench drawer — quality staff, NOT table writers */}
       {bench && room && (

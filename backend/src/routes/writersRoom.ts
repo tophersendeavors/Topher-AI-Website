@@ -12,6 +12,7 @@ import { STUDIO_AI_WRITER, WRITING_CREATIVES, QUALITY_STAFF } from "../writersRo
 import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../writersRoom/store.js";
 import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite } from "../writersRoom/review.js";
 import { getLockStatus, updateLockSettings, lockFinalDraft, unlockFinalDraft } from "../writersRoom/lock.js";
+import { conceptDefaults, saveConcept, generateOutline, approveOutline, generateDraftFromOutline } from "../writersRoom/writeFlow.js";
 import { listTalent } from "../talent/store.js";
 
 export default async function writersRoomRoutes(app: FastifyInstance) {
@@ -130,5 +131,55 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const { projectId } = req.params as { projectId: string };
     await assertProjectMember(user.id, projectId);
     return { status: await unlockFinalDraft(projectId) };
+  });
+
+  // --- Concept → Outline → Draft write flow --------------------------------
+  app.get("/projects/:projectId/writers-room/write-flow/defaults", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return { concept: await conceptDefaults(projectId) };
+  });
+
+  app.put("/projects/:projectId/writers-room/write-flow/concept", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const concept = z
+      .object({
+        title: z.string().max(200),
+        format: z.string().max(80),
+        genre: z.string().max(200),
+        tone: z.string().max(200),
+        logline: z.string().max(2000),
+        premise: z.string().max(4000),
+        targetLength: z.string().max(120),
+      })
+      .parse(req.body);
+    const state = await saveConcept(projectId, concept);
+    return { state };
+  });
+
+  app.post("/projects/:projectId/writers-room/write-flow/outline", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const { seatId } = z.object({ seatId: z.string().optional() }).parse(req.body ?? {});
+    const state = await generateOutline(projectId, seatId);
+    return { state };
+  });
+
+  app.post("/projects/:projectId/writers-room/write-flow/outline/approve", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return { state: await approveOutline(projectId) };
+  });
+
+  app.post("/projects/:projectId/writers-room/write-flow/draft", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    return await generateDraftFromOutline(projectId);
   });
 }

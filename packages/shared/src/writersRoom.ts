@@ -192,6 +192,54 @@ export interface ReviewRun {
   appliedAt: string | null;
 }
 
+// --- Concept → Outline → Draft write flow ------------------------------------
+// Active AI writing collaboration. A seated AI Writer / AI Creative develops the
+// creator's concept into an approved outline, then drafts from it. The room
+// never opens a blank editor for "Start From Concept".
+
+export interface ConceptBrief {
+  title: string;
+  format: string; // series | feature | micro_drama | (free text)
+  genre: string;
+  tone: string;
+  logline: string;
+  premise: string;
+  targetLength: string;
+}
+
+export interface OutlineBeat {
+  id: string;
+  heading: string; // "Cold open — the kettle"
+  summary: string; // 1–3 sentences
+}
+
+export type WriteFlowStatus = "concept" | "outline" | "drafting" | "drafted";
+
+/** Who is doing the AI writing (a seated AI Writer or AI Creative). */
+export interface WriteFlowCollaborator {
+  kind: "ai_writer" | "ai_creative";
+  id: string; // profile id
+  seatId: string;
+  name: string;
+  lens: string | null; // the creative lens, for an AI Creative
+}
+
+export interface WriteFlowOutline {
+  beats: OutlineBeat[];
+  collaborator: WriteFlowCollaborator | null;
+  approved: boolean;
+  generatedAt: string | null;
+  approvedAt: string | null;
+}
+
+export interface WriteFlow {
+  status: WriteFlowStatus;
+  concept: ConceptBrief | null;
+  outline: WriteFlowOutline | null;
+  draftScriptId: string | null;
+  updatedAt: string | null;
+}
+
 // --- Final Draft Lock --------------------------------------------------------
 
 /** The formal lock that must happen before the room hands off to Creative. */
@@ -257,6 +305,8 @@ export interface WritersRoomState {
   reviewBench: ReviewRun[];
   // Formal Final Draft Lock — the gate before Creative Room handoff.
   finalLock: FinalLock;
+  // Active AI writing collaboration (concept → outline → draft).
+  writeFlow: WriteFlow;
   updatedAt: string | null;
 }
 

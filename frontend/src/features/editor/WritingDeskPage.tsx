@@ -152,21 +152,12 @@ export function WritingDeskPage() {
     if (sel && !sel.isEmpty()) { ed.executeEdits("collab", [{ range: sel, text }]); setBody(ed.getValue()); setDirty(true); }
     else { setBody((b) => `${b.trimEnd()}\n\n${text}\n`); setDirty(true); }
   };
-  // Put an approved Review Bench rewrite INTO the script: replace its verbatim
-  // `before` where found, else append the `after`. Persists immediately so the
-  // editor and the staff (which read the DB) stay in sync.
-  const applyRewriteToEditor = async (before: string | null, after: string) => {
-    const ed = editorRef.current; const model = ed?.getModel();
-    let next = body;
-    if (ed && model && before && before.trim()) {
-      const matches = model.findMatches(before, false, false, false, null, false);
-      if (matches.length) { ed.executeEdits("rewrite", [{ range: matches[0].range, text: after }]); next = model.getValue(); }
-      else next = `${body.trimEnd()}\n\n${after}\n`;
-    } else {
-      next = `${body.trimEnd()}\n\n${after}\n`;
-    }
-    setBody(next);
-    await api.updateScript(scriptId, { fountain: next });
+  // Make sure the editor's current text is persisted before the server applies a
+  // rewrite to it (so the staff edits exactly what you see).
+  const ensureSaved = async () => { if (dirty) { await api.updateScript(scriptId, { fountain: body }); setDirty(false); } };
+  // The server applied a rewrite and returned the new draft text — sync the editor.
+  const onDraftReplaced = (fountain: string) => {
+    setBody(fountain);
     setDirty(false);
     qc.invalidateQueries({ queryKey: ["script", scriptId] });
   };
@@ -305,7 +296,7 @@ export function WritingDeskPage() {
             {!room ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-bone-500" /></div>
               : tab === "team" ? <TeamTab projectId={projectId} room={room} stage={stage} getSelection={getSelection} getContext={getContext} applyText={applyText} onRoomRefresh={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : tab === "outline" ? <OutlineTab room={room} onGoRoom={() => navigate(`/projects/${projectId}/writers-room`)} />
-              : tab === "bench" ? <BenchTab projectId={projectId} room={room} hasText={!!body.trim()} applyRewrite={applyRewriteToEditor} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
+              : tab === "bench" ? <BenchTab projectId={projectId} room={room} hasText={!!body.trim()} ensureSaved={ensureSaved} onDraftReplaced={onDraftReplaced} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : <NotesTab projectId={projectId} />}
           </div>
         </aside>
@@ -558,36 +549,40 @@ function OutlineTab({ room, onGoRoom }: { room: WritersRoomResponse; onGoRoom: (
 
 // ---- Review Bench (separate from writing collaborators) --------------------
 
-function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { projectId: string; room: WritersRoomResponse; hasText: boolean; applyRewrite: (before: string | null, after: string) => Promise<void>; onState: () => void }) {
+function BenchTab({ projectId, room, hasText, ensureSaved, onDraftReplaced, onState }: { projectId: string; room: WritersRoomResponse; hasText: boolean; ensureSaved: () => Promise<void>; onDraftReplaced: (fountain: string) => void; onState: () => void }) {
   const approved = room.state.writeFlow.draftApproved;
   const runById = new Map(room.state.reviewBench.map((r) => [r.agentId, r]));
   const [actingId, setActingId] = useState<string | null>(null);
+  // Per-agent proof of what apply did (before/after + whether it matched).
+  const [applied, setApplied] = useState<Record<string, { before: string | null; after: string; matched: boolean; changed: boolean }>>({});
+  const recordApply = (id: string, r: { before: string | null; after: string; matched: boolean; changed: boolean }) => setApplied((m) => ({ ...m, [id]: r }));
 
   const act = useMutation({
     mutationFn: async (v: { id: string; action: "run" | "skip"; }) => api.reviewAgentAction(projectId, v.id, v.action),
-    onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
+    onMutate: (v) => { setActingId(v.id); if (v.action === "run") setApplied((m) => { const n = { ...m }; delete n[v.id]; return n; }); },
+    onSuccess: onState, onSettled: () => setActingId(null),
   });
   const rewrite = useMutation({
     mutationFn: (v: { id: string; notes?: string; regenerate?: boolean }) => api.reviewRewrite(projectId, v.id, v.notes, v.regenerate),
     onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
   });
+  // Apply mutates the DRAFT TEXT on the server; sync the editor + record proof.
   const apply = useMutation({
-    mutationFn: async (v: { id: string; before: string | null; after: string }) => {
-      await applyRewrite(v.before, v.after);
-      return api.reviewAgentAction(projectId, v.id, "apply");
-    },
-    onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
+    mutationFn: async (v: { id: string }) => { await ensureSaved(); return api.applyReviewRewrite(projectId, v.id); },
+    onMutate: (v) => setActingId(v.id),
+    onSuccess: (r, v) => { if (r.changed) onDraftReplaced(r.fountain); recordApply(v.id, r); onState(); },
+    onSettled: () => setActingId(null),
   });
   // One step: surgically edit the current fix per the notes, then apply it.
   const approveWithChanges = useMutation({
     mutationFn: async (v: { id: string; notes: string }) => {
-      const r = await api.reviewRewrite(projectId, v.id, v.notes);
-      const opt = r.state.reviewBench.find((x) => x.agentId === v.id)?.finding?.rewriteOption;
-      if (opt) await applyRewrite(opt.before, opt.after);
-      await api.reviewAgentAction(projectId, v.id, "apply");
-      return r;
+      await ensureSaved();
+      await api.reviewRewrite(projectId, v.id, v.notes); // targeted edit of the fix
+      return api.applyReviewRewrite(projectId, v.id);
     },
-    onMutate: (v) => setActingId(v.id), onSuccess: onState, onSettled: () => setActingId(null),
+    onMutate: (v) => setActingId(v.id),
+    onSuccess: (r, v) => { if (r.changed) onDraftReplaced(r.fountain); recordApply(v.id, r); onState(); },
+    onSettled: () => setActingId(null),
   });
 
   if (!hasText) return <div className="py-8 text-center text-[12px] text-bone-400">Write or generate some pages first — the staff reviews real text.</div>;
@@ -611,12 +606,13 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
             agent={agent}
             run={run}
             busy={actingId === agent.id}
+            appliedResult={applied[agent.id] ?? null}
             onReview={() => act.mutate({ id: agent.id, action: "run" })}
             onSkip={() => act.mutate({ id: agent.id, action: "skip" })}
             onRewrite={(notes) => rewrite.mutate({ id: agent.id, notes })}
             onRegenerate={(notes) => rewrite.mutate({ id: agent.id, notes, regenerate: true })}
             onApprove={(notes) => approveWithChanges.mutate({ id: agent.id, notes })}
-            onApply={() => { const o = run?.finding?.rewriteOption; if (o) apply.mutate({ id: agent.id, before: o.before, after: o.after }); }}
+            onApply={() => apply.mutate({ id: agent.id })}
           />
         );
       })}
@@ -624,12 +620,13 @@ function BenchTab({ projectId, room, hasText, applyRewrite, onState }: { project
   );
 }
 
-function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onRegenerate, onApprove, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onRegenerate: (notes: string) => void; onApprove: (notes: string) => void; onApply: () => void }) {
+function BenchCard({ agent, run, busy, appliedResult, onReview, onSkip, onRewrite, onRegenerate, onApprove, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; appliedResult: { before: string | null; after: string; matched: boolean; changed: boolean } | null; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onRegenerate: (notes: string) => void; onApprove: (notes: string) => void; onApply: () => void }) {
   const [notes, setNotes] = useState("");
   const authority = run?.authority ?? reviewAuthorityOf(agent.rewriteAuthority);
   const f = run?.finding ?? null;
   const fix = f?.rewriteOption?.after?.trim() ? f.rewriteOption : null;
   const hasNotes = !!notes.trim();
+  const first = agent.name.split(" ")[0];
 
   return (
     <div className="rounded-lg border border-[#26262c] bg-white/[0.015] p-2.5">
@@ -639,9 +636,30 @@ function BenchCard({ agent, run, busy, onReview, onSkip, onRewrite, onRegenerate
         <span className="ml-auto rounded border border-[#26262c] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-bone-400">{REVIEW_AUTHORITY_LABELS[authority]}</span>
       </div>
 
+      {/* Proof of what apply actually did to the draft text. */}
+      {appliedResult && (
+        appliedResult.changed ? (
+          <div className="mt-1.5 rounded-md border border-[#7fd1a4]/30 bg-[#7fd1a4]/[0.05] p-2">
+            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide" style={{ color: "#7fd1a4" }}><CheckCircle2 className="h-3 w-3" /> Applied change — draft updated</div>
+            {appliedResult.before && <div className="mt-1"><span className="text-[9px] uppercase text-bone-500">Before</span><p className="whitespace-pre-wrap text-[10.5px] text-bone-500 line-through decoration-bone-700">{appliedResult.before}</p></div>}
+            <div className="mt-1"><span className="text-[9px] uppercase text-bone-500">After</span><p className="whitespace-pre-wrap text-[11px] text-bone-50">{appliedResult.after}</p></div>
+            <div className="mt-1.5 flex items-center gap-2">
+              <span className="text-[10px] text-bone-500">{first} will re-check this passage on the next run.</span>
+              <button onClick={onReview} disabled={busy} className="ml-auto inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">{busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Re-check</button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-1.5 rounded-md border border-[#d8b15a]/40 bg-[#d8b15a]/[0.06] p-2">
+            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide" style={gold}><AlertTriangle className="h-3 w-3" /> Couldn't apply automatically</div>
+            <p className="mt-0.5 text-[10.5px] text-bone-300">The exact passage to replace wasn't found in the draft, so <span className="text-bone-100">nothing was changed</span>. Regenerate the fix, or copy it and place it yourself.</p>
+            <button onClick={() => navigator.clipboard?.writeText(appliedResult.after)} className="mt-1 inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-300 hover:border-bone-600"><Copy className="h-3 w-3" /> Copy fix</button>
+          </div>
+        )
+      )}
+
       {!f ? (
         <p className="mt-1 text-[10.5px] text-bone-500">Not reviewed yet.</p>
-      ) : (
+      ) : appliedResult?.changed ? null : (
         <div className="mt-1.5 space-y-1.5">
           <div className="rounded-md border border-[#26262c] bg-black/30 p-2">
             <div className="text-[9px] uppercase tracking-wide text-bone-500">What {agent.name.split(" ")[0]} found</div>

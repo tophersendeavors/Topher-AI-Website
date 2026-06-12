@@ -15,6 +15,7 @@ import {
 } from "@toburt/shared";
 import { QUALITY_STAFF } from "./profiles.js";
 import { getWritersRoomState, saveReviewRun, setReviewBench } from "./store.js";
+import { indexScenes } from "../screenplay/sceneIndex.js";
 
 const MAX_DRAFT_CHARS = 24_000;
 
@@ -210,15 +211,66 @@ export async function rewriteFinding(projectId: string, agentId: string, notes?:
   });
 }
 
-/** Creator approves + applies the agent's rewrite option. */
-export async function applyReviewRewrite(projectId: string, agentId: string): Promise<WritersRoomState> {
+/** Replace `before` with `after` in the draft. Exact first, then whitespace-
+ *  flexible. Returns whether it actually matched (so we never pretend). */
+function applyReplacement(fountain: string, before: string | null, after: string): { text: string; matched: boolean } {
+  if (before && before.trim()) {
+    const i = fountain.indexOf(before);
+    if (i >= 0) return { text: fountain.slice(0, i) + after + fountain.slice(i + before.length), matched: true };
+    // whitespace-flexible: the agent's `before` may differ only in spacing/newlines.
+    const escaped = before.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    try {
+      const re = new RegExp(escaped);
+      if (re.test(fountain)) return { text: fountain.replace(re, () => after), matched: true };
+    } catch {
+      /* bad regex — fall through */
+    }
+  }
+  return { text: fountain, matched: false };
+}
+
+export interface ApplyResult {
+  state: WritersRoomState;
+  matched: boolean;
+  changed: boolean;
+  before: string | null;
+  after: string;
+  fountain: string; // the draft text after apply (unchanged if !matched)
+}
+
+/** Creator approves + APPLIES the rewrite into the actual draft text, saves it,
+ *  and re-indexes scenes. Only marks the item applied if the text really changed. */
+export async function applyReviewRewrite(projectId: string, agentId: string): Promise<ApplyResult> {
   const state = await getWritersRoomState(projectId);
   const run = state.reviewBench.find((r) => r.agentId === agentId);
-  if (!run || !run.finding?.rewriteOption) throw new Error("No rewrite option to apply.");
-  return saveReviewRun(projectId, {
+  const opt = run?.finding?.rewriteOption;
+  if (!run || !opt) throw new Error("Run the pass first, then apply.");
+
+  // Resolve the working draft row (pinned, else current, else latest).
+  const { data } = await supabase
+    .from("scripts")
+    .select("id, fountain, current, updated_at")
+    .eq("project_id", projectId)
+    .order("updated_at", { ascending: false });
+  const rows = (data ?? []) as Array<{ id: string; fountain: string | null; current: boolean | null }>;
+  const script = (state.writeFlow.draftScriptId ? rows.find((r) => r.id === state.writeFlow.draftScriptId) : null) ?? rows.find((r) => r.current) ?? rows[0];
+  if (!script) throw new Error("There's no draft to apply to.");
+
+  const fountain = script.fountain ?? "";
+  const { text: next, matched } = applyReplacement(fountain, opt.before, opt.after);
+  const changed = matched && next !== fountain;
+
+  if (changed) {
+    await supabase.from("scripts").update({ fountain: next }).eq("id", script.id);
+    try { await indexScenes(script.id, next); } catch { /* keep going; index is best-effort */ }
+  }
+
+  const newState = await saveReviewRun(projectId, {
     ...run,
-    applied: true,
+    applied: changed, // "applied" ONLY when the draft text actually changed
     status: "done",
-    appliedAt: new Date().toISOString(),
+    appliedAt: changed ? new Date().toISOString() : run.appliedAt,
   });
+
+  return { state: newState, matched, changed, before: opt.before, after: opt.after, fountain: changed ? next : fountain };
 }

@@ -95,8 +95,15 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
 
   app.post("/projects/:projectId/writers-room/review/:agentId/run", reviewAction(runReviewAgent));
   app.post("/projects/:projectId/writers-room/review/:agentId/skip", reviewAction(skipReviewAgent));
-  app.post("/projects/:projectId/writers-room/review/:agentId/apply", reviewAction(applyReviewRewrite));
   app.post("/projects/:projectId/writers-room/review/:agentId/reset", reviewAction(resetReviewAgent));
+
+  // Apply actually mutates the draft text — return the full result (matched + before/after + new fountain).
+  app.post("/projects/:projectId/writers-room/review/:agentId/apply", async (req) => {
+    const user = await requireUser(req);
+    const { projectId, agentId } = req.params as { projectId: string; agentId: string };
+    await assertProjectMember(user.id, projectId);
+    return await applyReviewRewrite(projectId, agentId);
+  });
 
   app.post("/projects/:projectId/writers-room/review/:agentId/rewrite", async (req) => {
     const user = await requireUser(req);

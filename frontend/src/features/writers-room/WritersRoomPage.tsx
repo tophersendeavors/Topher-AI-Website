@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,6 +17,7 @@ import type {
 } from "@toburt/shared";
 import { LIVE_PERMISSION_LABELS, LIVE_PERMISSIONS, TALENT_CATEGORY_LABELS, TALENT_INVITE_LABELS } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { markProjectOpened } from "@/lib/recentProjects";
 
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
@@ -52,6 +53,7 @@ export function WritersRoomPage() {
   const [bench, setBench] = useState(false);
   const [debug, setDebug] = useState(typeof window !== "undefined" && window.location.search.includes("debug"));
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => { markProjectOpened(projectId); }, [projectId]);
 
   const seed = (state: WritersRoomResponse["state"]) =>
     qc.setQueryData(["writers-room", projectId], (prev: WritersRoomResponse | undefined) =>

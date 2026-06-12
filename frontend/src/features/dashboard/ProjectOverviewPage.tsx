@@ -35,6 +35,7 @@ import {
   type MicroDramaCohesion,
 } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { markProjectOpened } from "@/lib/recentProjects";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { StoryCleanupPanel } from "@/components/ui/StoryCleanupPanel";
@@ -218,6 +219,7 @@ function RenameProjectButton({
 export function ProjectOverviewPage() {
   const { projectId } = useParams<{ projectId: string }>();
   if (!projectId) return null;
+  useEffect(() => { markProjectOpened(projectId); }, [projectId]);
 
   const project = useQuery({
     queryKey: ["project", projectId],

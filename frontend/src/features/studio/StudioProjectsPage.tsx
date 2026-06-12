@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Loader2, ChevronRight, ArrowRight } from "lucide-react";
 import { STUDIO_ROLE_LABELS, type Project } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { sortByRecent } from "@/lib/recentProjects";
 import { StudioLeftRail } from "./StudioLeftRail";
 
 const GOLD = "#d8b15a";
@@ -53,10 +54,10 @@ export function StudioProjectsPage() {
   const ownerTitle = owner?.role ? STUDIO_ROLE_LABELS[owner.role] : "Studio Owner";
 
   const all = projectsQ.data ?? [];
-  const railFeatured = all.filter((p) => p.status !== "archived")[0] ?? null;
+  const active = sortByRecent(all.filter((p) => p.status !== "archived"));
+  const railFeatured = active[0] ?? null;
 
   const [filter, setFilter] = useState<PType | "all" | "archived">("all");
-  const active = all.filter((p) => p.status !== "archived");
   const shown =
     filter === "all"
       ? active

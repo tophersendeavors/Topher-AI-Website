@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, PenLine, ArrowRight, Loader2 } from "lucide-react";
 import { STUDIO_ROLE_LABELS, type Project } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { sortByRecent } from "@/lib/recentProjects";
 import { StudioLeftRail } from "@/features/studio/StudioLeftRail";
 import { CreateProjectDialog } from "@/features/dashboard/ProjectsPage";
 
@@ -37,7 +38,7 @@ export function WritersRoomLobby() {
   const ownerTitle = owner?.role ? STUDIO_ROLE_LABELS[owner.role] : "Studio Owner";
 
   const all = projectsQ.data ?? [];
-  const active = all.filter((p) => p.status !== "archived");
+  const active = sortByRecent(all.filter((p) => p.status !== "archived"));
   const railFeatured = active[0] ?? null;
 
   return (

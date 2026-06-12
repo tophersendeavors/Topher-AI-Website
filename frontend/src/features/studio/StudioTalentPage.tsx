@@ -16,6 +16,7 @@ import {
   TALENT_INVITE_LABELS,
 } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { pickFeatured } from "@/lib/recentProjects";
 import { StudioLeftRail } from "@/features/studio/StudioLeftRail";
 
 const GOLD = "#d8b15a";
@@ -34,7 +35,7 @@ export function StudioTalentPage() {
   const studioName = approved?.name ?? "TOBURT STUDIOS";
   const ownerName = owner?.name && owner.name !== "chris" ? owner.name : "Studio Owner";
   const ownerTitle = owner?.role ? STUDIO_ROLE_LABELS[owner.role] : "Studio Owner";
-  const railFeatured = (projectsQ.data ?? []).filter((p) => p.status !== "archived")[0] ?? null;
+  const railFeatured = pickFeatured((projectsQ.data ?? []).filter((p) => p.status !== "archived"));
 
   const profiles = talentQ.data?.profiles ?? [];
   const [filter, setFilter] = useState<TalentCategory | "all">("all");

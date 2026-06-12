@@ -13,6 +13,7 @@ import {
 import { STUDIO_ROLE_LABELS } from "@toburt/shared";
 import type { Project, StudioOwnerResponse, StudioRole } from "@toburt/shared";
 import { api } from "@/lib/api";
+import { sortByRecent } from "@/lib/recentProjects";
 import { StudioOwnerOnboarding } from "./StudioOwnerOnboarding";
 import { StudioSidePanel } from "./StudioSidePanel";
 import { StudioLeftRail } from "./StudioLeftRail";
@@ -44,7 +45,7 @@ export function StudioLotHome() {
   });
 
   const owner = ownerQ.data?.owner ?? null;
-  const projects = (projectsQ.data ?? []).filter((p) => p.status !== "archived");
+  const projects = sortByRecent((projectsQ.data ?? []).filter((p) => p.status !== "archived"));
   const config = configQ.data?.config ?? null;
   const approvedStudio = config?.concepts.find((c) => c.id === config?.approvedConceptId) ?? null;
   // Per-studio asset precedence: approved-studio profile → dropped-in static
@@ -63,7 +64,7 @@ export function StudioLotHome() {
   const tagline = approvedStudio?.tagline ?? "Where imagination becomes legacy.";
   const ownerName = owner?.name && owner.name !== "chris" ? owner.name : "Studio Owner";
   const ownerTitle = owner?.role ? STUDIO_ROLE_LABELS[owner.role] : "Studio Owner";
-  const featured = projects[0] ?? null; // most recently updated active production
+  const featured = projects[0] ?? null; // most recently worked-on active production
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-black">
@@ -284,8 +285,10 @@ function SoundStageMarker({ project, index, spot }: { project: Project; index: n
 }
 
 // `slug` is the room's image filename in /studio/rooms/<slug>.png.
-const ROOMS = [
-  { label: "Writers Room", sub: "Develop Stories", Icon: Sparkles, path: "writers-room", slug: "writers-room" },
+// `to` overrides the link (e.g. the Writers Room opens a project picker, not a
+// project assumed from the featured slot).
+const ROOMS: Array<{ label: string; sub: string; Icon: typeof Sparkles; path: string; slug: string; to?: string }> = [
+  { label: "Writers Room", sub: "Develop Stories", Icon: Sparkles, path: "writers-room", slug: "writers-room", to: "/studio/writers-room" },
   { label: "Character Dept.", sub: "Build Legends", Icon: Users, path: "character-bible", slug: "character-dept" },
   { label: "Art Department", sub: "Create Worlds", Icon: Palette, path: "production", slug: "art-department" },
   { label: "Production", sub: "Bring to Life", Icon: Clapperboard, path: "episodes", slug: "production" },
@@ -307,7 +310,7 @@ function EnterTheStudio({ featuredId }: { featuredId: string | null }) {
           </div>
           <div className="flex min-h-0 flex-1 items-stretch gap-2.5 px-1 py-1.5">
             {ROOMS.map((r) => (
-              <RoomImageCard key={r.label} room={r} to={featuredId ? `/projects/${featuredId}/${r.path}` : "/projects"} />
+              <RoomImageCard key={r.label} room={r} to={r.to ?? (featuredId ? `/projects/${featuredId}/${r.path}` : "/projects")} />
             ))}
           </div>
         </div>

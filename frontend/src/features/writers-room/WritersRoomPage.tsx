@@ -85,9 +85,19 @@ export function WritersRoomPage() {
     onSuccess: (s) => navigate(`/projects/${projectId}/drafts/${s.id}/editor`),
   });
 
+  const scriptsQ = useQuery({ queryKey: ["scripts", projectId], queryFn: () => api.listScripts(projectId) });
+  const currentDraft = (scriptsQ.data ?? []).find((s) => s.current) ?? (scriptsQ.data ?? [])[0] ?? null;
+
   const room = roomQ.data;
   const seatById = new Map((room?.state.seats ?? []).map((s) => [s.seatId, s]));
   const firstEmptySeat = SEATS.find((s) => !seatById.has(s.seatId))?.seatId ?? SEATS[0].seatId;
+
+  // Always-available path INTO the writing surface: open the current draft, or
+  // create a blank one and open the editor. This is the room's "write" action.
+  function openDraft() {
+    if (currentDraft) navigate(`/projects/${projectId}/drafts/${currentDraft.id}/editor`);
+    else createScript.mutate({ title: `${projectQ.data?.title ?? "Untitled"} — Draft` });
+  }
 
   // The room's first question. Auto-open until the lead writer answers it.
   const writingMode = room?.state.writingMode ?? null;
@@ -101,8 +111,8 @@ export function WritersRoomPage() {
     const openAssign = (tab: SeatKind) => { setAssignTab(tab); setAssigning(firstEmptySeat); };
     switch (mode) {
       case "upload": setUploadOpen(true); break;
-      case "manual": createScript.mutate({ title: `${projectQ.data?.title ?? "Untitled"} — Draft` }); break;
-      case "concept": navigate(`/projects/${projectId}/story-bible`); break;
+      case "manual": openDraft(); break;
+      case "concept": navigate(`/projects/${projectId}/drafts`); break;
       case "ai_writer": openAssign("ai_writer"); break;
       case "ai_creative": openAssign("ai_creative"); break;
       case "co_writer": openAssign("live_person"); break;
@@ -176,6 +186,15 @@ export function WritersRoomPage() {
           )}
         </div>
         <div className="pointer-events-auto flex items-center gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); openDraft(); }}
+            disabled={createScript.isPending}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11.5px] font-medium text-black disabled:opacity-60"
+            style={{ background: GOLD }}
+          >
+            {createScript.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PenLine className="h-3.5 w-3.5" />}
+            {currentDraft ? "Open Draft" : "Write the Draft"}
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); setNotesOpen(true); }}
             className="flex items-center gap-1.5 rounded-lg border border-[#26262c] bg-black/40 px-3 py-1.5 text-[11.5px] text-bone-200 backdrop-blur-sm hover:border-[#d8b15a]/45"

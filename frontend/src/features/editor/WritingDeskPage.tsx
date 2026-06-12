@@ -74,6 +74,7 @@ export function WritingDeskPage() {
   const [dirty, setDirty] = useState(false);
   const [tab, setTab] = useState<Tab>("team");
   const [lockOpen, setLockOpen] = useState(false);
+  const [rewritePhase, setRewritePhase] = useState<null | "writing" | "polishing">(null);
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   useEffect(() => { markProjectOpened(projectId); }, [projectId]);
   useEffect(() => { if (scriptQ.data) { setBody(scriptQ.data.fountain ?? ""); setDirty(false); } }, [scriptQ.data?.id]);
@@ -96,6 +97,23 @@ export function WritingDeskPage() {
       qc.invalidateQueries({ queryKey: ["scripts", projectId] });
       qc.invalidateQueries({ queryKey: ["script", scriptId] });
     },
+  });
+  // Rewrite the draft = a FRESH take generated from the approved outline (quality
+  // checks are baked into the writer), then auto-polished. Lands on the new draft.
+  const rewriteDraft = useMutation({
+    mutationFn: async (notes: string) => {
+      setRewritePhase("writing");
+      const r = await api.generateWriteDraft(projectId, notes.trim() || undefined);
+      setRewritePhase("polishing");
+      await api.polishDraft(projectId);
+      return r;
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["scripts", projectId] });
+      qc.invalidateQueries({ queryKey: ["writers-room", projectId] });
+      navigate(`/projects/${projectId}/drafts/${r.scriptId}/editor`);
+    },
+    onSettled: () => setRewritePhase(null),
   });
 
   const onMount: OnMount = (editor, monaco) => {
@@ -294,7 +312,7 @@ export function WritingDeskPage() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {!room ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-bone-500" /></div>
-              : tab === "team" ? <TeamTab projectId={projectId} room={room} stage={stage} getSelection={getSelection} getContext={getContext} applyText={applyText} onRoomRefresh={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
+              : tab === "team" ? <TeamTab projectId={projectId} room={room} stage={stage} getSelection={getSelection} getContext={getContext} applyText={applyText} canRewriteDraft={!!room.state.writeFlow.outline?.approved} rewriting={rewriteDraft.isPending} onRewriteDraft={(notes) => rewriteDraft.mutate(notes)} onRoomRefresh={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : tab === "outline" ? <OutlineTab room={room} onGoRoom={() => navigate(`/projects/${projectId}/writers-room`)} />
               : tab === "bench" ? <BenchTab projectId={projectId} room={room} hasText={!!body.trim()} ensureSaved={ensureSaved} onDraftReplaced={onDraftReplaced} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : <NotesTab projectId={projectId} />}
@@ -303,6 +321,17 @@ export function WritingDeskPage() {
       </div>
 
       {lockOpen && <FinalDraftDrawer projectId={projectId} onClose={() => { setLockOpen(false); qc.invalidateQueries({ queryKey: ["writers-room", projectId] }); }} />}
+
+      {rewritePhase && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/85 backdrop-blur-sm">
+          <div className="grid place-items-center gap-3 text-center">
+            <Loader2 className="h-7 w-7 animate-spin" style={gold} />
+            {rewritePhase === "writing"
+              ? <div className="text-[14px] text-bone-100">Rewriting a fresh draft from the outline…</div>
+              : <><div className="text-[14px] text-bone-100">Polishing with the studio staff…</div><div className="max-w-sm text-[11px] text-bone-500">Structure, character, emotional truth, subtext, dialogue, continuity.</div></>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -330,7 +359,7 @@ function ApproveDraftButton({ approved, hasText, unfinished, pending, onToggle }
 
 // ---- Writing Team ----------------------------------------------------------
 
-function TeamTab({ projectId, room, stage, getSelection, getContext, applyText, onRoomRefresh }: { projectId: string; room: WritersRoomResponse; stage: Stage; getSelection: () => string; getContext: () => { text: string; atCursor: boolean }; applyText: (text: string, where: "append" | "cursor" | "replace") => void; onRoomRefresh: () => void }) {
+function TeamTab({ projectId, room, stage, getSelection, getContext, applyText, canRewriteDraft, rewriting, onRewriteDraft, onRoomRefresh }: { projectId: string; room: WritersRoomResponse; stage: Stage; getSelection: () => string; getContext: () => { text: string; atCursor: boolean }; applyText: (text: string, where: "append" | "cursor" | "replace") => void; canRewriteDraft: boolean; rewriting: boolean; onRewriteDraft: (notes: string) => void; onRoomRefresh: () => void }) {
   const seats = room.state.seats;
   const aiSeat = seats.find((s) => s.kind === "ai_creative" || s.kind === "ai_writer") ?? null;
   const creative = aiSeat?.kind === "ai_creative" ? room.creatives.find((c) => c.id === aiSeat.ref.id) ?? null : null;
@@ -341,6 +370,8 @@ function TeamTab({ projectId, room, stage, getSelection, getContext, applyText, 
   const [message, setMessage] = useState<{ from: string | null; text: string } | null>(null);
   const [steer, setSteer] = useState("");
   const [continueSteer, setContinueSteer] = useState("");
+  const [rewriteNotes, setRewriteNotes] = useState("");
+  const [showRewrite, setShowRewrite] = useState(false);
   const [ask, setAsk] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ text: string } | null>(null);
@@ -438,6 +469,30 @@ function TeamTab({ projectId, room, stage, getSelection, getContext, applyText, 
         <div className="text-[11px]" style={gold}>{aiSeat.kind === "ai_creative" ? `AI Creative · ${creative?.role ?? "Creative lens"}` : "Studio AI Writer · automated draft support"}</div>
         {creative && <div className="mt-1 text-[11px] text-bone-300">Current lens: {creative.style}</div>}
       </div>
+
+      {/* Rewrite the whole draft — a fresh take from the approved outline (the
+          quality checks are baked into the writer, so it comes out polished). */}
+      {canRewriteDraft && (
+        <div className="rounded-xl border border-[#26262c] bg-black/20 p-2.5">
+          {!showRewrite ? (
+            <button onClick={() => setShowRewrite(true)} className="flex w-full items-center gap-1.5 text-[12px] text-bone-200 hover:text-bone-50">
+              <RefreshCw className="h-3.5 w-3.5" style={gold} /> Rewrite the whole draft <span className="ml-auto text-[10px] text-bone-500">fresh take →</span>
+            </button>
+          ) : (
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-wide text-bone-500">Rewrite the whole draft</div>
+              <p className="text-[10.5px] text-bone-400">A fresh take from your approved outline, written by {first} and auto-polished. Saved as a new draft version.</p>
+              <textarea value={rewriteNotes} onChange={(e) => setRewriteNotes(e.target.value)} placeholder={`Optional direction: "darker", "tighter", "more on the sister"…`} className="min-h-[40px] w-full resize-y rounded-md border border-[#26262c] bg-black/30 px-2 py-1.5 text-[12px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none" />
+              <div className="flex gap-1.5">
+                <button onClick={() => onRewriteDraft(rewriteNotes)} disabled={rewriting} className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-medium text-black disabled:opacity-60" style={{ background: GOLD }}>
+                  {rewriting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Rewrite draft
+                </button>
+                <button onClick={() => setShowRewrite(false)} className="rounded-md border border-[#26262c] px-3 py-1.5 text-[12px] text-bone-400 hover:border-bone-600">Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <p className="text-[11px] text-bone-400">{intro}</p>
 

@@ -35,6 +35,7 @@ import wayfinderRoutes from "./routes/wayfinder.js";
 import studioRoutes from "./routes/studio.js";
 import studioOwnerRoutes from "./routes/studioOwner.js";
 import writersRoomRoutes from "./routes/writersRoom.js";
+import talentRoutes from "./routes/talent.js";
 import teamRoutes from "./routes/team.js";
 import briefRouterRoutes from "./routes/briefRouter.js";
 
@@ -88,6 +89,7 @@ async function main() {
       await api.register(studioRoutes);
       await api.register(studioOwnerRoutes);
       await api.register(writersRoomRoutes);
+      await api.register(talentRoutes);
       await api.register(teamRoutes);
       await api.register(briefRouterRoutes);
     },

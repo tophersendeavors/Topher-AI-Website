@@ -148,4 +148,7 @@ export interface WritersRoomResponse {
   aiWriter: AiWriterProfile;
   creatives: AiCreativeProfile[];
   qualityStaff: QualityAgent[];
+  // Existing reusable people from the Writer/Talent Directory, so a Live
+  // Co-Writer seat can select an existing profile instead of re-creating one.
+  talent: import("./talent").TalentProfile[];
 }

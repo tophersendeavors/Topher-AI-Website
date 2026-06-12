@@ -285,7 +285,15 @@ function postCreateRoute(
   return `/projects/${projectId}`;
 }
 
-function CreateProjectDialog({ onClose }: { onClose: () => void }) {
+export function CreateProjectDialog({
+  onClose,
+  landingRoute,
+}: {
+  onClose: () => void;
+  // Override where the user lands after creation (e.g. straight into the new
+  // project's Writers Room). Defaults to the type-aware postCreateRoute.
+  landingRoute?: (projectId: string, projectType: ProjectType) => string;
+}) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2>(1);
@@ -318,7 +326,11 @@ function CreateProjectDialog({ onClose }: { onClose: () => void }) {
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ["projects"] });
       onClose();
-      navigate(postCreateRoute(created.id, projectType, redevTemplateId));
+      navigate(
+        landingRoute
+          ? landingRoute(created.id, projectType)
+          : postCreateRoute(created.id, projectType, redevTemplateId)
+      );
     },
   });
 

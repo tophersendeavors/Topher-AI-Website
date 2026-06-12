@@ -6,6 +6,7 @@ import { SignInPage } from "@/features/auth/SignInPage";
 import { ProjectsPage } from "@/features/dashboard/ProjectsPage";
 import { ProjectOverviewPage } from "@/features/dashboard/ProjectOverviewPage";
 import { WritersRoomPage } from "@/features/writers-room/WritersRoomPage";
+import { WritersRoomLobby } from "@/features/writers-room/WritersRoomLobby";
 import { CharacterBiblePage } from "@/features/character-bible/CharacterBiblePage";
 import { StoryBiblePage } from "@/features/story-bible/StoryBiblePage";
 import { EpisodesPage } from "@/features/episodes/EpisodesPage";
@@ -28,6 +29,7 @@ import { StudioLotHome } from "@/features/studio/StudioLotHome";
 import { StudioOwnerPage } from "@/features/studio/StudioOwnerPage";
 import { StudioBuilderPage } from "@/features/studio/StudioBuilderPage";
 import { StudioProjectsPage } from "@/features/studio/StudioProjectsPage";
+import { StudioTalentPage } from "@/features/studio/StudioTalentPage";
 import { ShotListPage } from "@/features/shot-list/ShotListPage";
 import { TrailerBuilderPage } from "@/features/trailer-builder/TrailerBuilderPage";
 import { ProductionHubPage } from "@/features/production-hub/ProductionHubPage";
@@ -55,6 +57,8 @@ function AppRoutes() {
           <Route path="studio/owner" element={<StudioOwnerPage />} />
           <Route path="studio/build" element={<StudioBuilderPage />} />
           <Route path="studio/projects" element={<StudioProjectsPage />} />
+          <Route path="studio/talent" element={<StudioTalentPage />} />
+          <Route path="studio/writers-room" element={<WritersRoomLobby />} />
           {/* Writers Room is an immersive place — full-bleed, no dashboard chrome. */}
           <Route path="projects/:projectId/writers-room" element={<WritersRoomPage />} />
           <Route element={<AppShell />}>

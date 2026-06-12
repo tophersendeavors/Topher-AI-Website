@@ -16,6 +16,9 @@ import type {
   WritersRoomState,
   SeatKind,
   LivePermission,
+  TalentProfile,
+  TalentProfileInput,
+  TalentCategory,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -908,6 +911,7 @@ export const api = {
     body: {
       kind: SeatKind;
       profileId?: string;
+      talentId?: string;
       name?: string;
       email?: string;
       role?: string;
@@ -922,6 +926,16 @@ export const api = {
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/seats/${seatId}`, {
       method: "DELETE",
     }),
+
+  // Writer / Talent Directory — account-level reusable people
+  listTalent: (category?: TalentCategory) =>
+    request<{ profiles: TalentProfile[] }>(`/talent${category ? `?category=${category}` : ""}`),
+  getTalentProfile: (id: string) => request<{ profile: TalentProfile }>(`/talent/${id}`),
+  createTalent: (body: TalentProfileInput) =>
+    request<{ profile: TalentProfile }>("/talent", { method: "POST", body: JSON.stringify(body) }),
+  updateTalent: (id: string, body: Partial<TalentProfileInput>) =>
+    request<{ profile: TalentProfile }>(`/talent/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteTalent: (id: string) => request<{ ok: true }>(`/talent/${id}`, { method: "DELETE" }),
   createProject: (
     body: Partial<Project> & { projectType?: string; redevTemplateId?: string }
   ) => request<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),

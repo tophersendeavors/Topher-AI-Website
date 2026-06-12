@@ -11,10 +11,11 @@ import type {
   LivePermission,
   QualityAgent,
   SeatKind,
+  TalentProfile,
   WritersRoomResponse,
   WritersRoomSeat,
 } from "@toburt/shared";
-import { LIVE_PERMISSION_LABELS, LIVE_PERMISSIONS } from "@toburt/shared";
+import { LIVE_PERMISSION_LABELS, LIVE_PERMISSIONS, TALENT_CATEGORY_LABELS, TALENT_INVITE_LABELS } from "@toburt/shared";
 import { api } from "@/lib/api";
 
 const GOLD = "#d8b15a";
@@ -160,6 +161,7 @@ export function WritersRoomPage() {
           seatId={assigning}
           aiWriter={room.aiWriter}
           creatives={room.creatives}
+          talent={room.talent}
           projectId={projectId}
           onClose={() => setAssigning(null)}
           onAssigned={(state) => { seed(state); setAssigning(null); }}
@@ -263,11 +265,12 @@ function Avatar({ name, url, size, ring }: { name: string; url: string | null; s
 // Quality/checks agents are NOT here; they live on the Review Bench.
 
 function AssignModal({
-  seatId, aiWriter, creatives, projectId, onClose, onAssigned,
+  seatId, aiWriter, creatives, talent, projectId, onClose, onAssigned,
 }: {
   seatId: string;
   aiWriter: AiWriterProfile;
   creatives: AiCreativeProfile[];
+  talent: TalentProfile[];
   projectId: string;
   onClose: () => void;
   onAssigned: (state: WritersRoomResponse["state"]) => void;
@@ -341,7 +344,14 @@ function AssignModal({
             </div>
           )}
 
-          {tab === "live_person" && <LivePersonForm busy={assign.isPending} onAdd={(body) => assign.mutate(body)} />}
+          {tab === "live_person" && (
+            <LivePersonPicker
+              talent={talent}
+              busy={assign.isPending}
+              onPickExisting={(talentId) => assign.mutate({ kind: "live_person", talentId })}
+              onInvite={(body) => assign.mutate(body)}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -369,41 +379,85 @@ function CreativeRow({ c, busy, onPick }: { c: AiCreativeProfile; busy: boolean;
   );
 }
 
-function LivePersonForm({
-  busy, onAdd,
+function LivePersonPicker({
+  talent, busy, onPickExisting, onInvite,
 }: {
+  talent: TalentProfile[];
   busy: boolean;
-  onAdd: (body: { kind: "live_person"; name: string; email?: string; role?: string; permission?: LivePermission }) => void;
+  onPickExisting: (talentId: string) => void;
+  onInvite: (body: { kind: "live_person"; name: string; email?: string; role?: string; permission?: LivePermission }) => void;
 }) {
+  const [mode, setMode] = useState<"existing" | "invite">(talent.length ? "existing" : "invite");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("");
   const [permission, setPermission] = useState<LivePermission>("co_writer");
   const input = "w-full rounded-md border border-[#26262c] bg-black/30 px-3 py-2 text-[13px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none";
+
   return (
     <div className="space-y-3">
-      <p className="text-[11.5px] text-bone-400">
-        Add a real writer to the team. They become a reusable profile in your Writer Directory — their photo, credits and specialties are captured when they accept the invite.
-      </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <input className={input} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input className={input} placeholder="Email (for invite)" value={email} onChange={(e) => setEmail(e.target.value)} />
-      </div>
-      <input className={input} placeholder="Role — e.g. Co-writer, Staff Writer" value={role} onChange={(e) => setRole(e.target.value)} />
-      <div>
-        <label className="text-[10px] uppercase tracking-wide text-bone-500">Permission</label>
-        <select className={input + " mt-1"} value={permission} onChange={(e) => setPermission(e.target.value as LivePermission)}>
-          {LIVE_PERMISSIONS.map((p) => <option key={p} value={p} className="bg-[#0b0b0e]">{LIVE_PERMISSION_LABELS[p]}</option>)}
-        </select>
-      </div>
-      <button
-        onClick={() => onAdd({ kind: "live_person", name: name.trim(), email: email.trim() || undefined, role: role.trim() || undefined, permission })}
-        disabled={busy || !name.trim()}
-        className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black disabled:opacity-50"
-        style={{ background: GOLD }}
-      >
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Invite to the team
-      </button>
+      {talent.length > 0 && (
+        <div className="flex gap-1 rounded-lg border border-[#26262c] p-0.5 text-[12px]">
+          {(["existing", "invite"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className="flex-1 rounded-md px-3 py-1.5 transition-colors"
+              style={mode === m ? { background: "rgba(216,177,90,0.14)", color: GOLD } : { color: "#9a927e" }}
+            >
+              {m === "existing" ? `From your directory (${talent.length})` : "Invite someone new"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {mode === "existing" && talent.length > 0 ? (
+        <div className="grid gap-2">
+          {talent.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => onPickExisting(t.id)}
+              disabled={busy}
+              className="flex items-center gap-3 rounded-xl border border-[#26262c] bg-white/[0.015] p-2.5 text-left transition-colors hover:border-[#d8b15a]/45 disabled:opacity-60"
+            >
+              <Avatar name={t.name} url={t.avatarUrl} size={40} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] text-bone-50">{t.name}</div>
+                <div className="truncate text-[10.5px]" style={gold}>{TALENT_CATEGORY_LABELS[t.category]}{t.role ? ` · ${t.role}` : ""}</div>
+                {t.specialties.length > 0 && <div className="truncate text-[10.5px] text-bone-400">{t.specialties.slice(0, 3).join(", ")}</div>}
+              </div>
+              <span className="shrink-0 rounded-full px-2 py-0.5 text-[9.5px]" style={{ color: "#9a927e", background: "rgba(154,146,126,0.12)" }}>
+                {TALENT_INVITE_LABELS[t.inviteStatus]}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <>
+          <p className="text-[11.5px] text-bone-400">
+            Invite a real writer. They become a reusable profile in your Writer Directory — usable on every future project. Photo, credits and specialties fill in when they accept.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input className={input} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className={input} placeholder="Email (for invite)" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <input className={input} placeholder="Role — e.g. Co-writer, Staff Writer" value={role} onChange={(e) => setRole(e.target.value)} />
+          <div>
+            <label className="text-[10px] uppercase tracking-wide text-bone-500">Permission</label>
+            <select className={input + " mt-1"} value={permission} onChange={(e) => setPermission(e.target.value as LivePermission)}>
+              {LIVE_PERMISSIONS.map((p) => <option key={p} value={p} className="bg-[#0b0b0e]">{LIVE_PERMISSION_LABELS[p]}</option>)}
+            </select>
+          </div>
+          <button
+            onClick={() => onInvite({ kind: "live_person", name: name.trim(), email: email.trim() || undefined, role: role.trim() || undefined, permission })}
+            disabled={busy || !name.trim()}
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium text-black disabled:opacity-50"
+            style={{ background: GOLD }}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Invite to the team
+          </button>
+        </>
+      )}
     </div>
   );
 }

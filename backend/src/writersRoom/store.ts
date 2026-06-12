@@ -3,7 +3,6 @@
 // person). Resolving a seat denormalizes display fields so the room renders
 // without re-fetching the profile.
 
-import { randomUUID } from "node:crypto";
 import { supabase } from "../db/client.js";
 import type {
   LivePermission,
@@ -12,6 +11,7 @@ import type {
   WritersRoomState,
 } from "@toburt/shared";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES } from "./profiles.js";
+import { getTalent, createTalent, addProjectHistory } from "../talent/store.js";
 
 async function loadMeta(projectId: string): Promise<Record<string, unknown>> {
   const { data, error } = await supabase.from("projects").select("metadata").eq("id", projectId).single();
@@ -37,10 +37,16 @@ export interface AssignSeatInput {
   kind: SeatKind;
   profileId?: string; // ai_creative
   // live_person:
-  name?: string;
+  talentId?: string; // select an existing Writer/Talent Directory profile
+  name?: string; // …or invite a new person (creates a reusable profile)
   email?: string;
   role?: string;
   permission?: LivePermission;
+}
+
+async function projectTitle(projectId: string): Promise<string> {
+  const { data } = await supabase.from("projects").select("title").eq("id", projectId).maybeSingle();
+  return (data?.title as string | undefined) ?? "Untitled";
 }
 
 /** Build a fully-resolved seat from an assignment and save it. */
@@ -69,18 +75,37 @@ export async function assignSeat(
       assignedAt: now, assignedBy: userId,
     };
   } else {
-    // live_person — inline for now, but with a stable id so the Phase-2
-    // directory can adopt it as a global profile without changing the seat.
-    if (!input.name?.trim()) throw new Error("A live person needs a name.");
-    const id = randomUUID();
-    const permission: LivePermission = input.permission ?? "comment";
+    // live_person — resolve to a reusable Writer/Talent Directory profile.
+    // Either select an existing profile or invite a new one (which creates the
+    // profile). The seat references it by id so the person is reusable.
+    let profile;
+    if (input.talentId) {
+      profile = await getTalent(userId, input.talentId);
+      if (!profile) throw new Error("That writer profile could not be found.");
+    } else {
+      if (!input.name?.trim()) throw new Error("A live writer needs a name.");
+      profile = await createTalent(userId, {
+        name: input.name.trim(),
+        email: input.email?.trim() || null,
+        role: input.role?.trim() || "Co-Writer",
+        category: "co_writer",
+        permission: input.permission ?? "co_writer",
+        inviteStatus: input.email?.trim() ? "invited" : "draft",
+      });
+    }
+    const live = profile.inviteStatus === "active" ? "active" : "pending";
     seat = {
-      seatId, kind: "live_person", ref: { kind: "live_person", id },
-      name: input.name.trim(), roleLabel: input.role?.trim() || "Collaborator",
-      avatarUrl: null, status: "Invite pending",
-      personEmail: input.email?.trim() || null, permission, inviteStatus: "pending",
+      seatId, kind: "live_person", ref: { kind: "live_person", id: profile.id },
+      name: profile.name, roleLabel: profile.role || "Co-Writer",
+      avatarUrl: profile.avatarUrl,
+      status: profile.inviteStatus === "active" ? "On the team" : "Invite pending",
+      personEmail: profile.email, permission: profile.permission, inviteStatus: live,
       assignedAt: now, assignedBy: userId,
     };
+    // Record that this person is now part of this project.
+    await addProjectHistory(userId, profile.id, {
+      projectId, title: await projectTitle(projectId), role: profile.role, at: now,
+    });
   }
 
   const state = await getWritersRoomState(projectId);

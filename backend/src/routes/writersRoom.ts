@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { LIVE_PERMISSIONS, WRITING_MODES, type LivePermission, type WritersRoomResponse, type WritingMode } from "@toburt/shared";
+import { LIVE_PERMISSIONS, WRITING_MODES, COLLAB_ACTIONS, type LivePermission, type WritersRoomResponse, type WritingMode, type CollabAction } from "@toburt/shared";
 import { requireUser } from "../auth/verifyJwt.js";
 import { assertProjectMember } from "../db/queries.js";
 import { getStudioOwner } from "../studio/identityStore.js";
@@ -13,6 +13,7 @@ import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../w
 import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite } from "../writersRoom/review.js";
 import { getLockStatus, updateLockSettings, lockFinalDraft, unlockFinalDraft } from "../writersRoom/lock.js";
 import { conceptDefaults, saveConcept, generateOutline, approveOutline, generateDraftFromOutline } from "../writersRoom/writeFlow.js";
+import { collaborate, setDraftApproved } from "../writersRoom/collaborate.js";
 import { listTalent } from "../talent/store.js";
 
 export default async function writersRoomRoutes(app: FastifyInstance) {
@@ -182,5 +183,28 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     await assertProjectMember(user.id, projectId);
     const { notes } = z.object({ notes: z.string().max(2000).optional() }).parse(req.body ?? {});
     return await generateDraftFromOutline(projectId, notes);
+  });
+
+  // --- Active writing collaboration at the desk ----------------------------
+  app.post("/projects/:projectId/writers-room/collaborate", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const { action, selection, instruction } = z
+      .object({
+        action: z.enum(COLLAB_ACTIONS as unknown as [CollabAction, ...CollabAction[]]),
+        selection: z.string().max(8000).optional(),
+        instruction: z.string().max(2000).optional(),
+      })
+      .parse(req.body);
+    return await collaborate(projectId, action, { selection, instruction });
+  });
+
+  app.post("/projects/:projectId/writers-room/write-flow/approve-draft", async (req) => {
+    const user = await requireUser(req);
+    const { projectId } = req.params as { projectId: string };
+    await assertProjectMember(user.id, projectId);
+    const { approved } = z.object({ approved: z.boolean().default(true) }).parse(req.body ?? {});
+    return { state: await setDraftApproved(projectId, approved) };
   });
 }

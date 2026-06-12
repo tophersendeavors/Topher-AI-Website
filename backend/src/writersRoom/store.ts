@@ -36,6 +36,8 @@ const EMPTY_WRITE_FLOW: WritersRoomState["writeFlow"] = {
   concept: null,
   outline: null,
   draftScriptId: null,
+  draftApproved: false,
+  draftApprovedAt: null,
   updatedAt: null,
 };
 

@@ -237,8 +237,22 @@ export interface WriteFlow {
   concept: ConceptBrief | null;
   outline: WriteFlowOutline | null;
   draftScriptId: string | null;
+  // The creator approves the written draft before quality checks begin.
+  draftApproved: boolean;
+  draftApprovedAt: string | null;
   updatedAt: string | null;
 }
+
+/** Active-collaboration actions the seated AI can take at the writing desk. */
+export const COLLAB_ACTIONS = [
+  "next_scene",
+  "continue",
+  "rewrite",
+  "subtext",
+  "alt_beat",
+  "ask",
+] as const;
+export type CollabAction = (typeof COLLAB_ACTIONS)[number];
 
 // --- Final Draft Lock --------------------------------------------------------
 

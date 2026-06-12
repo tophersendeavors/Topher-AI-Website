@@ -42,7 +42,7 @@ export async function saveConcept(projectId: string, concept: ConceptBrief): Pro
 }
 
 /** Find the seated AI collaborator (prefer an AI Creative). */
-function resolveCollaborator(state: WritersRoomState, seatId?: string): { ref: WriteFlowCollaborator; creativeIdx: number } | null {
+export function resolveCollaborator(state: WritersRoomState, seatId?: string): { ref: WriteFlowCollaborator; creativeIdx: number } | null {
   const seats = state.seats.filter((s) => s.kind === "ai_creative" || s.kind === "ai_writer");
   const seat = seatId
     ? seats.find((s) => s.seatId === seatId)
@@ -59,7 +59,7 @@ function resolveCollaborator(state: WritersRoomState, seatId?: string): { ref: W
   return { ref: { kind: "ai_writer", id: seat.ref.id, seatId: seat.seatId, name: seat.name, lens: null }, creativeIdx: -1 };
 }
 
-function collaboratorSystem(collab: WriteFlowCollaborator, creativeIdx: number): string {
+export function collaboratorSystem(collab: WriteFlowCollaborator, creativeIdx: number): string {
   if (collab.kind === "ai_creative" && creativeIdx >= 0) {
     const c = WRITING_CREATIVES[creativeIdx];
     return [

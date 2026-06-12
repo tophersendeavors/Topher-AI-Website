@@ -11,7 +11,7 @@ import { CharacterBiblePage } from "@/features/character-bible/CharacterBiblePag
 import { StoryBiblePage } from "@/features/story-bible/StoryBiblePage";
 import { EpisodesPage } from "@/features/episodes/EpisodesPage";
 import { DraftsPage } from "@/features/drafts/DraftsPage";
-import { ScriptEditorPage } from "@/features/editor/ScriptEditorPage";
+import { WritingDeskPage } from "@/features/editor/WritingDeskPage";
 import { DraftWorkspacePage } from "@/features/drafts/DraftWorkspacePage";
 import { RewritesPage } from "@/features/rewrites/RewritesPage";
 import { ContinuityPage } from "@/features/continuity/ContinuityPage";
@@ -61,6 +61,8 @@ function AppRoutes() {
           <Route path="studio/writers-room" element={<WritersRoomLobby />} />
           {/* Writers Room is an immersive place — full-bleed, no dashboard chrome. */}
           <Route path="projects/:projectId/writers-room" element={<WritersRoomPage />} />
+          {/* The writing desk is a full-bleed studio surface, not dashboard chrome. */}
+          <Route path="projects/:projectId/drafts/:scriptId/editor" element={<WritingDeskPage />} />
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/studio" replace />} />
             <Route path="projects" element={<ProjectsPage />} />
@@ -72,7 +74,6 @@ function AppRoutes() {
             <Route path="projects/:projectId/pitch" element={<PitchMaterialsPage />} />
             <Route path="projects/:projectId/drafts" element={<DraftsPage />} />
             <Route path="projects/:projectId/drafts/:scriptId" element={<DraftWorkspacePage />} />
-            <Route path="projects/:projectId/drafts/:scriptId/editor" element={<ScriptEditorPage />} />
             <Route path="projects/:projectId/rewrites" element={<RewritesPage />} />
             <Route path="projects/:projectId/continuity" element={<ContinuityPage />} />
             <Route path="projects/:projectId/emotional" element={<EmotionalIntelligencePage />} />

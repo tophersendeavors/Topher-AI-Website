@@ -20,6 +20,10 @@ import type {
   TalentProfile,
   TalentProfileInput,
   TalentCategory,
+  RoomNote,
+  RoomNoteInput,
+  NoteTargetType,
+  NoteStatus,
   CharacterWound,
   DirectnessReport,
   Episode,
@@ -932,6 +936,21 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ mode }),
     }),
+
+  // Room Notes — studio-wide production notes
+  listRoomNotes: (
+    projectId: string,
+    q: { room?: string; targetType?: NoteTargetType; targetRef?: string; status?: NoteStatus } = {}
+  ) => {
+    const qs = new URLSearchParams(Object.entries(q).filter(([, v]) => v != null) as [string, string][]).toString();
+    return request<{ notes: RoomNote[] }>(`/projects/${projectId}/notes${qs ? `?${qs}` : ""}`);
+  },
+  createRoomNote: (projectId: string, body: RoomNoteInput) =>
+    request<{ note: RoomNote }>(`/projects/${projectId}/notes`, { method: "POST", body: JSON.stringify(body) }),
+  updateRoomNote: (projectId: string, noteId: string, body: Partial<RoomNoteInput>) =>
+    request<{ note: RoomNote }>(`/projects/${projectId}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteRoomNote: (projectId: string, noteId: string) =>
+    request<{ ok: true }>(`/projects/${projectId}/notes/${noteId}`, { method: "DELETE" }),
 
   // Writer / Talent Directory — account-level reusable people
   listTalent: (category?: TalentCategory) =>

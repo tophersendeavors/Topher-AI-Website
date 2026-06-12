@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Plus, X, PenLine, Wand2, UserPlus, ArrowRight, Loader2,
-  ClipboardCheck, Crosshair, Upload, Lightbulb, Bot, PencilLine, Pencil,
+  ClipboardCheck, Crosshair, Upload, Lightbulb, Bot, PencilLine, Pencil, StickyNote,
 } from "lucide-react";
 import type {
   AiCreativeProfile,
@@ -22,6 +22,7 @@ import {
 } from "@toburt/shared";
 import { api } from "@/lib/api";
 import { markProjectOpened } from "@/lib/recentProjects";
+import { NotesDrawer } from "./NotesDrawer";
 
 const GOLD = "#d8b15a";
 const gold = { color: GOLD };
@@ -57,6 +58,7 @@ export function WritersRoomPage() {
   const [assigning, setAssigning] = useState<string | null>(null);
   const [assignTab, setAssignTab] = useState<SeatKind>("ai_writer");
   const [bench, setBench] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [beginOpen, setBeginOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [debug, setDebug] = useState(typeof window !== "undefined" && window.location.search.includes("debug"));
@@ -173,6 +175,12 @@ export function WritersRoomPage() {
         </div>
         <div className="pointer-events-auto flex items-center gap-2">
           <button
+            onClick={(e) => { e.stopPropagation(); setNotesOpen(true); }}
+            className="flex items-center gap-1.5 rounded-lg border border-[#26262c] bg-black/40 px-3 py-1.5 text-[11.5px] text-bone-200 backdrop-blur-sm hover:border-[#d8b15a]/45"
+          >
+            <StickyNote className="h-3.5 w-3.5" style={gold} /> Notes
+          </button>
+          <button
             onClick={(e) => { e.stopPropagation(); setBench(true); }}
             className="flex items-center gap-1.5 rounded-lg border border-[#26262c] bg-black/40 px-3 py-1.5 text-[11.5px] text-bone-200 backdrop-blur-sm hover:border-[#d8b15a]/45"
           >
@@ -243,6 +251,9 @@ export function WritersRoomPage() {
           onSubmit={(title, fountain) => createScript.mutate({ title, fountain })}
         />
       )}
+
+      {/* room notes drawer — actionable production notes */}
+      {notesOpen && <NotesDrawer projectId={projectId} onClose={() => setNotesOpen(false)} />}
 
       {/* review bench drawer — quality staff, NOT table writers */}
       {bench && room && <ReviewBench staff={room.qualityStaff} onClose={() => setBench(false)} />}

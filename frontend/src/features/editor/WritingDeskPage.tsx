@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Save, Download, Loader2, Wand2, PencilLine, MessageCircle,
   Sparkles, ClipboardCheck, StickyNote, ListOrdered, Users, Check, ArrowRight,
-  CheckCircle2, Play, SkipForward,
+  CheckCircle2, Play, SkipForward, AlertTriangle, Copy, ArrowDownToLine, Trash2,
 } from "lucide-react";
 import type { CollabAction, NoteStatus, QualityAgent, ReviewRun, WritersRoomResponse } from "@toburt/shared";
 import { reviewAuthorityOf, REVIEW_AUTHORITY_LABELS, OPEN_NOTE_STATUSES } from "@toburt/shared";
@@ -33,6 +33,22 @@ function writingStage(room: WritersRoomResponse, hasText: boolean): Stage {
   }
   return "drafting"; // manual / upload with no text yet
 }
+const HEADING_RE = /^(\.|INT\.?|EXT\.?|EST\.?|INT\.?\/EXT\.?|I\/E\.?)\b/i;
+/** Heuristic: does the draft end on something that signals it's incomplete? */
+function isUnfinished(body: string): boolean {
+  const lines = body.split(/\r?\n/);
+  let i = lines.length - 1;
+  while (i >= 0 && !lines[i].trim()) i--;
+  if (i < 0) return false;
+  const last = lines[i].trim();
+  if (HEADING_RE.test(last)) return true;                       // ends on a scene heading
+  if (/(TO:|FADE OUT\.?|CUT TO:?|SMASH CUT:?)$/i.test(last)) return true; // transition
+  if (/^(---|\*\*\*|===|—)$/.test(last)) return true;            // dangling separator
+  // bare character cue (short ALL-CAPS line, no sentence punctuation)
+  if (/^[A-Z][A-Z0-9 .'()\-]{1,30}$/.test(last) && !/[.!?]$/.test(last) && last.length < 32) return true;
+  return false;
+}
+
 const STAGE_META: Record<Stage, { objective: string; next: string }> = {
   concept_outline: { objective: "Develop concept into an outline", next: "Draft" },
   outline_review: { objective: "Review & approve the outline", next: "Draft" },
@@ -91,15 +107,33 @@ export function WritingDeskPage() {
     const ed = editorRef.current;
     if (!ed) return "";
     const sel = ed.getSelection();
-    return sel ? ed.getModel()?.getValueInRange(sel) ?? "" : "";
+    return sel && !sel.isEmpty() ? ed.getModel()?.getValueInRange(sel) ?? "" : "";
   };
-  const applyResult = (r: { text: string; mode: "append" | "replace" | "message" }) => {
-    if (r.mode === "append") { setBody((b) => `${b.trimEnd()}\n\n${r.text}\n`); setDirty(true); }
-    else if (r.mode === "replace") {
-      const ed = editorRef.current; const sel = ed?.getSelection();
-      if (ed && sel) { ed.executeEdits("collab", [{ range: sel, text: r.text }]); setBody(ed.getValue()); setDirty(true); }
-      else { setBody((b) => `${b.trimEnd()}\n\n${r.text}\n`); setDirty(true); }
+  // Context to continue from: text up to the cursor when the cursor sits inside
+  // the draft; otherwise the whole draft. `atCursor` = cursor isn't at the end.
+  const getContext = (): { text: string; atCursor: boolean } => {
+    const ed = editorRef.current; const model = ed?.getModel();
+    if (!ed || !model) return { text: body, atCursor: false };
+    const pos = ed.getPosition();
+    const end = model.getFullModelRange().getEndPosition();
+    const atCursor = !!pos && !(pos.lineNumber === end.lineNumber && pos.column === end.column);
+    const text = pos && atCursor
+      ? model.getValueInRange({ startLineNumber: 1, startColumn: 1, endLineNumber: pos.lineNumber, endColumn: pos.column })
+      : model.getValue();
+    return { text, atCursor };
+  };
+  // Apply collaborator text where the user chooses.
+  const applyText = (text: string, where: "append" | "cursor" | "replace") => {
+    const ed = editorRef.current;
+    if (where === "append" || !ed) { setBody((b) => `${b.trimEnd()}\n\n${text}\n`); setDirty(true); return; }
+    if (where === "cursor") {
+      const pos = ed.getPosition();
+      if (pos) { ed.executeEdits("collab", [{ range: { startLineNumber: pos.lineNumber, startColumn: pos.column, endLineNumber: pos.lineNumber, endColumn: pos.column }, text: `\n${text}\n` }]); setBody(ed.getValue()); setDirty(true); }
+      return;
     }
+    const sel = ed.getSelection();
+    if (sel && !sel.isEmpty()) { ed.executeEdits("collab", [{ range: sel, text }]); setBody(ed.getValue()); setDirty(true); }
+    else { setBody((b) => `${b.trimEnd()}\n\n${text}\n`); setDirty(true); }
   };
 
   const room = roomQ.data;
@@ -108,6 +142,7 @@ export function WritingDeskPage() {
   const stage: Stage = room ? writingStage(room, hasText) : "drafting";
   const meta = STAGE_META[stage];
   const showApprove = !!room && (hasText || room.state.writeFlow.draftApproved) && (stage === "drafting" || stage === "reviewing" || stage === "locked");
+  const unfinished = hasText && isUnfinished(body);
 
   return (
     <div className="flex h-screen flex-col bg-[#0a0a0c] text-bone-100">
@@ -127,7 +162,7 @@ export function WritingDeskPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {showApprove && <ApproveDraftButton projectId={projectId} approved={room?.state.writeFlow.draftApproved ?? false} hasText={hasText} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />}
+          {showApprove && <ApproveDraftButton projectId={projectId} approved={room?.state.writeFlow.draftApproved ?? false} hasText={hasText} unfinished={unfinished} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />}
           <ExportMenu scriptId={scriptId} />
           <button onClick={() => save.mutate()} disabled={!dirty || save.isPending} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
             {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} {dirty ? "Save Draft" : "Saved"}
@@ -155,7 +190,9 @@ export function WritingDeskPage() {
                 <div className="text-[10px] uppercase tracking-wide text-bone-500">Other versions</div>
                 <div className="mt-1.5 space-y-1">
                   {others.map((d) => (
-                    <Link key={d.id} to={`/projects/${projectId}/drafts/${d.id}/editor`} className="block truncate rounded-md px-2 py-1 text-[11.5px] text-bone-400 hover:text-bone-100">Draft {d.draft_number}</Link>
+                    <Link key={d.id} to={`/projects/${projectId}/drafts/${d.id}/editor`} className="block truncate rounded-md px-2 py-1 text-[11.5px] text-bone-400 hover:text-bone-100">
+                      Draft {d.draft_number}{!d.fountain?.trim() ? " · empty" : ""}{d.updated_at ? ` · ${new Date(d.updated_at).toLocaleDateString()}` : ""}
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -164,9 +201,15 @@ export function WritingDeskPage() {
         </aside>
 
         {/* center: the script page on the writing desk */}
-        <main className="min-w-0 flex-1 overflow-hidden p-5" style={{ background: "radial-gradient(130% 85% at 50% -8%, rgba(216,177,90,0.07), transparent 55%), #0a0a0c" }}>
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden p-5" style={{ background: "radial-gradient(130% 85% at 50% -8%, rgba(216,177,90,0.07), transparent 55%), #0a0a0c" }}>
+          {unfinished && (
+            <div className="mx-auto mb-3 flex w-full max-w-3xl items-center justify-between gap-3 rounded-lg border border-[#d8b15a]/30 bg-[#d8b15a]/[0.06] px-4 py-2">
+              <span className="text-[11.5px] text-bone-200">This draft appears unfinished — it ends on a heading/cue with nothing after it.</span>
+              <button onClick={() => setTab("team")} className="shrink-0 rounded-md px-3 py-1 text-[11.5px] font-medium text-black" style={{ background: GOLD }}>Continue from end</button>
+            </div>
+          )}
           <div
-            className="mx-auto flex h-full max-w-3xl flex-col overflow-hidden rounded-2xl"
+            className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden rounded-2xl"
             style={{ border: "1px solid #2a2118", background: "#16120d", boxShadow: "0 28px 70px rgba(0,0,0,0.6), 0 0 0 1px rgba(216,177,90,0.05), inset 0 1px 0 rgba(255,255,255,0.03)" }}
           >
             <div className="flex items-center justify-between border-b border-[#26201a] px-6 py-2">
@@ -205,7 +248,7 @@ export function WritingDeskPage() {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {!room ? <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-bone-500" /></div>
-              : tab === "team" ? <TeamTab projectId={projectId} room={room} stage={stage} getSelection={getSelection} onApply={applyResult} onRoomRefresh={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
+              : tab === "team" ? <TeamTab projectId={projectId} room={room} stage={stage} getSelection={getSelection} getContext={getContext} applyText={applyText} onRoomRefresh={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : tab === "outline" ? <OutlineTab room={room} onGoRoom={() => navigate(`/projects/${projectId}/writers-room`)} />
               : tab === "bench" ? <BenchTab projectId={projectId} room={room} hasText={!!body.trim()} onState={() => qc.invalidateQueries({ queryKey: ["writers-room", projectId] })} />
               : <NotesTab projectId={projectId} />}
@@ -216,10 +259,22 @@ export function WritingDeskPage() {
   );
 }
 
-function ApproveDraftButton({ projectId, approved, hasText, onState }: { projectId: string; approved: boolean; hasText: boolean; onState: () => void }) {
-  const m = useMutation({ mutationFn: () => api.approveWriteDraft(projectId, !approved), onSuccess: onState });
+function ApproveDraftButton({ projectId, approved, hasText, unfinished, onState }: { projectId: string; approved: boolean; hasText: boolean; unfinished: boolean; onState: () => void }) {
+  const [confirm, setConfirm] = useState(false);
+  const m = useMutation({ mutationFn: () => api.approveWriteDraft(projectId, !approved), onSuccess: () => { setConfirm(false); onState(); } });
+  const onClick = () => { if (!approved && unfinished && !confirm) { setConfirm(true); return; } m.mutate(); };
+  if (confirm && !approved) {
+    return (
+      <div className="inline-flex items-center gap-1.5 rounded-lg border border-[#d8b15a]/40 bg-black/40 px-2 py-1 text-[11.5px]">
+        <AlertTriangle className="h-3.5 w-3.5" style={gold} />
+        <span className="text-bone-200">May be incomplete.</span>
+        <button onClick={() => m.mutate()} disabled={m.isPending} className="rounded px-2 py-0.5 font-medium text-black" style={{ background: GOLD }}>Approve anyway</button>
+        <button onClick={() => setConfirm(false)} className="px-1 text-bone-400 hover:text-bone-100">Cancel</button>
+      </div>
+    );
+  }
   return (
-    <button onClick={() => m.mutate()} disabled={m.isPending || (!hasText && !approved)} className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] disabled:opacity-50"
+    <button onClick={onClick} disabled={m.isPending || (!hasText && !approved)} className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] disabled:opacity-50"
       style={approved ? { borderColor: "#7fd1a4", color: "#7fd1a4" } : { borderColor: "#26262c", color: GOLD }}>
       {m.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} {approved ? "Draft approved" : "Approve Draft"}
     </button>
@@ -228,7 +283,7 @@ function ApproveDraftButton({ projectId, approved, hasText, onState }: { project
 
 // ---- Writing Team ----------------------------------------------------------
 
-function TeamTab({ projectId, room, stage, getSelection, onApply, onRoomRefresh }: { projectId: string; room: WritersRoomResponse; stage: Stage; getSelection: () => string; onApply: (r: { text: string; mode: "append" | "replace" | "message" }) => void; onRoomRefresh: () => void }) {
+function TeamTab({ projectId, room, stage, getSelection, getContext, applyText, onRoomRefresh }: { projectId: string; room: WritersRoomResponse; stage: Stage; getSelection: () => string; getContext: () => { text: string; atCursor: boolean }; applyText: (text: string, where: "append" | "cursor" | "replace") => void; onRoomRefresh: () => void }) {
   const seats = room.state.seats;
   const aiSeat = seats.find((s) => s.kind === "ai_creative" || s.kind === "ai_writer") ?? null;
   const creative = aiSeat?.kind === "ai_creative" ? room.creatives.find((c) => c.id === aiSeat.ref.id) ?? null : null;
@@ -238,17 +293,29 @@ function TeamTab({ projectId, room, stage, getSelection, onApply, onRoomRefresh 
 
   const [message, setMessage] = useState<{ from: string | null; text: string } | null>(null);
   const [steer, setSteer] = useState("");
+  const [continueSteer, setContinueSteer] = useState("");
   const [ask, setAsk] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ text: string } | null>(null);
+  const [previewMeta, setPreviewMeta] = useState<{ atCursor: boolean; hadSelection: boolean }>({ atCursor: false, hadSelection: false });
 
   const collab = useMutation({
-    mutationFn: (v: { action: CollabAction; instruction?: string }) => api.collaborate(projectId, { action: v.action, selection: getSelection() || undefined, instruction: v.instruction }),
-    onMutate: () => {}, onSuccess: (r) => { if (r.mode === "message") setMessage({ from: r.collaborator, text: r.text }); else onApply(r); },
+    mutationFn: (v: { action: CollabAction; instruction?: string; context?: string; selection?: string }) =>
+      api.collaborate(projectId, { action: v.action, selection: (v.selection ?? getSelection()) || undefined, instruction: v.instruction, context: v.context }),
+    onSuccess: (r) => { if (r.mode === "message") setMessage({ from: r.collaborator, text: r.text }); else setPreview({ text: r.text }); },
     onSettled: () => setPendingKey(null),
   });
   const outlineGen = useMutation({ mutationFn: (notes?: string) => api.generateWriteOutline(projectId, aiSeat?.seatId, notes), onSuccess: onRoomRefresh, onSettled: () => setPendingKey(null) });
   const outlineApprove = useMutation({ mutationFn: () => api.approveWriteOutline(projectId), onSuccess: onRoomRefresh, onSettled: () => setPendingKey(null) });
   const busy = collab.isPending || outlineGen.isPending || outlineApprove.isPending;
+
+  const runContinue = () => {
+    const sel = getSelection();
+    setPendingKey("continue");
+    if (sel.trim()) { setPreviewMeta({ atCursor: false, hadSelection: true }); collab.mutate({ action: "rewrite", instruction: continueSteer.trim() || undefined, selection: sel }); }
+    else { const ctx = getContext(); setPreviewMeta({ atCursor: ctx.atCursor, hadSelection: false }); collab.mutate({ action: "complete", instruction: continueSteer.trim() || undefined, context: ctx.text }); }
+  };
+  const apply = (where: "append" | "cursor" | "replace") => { if (preview) { applyText(preview.text, where); setPreview(null); } };
 
   if (!aiSeat) {
     return (
@@ -265,7 +332,12 @@ function TeamTab({ projectId, room, stage, getSelection, onApply, onRoomRefresh 
   // A stage-aware action: either an LLM collab call or an outline op.
   type Act = { key: string; label: string; Icon: typeof Wand2; run: () => void };
   const collabAct = (key: string, action: CollabAction, label: string, Icon: typeof Wand2, instruction?: string): Act =>
-    ({ key, label, Icon, run: () => { setPendingKey(key); collab.mutate({ action, instruction }); } });
+    ({ key, label, Icon, run: () => {
+      setPendingKey(key);
+      const hadSelection = (action === "rewrite" || action === "subtext") && !!getSelection().trim();
+      setPreviewMeta({ atCursor: false, hadSelection });
+      collab.mutate({ action, instruction });
+    } });
 
   let intro = "";
   let acts: Act[] = [];
@@ -326,6 +398,33 @@ function TeamTab({ projectId, room, stage, getSelection, onApply, onRoomRefresh 
         <textarea value={steer} onChange={(e) => setSteer(e.target.value)} placeholder={`Optional — steer ${first}: "open quieter", "lean into the sister relationship"…`} className="min-h-[44px] w-full resize-y rounded-md border border-[#26262c] bg-black/30 px-2.5 py-1.5 text-[12px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none" />
       )}
 
+      {/* Continue from end / complete the ending — the headline drafting action */}
+      {(stage === "draft_from_outline" || stage === "drafting" || stage === "reviewing") && (
+        <div className="rounded-xl border border-[#d8b15a]/20 bg-black/20 p-2.5">
+          <div className="text-[10px] uppercase tracking-wide" style={gold}>Continue / complete the draft</div>
+          <textarea value={continueSteer} onChange={(e) => setContinueSteer(e.target.value)} placeholder={`Tell ${first} how to continue or finish this section…`} className="mt-1 min-h-[40px] w-full resize-y rounded-md border border-[#26262c] bg-black/30 px-2.5 py-1.5 text-[12px] text-bone-50 placeholder:text-bone-600 focus:border-[#d8b15a]/60 focus:outline-none" />
+          <button onClick={runContinue} disabled={busy} className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-[12.5px] font-medium text-black disabled:opacity-50" style={{ background: GOLD }}>
+            {busy && pendingKey === "continue" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />} Continue from end with {first}
+          </button>
+          <p className="mt-1 text-[10px] text-bone-600">Continues from your cursor (or the end). Select text first to rewrite that passage instead.</p>
+        </div>
+      )}
+
+      {/* preview / apply — nothing is auto-inserted */}
+      {preview && (
+        <div className="rounded-xl border border-[#d8b15a]/30 bg-[#16120d] p-2.5">
+          <div className="text-[10px] uppercase tracking-wide" style={gold}>{first}'s draft — preview</div>
+          <pre className="mt-1 max-h-56 overflow-y-auto whitespace-pre-wrap font-mono text-[11.5px] leading-snug text-bone-100">{preview.text}</pre>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button onClick={() => apply("append")} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium text-black" style={{ background: GOLD }}><ArrowDownToLine className="h-3 w-3" /> Append to draft</button>
+            {previewMeta.atCursor && <button onClick={() => apply("cursor")} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45">Insert at cursor</button>}
+            {previewMeta.hadSelection && <button onClick={() => apply("replace")} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-200 hover:border-[#d8b15a]/45">Replace selected</button>}
+            <button onClick={() => navigator.clipboard?.writeText(preview.text)} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-300 hover:border-bone-600"><Copy className="h-3 w-3" /> Copy</button>
+            <button onClick={() => setPreview(null)} className="inline-flex items-center gap-1 rounded-md border border-[#26262c] px-2.5 py-1 text-[11px] text-bone-400 hover:text-red-300"><Trash2 className="h-3 w-3" /> Discard</button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-1.5">
         {acts.map((a) => (
           <button key={a.key} onClick={a.run} disabled={busy} className="flex w-full items-center gap-2 rounded-lg border border-[#26262c] bg-white/[0.015] px-3 py-2 text-left text-[12.5px] text-bone-100 hover:border-[#d8b15a]/45 disabled:opacity-50">
@@ -350,7 +449,7 @@ function TeamTab({ projectId, room, stage, getSelection, onApply, onRoomRefresh 
         <div className="rounded-xl border border-[#26262c] bg-white/[0.015] p-3">
           <div className="text-[10px] uppercase tracking-wide" style={gold}>{message.from ?? first} says</div>
           <p className="mt-1 whitespace-pre-wrap text-[12px] leading-snug text-bone-100">{message.text}</p>
-          <button onClick={() => onApply({ text: message.text.replace(/^\/\/.*$/m, "").trim(), mode: "append" })} className="mt-2 inline-flex items-center gap-1 text-[11px]" style={gold}><ArrowRight className="h-3 w-3" /> Insert into draft</button>
+          <button onClick={() => { applyText(message.text.replace(/^\/\/.*$/m, "").trim(), "append"); setMessage(null); }} className="mt-2 inline-flex items-center gap-1 text-[11px]" style={gold}><ArrowRight className="h-3 w-3" /> Insert into draft</button>
         </div>
       )}
 

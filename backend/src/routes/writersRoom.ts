@@ -190,14 +190,15 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const user = await requireUser(req);
     const { projectId } = req.params as { projectId: string };
     await assertProjectMember(user.id, projectId);
-    const { action, selection, instruction } = z
+    const { action, selection, instruction, context } = z
       .object({
         action: z.enum(COLLAB_ACTIONS as unknown as [CollabAction, ...CollabAction[]]),
         selection: z.string().max(8000).optional(),
         instruction: z.string().max(2000).optional(),
+        context: z.string().max(16000).optional(),
       })
       .parse(req.body);
-    return await collaborate(projectId, action, { selection, instruction });
+    return await collaborate(projectId, action, { selection, instruction, context });
   });
 
   app.post("/projects/:projectId/writers-room/write-flow/approve-draft", async (req) => {

@@ -247,6 +247,7 @@ export interface WriteFlow {
 export const COLLAB_ACTIONS = [
   "next_scene",
   "continue",
+  "complete",   // continue from exactly where the draft stops / finish the ending
   "rewrite",
   "subtext",
   "alt_beat",

@@ -980,7 +980,7 @@ export const api = {
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/outline/approve`, { method: "POST" }),
   generateWriteDraft: (projectId: string, notes?: string) =>
     request<{ state: WritersRoomState; scriptId: string }>(`/projects/${projectId}/writers-room/write-flow/draft`, { method: "POST", body: JSON.stringify({ notes }) }),
-  collaborate: (projectId: string, body: { action: CollabAction; selection?: string; instruction?: string }) =>
+  collaborate: (projectId: string, body: { action: CollabAction; selection?: string; instruction?: string; context?: string }) =>
     request<{ text: string; mode: "append" | "replace" | "message"; collaborator: string | null }>(`/projects/${projectId}/writers-room/collaborate`, { method: "POST", body: JSON.stringify(body) }),
   approveWriteDraft: (projectId: string, approved = true) =>
     request<{ state: WritersRoomState }>(`/projects/${projectId}/writers-room/write-flow/approve-draft`, { method: "POST", body: JSON.stringify({ approved }) }),

@@ -10,7 +10,7 @@ import { assertProjectMember } from "../db/queries.js";
 import { getStudioOwner } from "../studio/identityStore.js";
 import { STUDIO_AI_WRITER, WRITING_CREATIVES, QUALITY_STAFF } from "../writersRoom/profiles.js";
 import { getWritersRoomState, assignSeat, clearSeat, setWritingMode } from "../writersRoom/store.js";
-import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite, rewriteFinding } from "../writersRoom/review.js";
+import { runReviewAgent, skipReviewAgent, resetReviewAgent, applyReviewRewrite, rewriteFinding, autoResolveFinding } from "../writersRoom/review.js";
 import { getLockStatus, updateLockSettings, lockFinalDraft, unlockFinalDraft } from "../writersRoom/lock.js";
 import { conceptDefaults, saveConcept, generateOutline, approveOutline, generateDraftFromOutline } from "../writersRoom/writeFlow.js";
 import { collaborate, setDraftApproved } from "../writersRoom/collaborate.js";
@@ -103,6 +103,14 @@ export default async function writersRoomRoutes(app: FastifyInstance) {
     const { projectId, agentId } = req.params as { projectId: string; agentId: string };
     await assertProjectMember(user.id, projectId);
     return await applyReviewRewrite(projectId, agentId);
+  });
+
+  // Fix-and-check loop: run → apply → re-check until resolved or capped.
+  app.post("/projects/:projectId/writers-room/review/:agentId/auto-resolve", async (req) => {
+    const user = await requireUser(req);
+    const { projectId, agentId } = req.params as { projectId: string; agentId: string };
+    await assertProjectMember(user.id, projectId);
+    return await autoResolveFinding(projectId, agentId);
   });
 
   app.post("/projects/:projectId/writers-room/review/:agentId/rewrite", async (req) => {

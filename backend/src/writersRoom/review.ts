@@ -79,10 +79,57 @@ const FINDING_SCHEMA = {
         required: ["targetLabel", "after", "rationale"],
       },
       confidence: { type: "number" },
+      resolved: { type: "boolean" },
     },
-    required: ["diagnosis", "notes", "confidence"],
+    required: ["diagnosis", "notes", "confidence", "resolved"],
   },
 } as const;
+
+/** One LLM pass: read the draft text and produce a finding for this agent. */
+async function generateFinding(agentId: string, authority: ReviewAuthority, draftLabel: string | null, draftText: string): Promise<ReviewFinding> {
+  const agent = QUALITY_STAFF.find((a) => a.id === agentId)!;
+  if (!draftText.trim()) {
+    return { diagnosis: "There's no draft to review yet. Start or upload a draft, then run this pass.", notes: [], rewriteOption: null, confidence: 1, resolved: false };
+  }
+  const system = [
+    `You are the ${agent.name} — ${agent.role} — on a film/TV studio's script staff.`,
+    `Focus: ${AGENT_FOCUS[agentId] ?? agent.specialty}`,
+    authorityClause(authority),
+    "If the draft is already CLEAN on YOUR dimension (no meaningful issue worth a fix), set resolved=true and rewriteOption=null. Otherwise resolved=false.",
+    "Be specific and reference scenes/lines. Confidence is 0..1. Return JSON only.",
+  ].join("\n");
+  const res = await callLLM({
+    model: config.SCENE_MODEL,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: `Review this draft (${draftLabel ?? "draft"}). Return your finding as JSON.\n\n--- DRAFT ---\n${draftText}` },
+    ],
+    jsonSchema: FINDING_SCHEMA as unknown as { name: string; schema: Record<string, unknown> },
+    temperature: 0.4,
+    maxTokens: 1200,
+  });
+  const parsed = extractJSON<Partial<ReviewFinding>>(res.text);
+  const resolved = parsed.resolved === true;
+  return {
+    diagnosis: parsed.diagnosis?.trim() || "No diagnosis returned.",
+    notes: Array.isArray(parsed.notes) ? parsed.notes.map(String).slice(0, 8) : [],
+    rewriteOption:
+      resolved || authority === "observe" || authority === "recommend" || !parsed.rewriteOption
+        ? null
+        : {
+            targetLabel: parsed.rewriteOption.targetLabel ?? "Suggested fix",
+            before: parsed.rewriteOption.before ?? null,
+            after: parsed.rewriteOption.after ?? "",
+            rationale: parsed.rewriteOption.rationale ?? "",
+          },
+    confidence: typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0.5,
+    resolved,
+  };
+}
+
+async function saveRun(projectId: string, agentId: string, authority: ReviewAuthority, finding: ReviewFinding): Promise<WritersRoomState> {
+  return saveReviewRun(projectId, { agentId, status: "done", authority, finding, applied: false, ranAt: new Date().toISOString(), appliedAt: null });
+}
 
 export async function runReviewAgent(projectId: string, agentId: string): Promise<WritersRoomState> {
   const agent = QUALITY_STAFF.find((a) => a.id === agentId);
@@ -90,59 +137,60 @@ export async function runReviewAgent(projectId: string, agentId: string): Promis
   const authority = reviewAuthorityOf(agent.rewriteAuthority);
   const state = await getWritersRoomState(projectId);
   const draft = await loadProjectDraft(projectId, state.writeFlow.draftScriptId);
+  const finding = await generateFinding(agentId, authority, draft.label, draft.text);
+  return saveRun(projectId, agentId, authority, finding);
+}
 
-  let finding: ReviewFinding;
-  if (!draft.text.trim()) {
-    finding = {
-      diagnosis: "There's no draft to review yet. Start or upload a draft, then run this pass.",
-      notes: [],
-      rewriteOption: null,
-      confidence: 1,
-    };
-  } else {
-    const system = [
-      `You are the ${agent.name} — ${agent.role} — on a film/TV studio's script staff.`,
-      `Focus: ${AGENT_FOCUS[agentId] ?? agent.specialty}`,
-      authorityClause(authority),
-      "Be specific and reference scenes/lines. Confidence is 0..1. Return JSON only.",
-    ].join("\n");
-    const res = await callLLM({
-      model: config.SCENE_MODEL,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: `Review this draft (${draft.label}). Return your finding as JSON.\n\n--- DRAFT ---\n${draft.text}` },
-      ],
-      jsonSchema: FINDING_SCHEMA as unknown as { name: string; schema: Record<string, unknown> },
-      temperature: 0.4,
-      maxTokens: 1200,
-    });
-    const parsed = extractJSON<Partial<ReviewFinding>>(res.text);
-    finding = {
-      diagnosis: parsed.diagnosis?.trim() || "No diagnosis returned.",
-      notes: Array.isArray(parsed.notes) ? parsed.notes.map(String).slice(0, 8) : [],
-      rewriteOption:
-        authority === "observe" || authority === "recommend" || !parsed.rewriteOption
-          ? null
-          : {
-              targetLabel: parsed.rewriteOption.targetLabel ?? "Suggested fix",
-              before: parsed.rewriteOption.before ?? null,
-              after: parsed.rewriteOption.after ?? "",
-              rationale: parsed.rewriteOption.rationale ?? "",
-            },
-      confidence: typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0.5,
-    };
+export type AutoResolveStatus = "resolved" | "stuck" | "needs_manual" | "maxed" | "no_draft";
+export interface AutoResolveResult {
+  state: WritersRoomState;
+  status: AutoResolveStatus;
+  rounds: number;
+  changed: boolean;
+  fountain: string; // full draft text after the loop (for the editor)
+}
+
+/** Fix-and-check loop: run → if not clean, apply the fix → re-run on the updated
+ *  draft → repeat until the agent reports resolved, can't apply, or the cap. */
+export async function autoResolveFinding(projectId: string, agentId: string, maxRounds = 4): Promise<AutoResolveResult> {
+  const agent = QUALITY_STAFF.find((a) => a.id === agentId);
+  if (!agent) throw new Error("Unknown review agent.");
+  const authority = reviewAuthorityOf(agent.rewriteAuthority);
+
+  let lastState = await getWritersRoomState(projectId);
+  let changed = false;
+  let lastFountain = "";
+  let status: AutoResolveStatus = "maxed";
+  let rounds = 0;
+
+  for (rounds = 1; rounds <= maxRounds; rounds++) {
+    const state = await getWritersRoomState(projectId);
+    const draft = await loadProjectDraft(projectId, state.writeFlow.draftScriptId);
+    if (!draft.text.trim()) { status = "no_draft"; lastState = await runReviewAgent(projectId, agentId); break; }
+
+    const finding = await generateFinding(agentId, authority, draft.label, draft.text);
+    lastState = await saveRun(projectId, agentId, authority, finding);
+
+    if (finding.resolved) { status = "resolved"; break; }
+    if (!finding.rewriteOption) { status = "needs_manual"; break; } // observe/recommend or no concrete fix
+
+    const applyRes = await applyReviewRewrite(projectId, agentId);
+    lastState = applyRes.state;
+    if (applyRes.changed) { changed = true; lastFountain = applyRes.fountain; }
+    else { status = "stuck"; break; } // couldn't locate the passage — stop honestly
   }
 
-  const run: ReviewRun = {
-    agentId,
-    status: "done",
-    authority,
-    finding,
-    applied: false,
-    ranAt: new Date().toISOString(),
-    appliedAt: null,
-  };
-  return saveReviewRun(projectId, run);
+  // Full draft text for the editor (loadProjectDraft slices for the LLM).
+  if (changed && !lastFountain) lastFountain = (await loadFullDraft(projectId)) ?? "";
+  return { state: lastState, status, rounds, changed, fountain: changed ? lastFountain : "" };
+}
+
+async function loadFullDraft(projectId: string): Promise<string | null> {
+  const state = await getWritersRoomState(projectId);
+  const { data } = await supabase.from("scripts").select("id, fountain, current, updated_at").eq("project_id", projectId).order("updated_at", { ascending: false });
+  const rows = (data ?? []) as Array<{ id: string; fountain: string | null; current: boolean | null }>;
+  const s = (state.writeFlow.draftScriptId ? rows.find((r) => r.id === state.writeFlow.draftScriptId) : null) ?? rows.find((r) => r.current) ?? rows[0];
+  return s?.fountain ?? null;
 }
 
 export async function skipReviewAgent(projectId: string, agentId: string): Promise<WritersRoomState> {
@@ -207,7 +255,7 @@ export async function rewriteFinding(projectId: string, agentId: string, notes?:
     ...run,
     status: "done",
     applied: false,
-    finding: { ...run.finding, rewriteOption: { targetLabel, before, after, rationale: notes?.trim() || run.finding.rewriteOption?.rationale || "" } },
+    finding: { ...run.finding, resolved: false, rewriteOption: { targetLabel, before, after, rationale: notes?.trim() || run.finding.rewriteOption?.rationale || "" } },
   });
 }
 

@@ -179,6 +179,7 @@ export interface ReviewFinding {
   notes: string[];
   rewriteOption: ReviewRewriteOption | null;
   confidence: number; // 0..1
+  resolved: boolean; // true when the draft is already clean on this agent's dimension
 }
 
 /** Per-agent run state on the bench (lives in WritersRoomState.reviewBench). */

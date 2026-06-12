@@ -556,6 +556,7 @@ function BenchTab({ projectId, room, hasText, ensureSaved, onDraftReplaced, onSt
   // Per-agent proof of what apply did (before/after + whether it matched).
   const [applied, setApplied] = useState<Record<string, { before: string | null; after: string; matched: boolean; changed: boolean }>>({});
   const recordApply = (id: string, r: { before: string | null; after: string; matched: boolean; changed: boolean }) => setApplied((m) => ({ ...m, [id]: r }));
+  const [auto, setAuto] = useState<Record<string, { status: string; rounds: number }>>({});
 
   const act = useMutation({
     mutationFn: async (v: { id: string; action: "run" | "skip"; }) => api.reviewAgentAction(projectId, v.id, v.action),
@@ -584,6 +585,13 @@ function BenchTab({ projectId, room, hasText, ensureSaved, onDraftReplaced, onSt
     onSuccess: (r, v) => { if (r.changed) onDraftReplaced(r.fountain); recordApply(v.id, r); onState(); },
     onSettled: () => setActingId(null),
   });
+  // Fix-and-check loop: run → apply → re-check until resolved or capped.
+  const autoResolve = useMutation({
+    mutationFn: async (v: { id: string }) => { await ensureSaved(); return api.autoResolveReview(projectId, v.id); },
+    onMutate: (v) => { setActingId(v.id); setApplied((m) => { const n = { ...m }; delete n[v.id]; return n; }); },
+    onSuccess: (r, v) => { if (r.changed) onDraftReplaced(r.fountain); setAuto((m) => ({ ...m, [v.id]: { status: r.status, rounds: r.rounds } })); onState(); },
+    onSettled: () => setActingId(null),
+  });
 
   if (!hasText) return <div className="py-8 text-center text-[12px] text-bone-400">Write or generate some pages first — the staff reviews real text.</div>;
   if (!approved) {
@@ -607,7 +615,9 @@ function BenchTab({ projectId, room, hasText, ensureSaved, onDraftReplaced, onSt
             run={run}
             busy={actingId === agent.id}
             appliedResult={applied[agent.id] ?? null}
-            onReview={() => act.mutate({ id: agent.id, action: "run" })}
+            autoResult={auto[agent.id] ?? null}
+            onAutoResolve={() => autoResolve.mutate({ id: agent.id })}
+            onReview={() => { setAuto((m) => { const n = { ...m }; delete n[agent.id]; return n; }); act.mutate({ id: agent.id, action: "run" }); }}
             onSkip={() => act.mutate({ id: agent.id, action: "skip" })}
             onRewrite={(notes) => rewrite.mutate({ id: agent.id, notes })}
             onRegenerate={(notes) => rewrite.mutate({ id: agent.id, notes, regenerate: true })}
@@ -620,7 +630,15 @@ function BenchTab({ projectId, room, hasText, ensureSaved, onDraftReplaced, onSt
   );
 }
 
-function BenchCard({ agent, run, busy, appliedResult, onReview, onSkip, onRewrite, onRegenerate, onApprove, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; appliedResult: { before: string | null; after: string; matched: boolean; changed: boolean } | null; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onRegenerate: (notes: string) => void; onApprove: (notes: string) => void; onApply: () => void }) {
+const AUTO_MSG: Record<string, { label: string; color: string }> = {
+  resolved: { label: "clean — issue resolved", color: "#7fd1a4" },
+  maxed: { label: "still finding issues after several rounds — fix manually below", color: "#d8b15a" },
+  stuck: { label: "couldn't apply a fix automatically — regenerate or place manually", color: "#d8b15a" },
+  needs_manual: { label: "this pass only advises — apply a fix manually", color: "#d8b15a" },
+  no_draft: { label: "no draft to review", color: "#9a927e" },
+};
+
+function BenchCard({ agent, run, busy, appliedResult, autoResult, onAutoResolve, onReview, onSkip, onRewrite, onRegenerate, onApprove, onApply }: { agent: QualityAgent; run: ReviewRun | null; busy: boolean; appliedResult: { before: string | null; after: string; matched: boolean; changed: boolean } | null; autoResult: { status: string; rounds: number } | null; onAutoResolve: () => void; onReview: () => void; onSkip: () => void; onRewrite: (notes: string) => void; onRegenerate: (notes: string) => void; onApprove: (notes: string) => void; onApply: () => void }) {
   const [notes, setNotes] = useState("");
   const authority = run?.authority ?? reviewAuthorityOf(agent.rewriteAuthority);
   const f = run?.finding ?? null;
@@ -657,8 +675,21 @@ function BenchCard({ agent, run, busy, appliedResult, onReview, onSkip, onRewrit
         )
       )}
 
+      {/* Fix-and-check loop outcome */}
+      {autoResult && (
+        <div className="mt-1.5 rounded-md border p-2" style={{ borderColor: `${AUTO_MSG[autoResult.status]?.color ?? "#26262c"}55`, background: `${AUTO_MSG[autoResult.status]?.color ?? "#26262c"}14` }}>
+          <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide" style={{ color: AUTO_MSG[autoResult.status]?.color ?? "#9a927e" }}>
+            {autoResult.status === "resolved" ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+            Fix &amp; check · {autoResult.rounds} round{autoResult.rounds === 1 ? "" : "s"}
+          </div>
+          <p className="mt-0.5 text-[10.5px] text-bone-300">{first} ran the loop — {AUTO_MSG[autoResult.status]?.label ?? autoResult.status}.</p>
+        </div>
+      )}
+
       {!f ? (
         <p className="mt-1 text-[10.5px] text-bone-500">Not reviewed yet.</p>
+      ) : f.resolved ? (
+        <p className="mt-1.5 text-[11px]" style={{ color: "#7fd1a4" }}>✓ Clean on {first}'s dimension — no issues to fix.</p>
       ) : appliedResult?.changed ? null : (
         <div className="mt-1.5 space-y-1.5">
           <div className="rounded-md border border-[#26262c] bg-black/30 p-2">
@@ -707,10 +738,15 @@ function BenchCard({ agent, run, busy, appliedResult, onReview, onSkip, onRewrit
         </div>
       )}
 
-      <div className="mt-1.5 flex gap-1.5 border-t border-[#1c1c20] pt-1.5">
+      <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[#1c1c20] pt-1.5">
         <button onClick={onReview} disabled={busy} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-200 hover:border-[#d8b15a]/45 disabled:opacity-50">
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} {run ? "Review again" : "Review"}
         </button>
+        {(authority === "rewrite" || authority === "rewrite_requires_approval") && (
+          <button onClick={onAutoResolve} disabled={busy} className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10.5px] disabled:opacity-50" style={{ borderColor: `${GOLD}55`, color: GOLD }} title="Run, fix, and re-check until it's clean">
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Fix until resolved
+          </button>
+        )}
         {run?.status !== "skipped" && <button onClick={onSkip} disabled={busy} className="inline-flex items-center gap-1 rounded border border-[#26262c] px-2 py-0.5 text-[10.5px] text-bone-400 hover:border-bone-600 disabled:opacity-50"><SkipForward className="h-3 w-3" /> Skip</button>}
       </div>
     </div>
